@@ -28,7 +28,29 @@ jobs:
       - run: npm ci
       - run: npm test
 
-      - name: Build and publish draft release
+      # لازم الـ draft يتعمل قبل electron-builder — لو ملقاش release بيرفع الملفات بالتوازي
+      # وكل رفعة بتعمل draft لوحدها (حصلت في v4.1.0: draft فيه الـ blockmap وتاني فيه الباقي)
+      - name: Create draft release
+        shell: bash
+        run: gh release create "$GITHUB_REF_NAME" --draft --title "${GITHUB_REF_NAME#v}" --notes "$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and upload to draft release
         run: npx electron-builder --win nsis --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify single draft has all update files
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          n=$(gh release list --json tagName,isDraft --jq "[.[] | select(.tagName==\"$GITHUB_REF_NAME\")] | length")
+          [ "$n" = "1" ] || { echo "expected 1 release for $GITHUB_REF_NAME, found $n"; exit 1; }
+          assets=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
+          echo "$assets"
+          for f in latest.yml "Watchlist-Setup-$v.exe" "Watchlist-Setup-$v.exe.blockmap"; do
+            echo "$assets" | grep -qxF "$f" || { echo "missing $f"; exit 1; }
+          done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
