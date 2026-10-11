@@ -1,0 +1,61 @@
+{
+  "name": "watchlist",
+  "productName": "Watchlist",
+  "version": "4.1.0",
+  "description": "قائمة المشاهدة — نسخة الديسكتوب",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/security-check.mjs",
+    "dist": "electron-builder --win nsis --publish never"
+  },
+  "build": {
+    "appId": "com.watchlist.desktop",
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "draft"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Watchlist-Setup-${version}.${ext}"
+    },
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": false
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "updater.js",
+      "app.html",
+      "app.js",
+      "popupblock.js",
+      "mysteryhide.js",
+      "icon*.png"
+    ]
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  },
+  "allowScripts": {
+    "electron@44.7.0": true,
+    "electron-winstaller": false
+  }
+}

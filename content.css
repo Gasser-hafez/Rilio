@@ -1,0 +1,29 @@
+#wl-panel{
+  position:fixed;bottom:22px;right:22px;z-index:2147483647;
+  width:290px;background:#17171f;border:1px solid #2b2b38;border-radius:14px;
+  padding:14px 16px;color:#eceaf2;font-family:'Segoe UI',Tahoma,Arial,sans-serif;
+  box-shadow:0 8px 30px rgba(0,0,0,.55);direction:rtl;
+}
+#wl-panel .wl-head{display:flex;align-items:center;gap:8px}
+#wl-panel .wl-logo{font-size:1.1rem}
+#wl-panel .wl-title{
+  flex:1;font-weight:700;font-size:.95rem;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right;
+}
+#wl-panel .wl-x{
+  background:none;border:none;color:#8b8a99;cursor:pointer;font-size:.85rem;padding:2px 4px;
+}
+#wl-panel .wl-x:hover{color:#eceaf2}
+#wl-panel .wl-sub{font-size:.75rem;color:#8b8a99;margin:3px 0 10px}
+#wl-panel .wl-btns{display:flex;gap:8px}
+#wl-panel .wl-btn{
+  flex:1;border:1px solid #2b2b38;background:#1f1f2a;color:#eceaf2;
+  border-radius:9px;padding:8px 6px;font-size:.8rem;font-weight:700;cursor:pointer;
+  font-family:inherit;transition:.15s;
+}
+#wl-panel .wl-btn:hover{border-color:#a9741f}
+#wl-panel .wl-btn:disabled{opacity:.6;cursor:default}
+#wl-panel .wl-amber{background:#e8a33d;border-color:#e8a33d;color:#161006}
+#wl-panel .wl-amber:hover{background:#f0b355}
+#wl-panel .wl-msg{font-size:.78rem;color:#e8a33d;margin-top:8px;min-height:1em;font-weight:700}
+#wl-panel.wl-done .wl-btns{display:none}

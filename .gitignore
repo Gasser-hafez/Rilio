@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.rar
+# ملفات إعدادات/نسخ احتياطية فيها مفاتيح API — متترفعش أبداً
+بلبول.json
+watchlist-backup-*.json
+watchlist-settings-*.json

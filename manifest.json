@@ -1,0 +1,92 @@
+{
+  "manifest_version": 3,
+  "name": "قائمة المشاهدة — Watchlist",
+  "description": "أضف أي فيلم أو مسلسل لقائمة مشاهدتك مباشرة من صفحته على IMDb",
+  "version": "4.1",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.omdbapi.com/*",
+    "https://api.themoviedb.org/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "افتح قائمة المشاهدة"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://www.imdb.com/*/title/*",
+        "*://www.imdb.com/title/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://vsembed.ru/*",
+        "*://*.vsembed.ru/*",
+        "*://vidsrc-embed.ru/*",
+        "*://*.vidsrc-embed.ru/*",
+        "*://vidsrc-embed.su/*",
+        "*://*.vidsrc-embed.su/*",
+        "*://vidsrcme.su/*",
+        "*://*.vidsrcme.su/*",
+        "*://vsrc.su/*",
+        "*://*.vsrc.su/*",
+        "*://vidsrc.cc/*",
+        "*://*.vidsrc.cc/*",
+        "*://player.embed-api.stream/*",
+        "*://*.cloudnestra.com/*"
+      ],
+      "js": [
+        "popupblock.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://vsembed.ru/*",
+        "*://*.vsembed.ru/*",
+        "*://vidsrc-embed.ru/*",
+        "*://*.vidsrc-embed.ru/*",
+        "*://vidsrc-embed.su/*",
+        "*://*.vidsrc-embed.su/*",
+        "*://vidsrcme.su/*",
+        "*://*.vidsrcme.su/*",
+        "*://vsrc.su/*",
+        "*://*.vsrc.su/*",
+        "*://vidsrc.cc/*",
+        "*://*.vidsrc.cc/*",
+        "*://player.embed-api.stream/*",
+        "*://*.cloudnestra.com/*"
+      ],
+      "js": [
+        "mysteryhide.js"
+      ],
+      "run_at": "document_end",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "options_ui": {
+    "page": "app.html?settings=1",
+    "open_in_tab": true
+  }
+}

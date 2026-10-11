@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- مفيش inline scripts ولا javascript: URLs، والـ fetch مسموح بس لـ OMDb/TMDB — يقفل تسريب البيانات لو حصل HTML injection -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src https://www.omdbapi.com https://api.themoviedb.org; frame-src https:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>قائمة المشاهدة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Changa:wght@600;700;800&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0b10;
+    --surface:#16161e;
+    --surface2:#1e1e28;
+    --line:#292936;
+    --ink:#edeaf3;
+    --muted:#8d8b9c;
+    --amber:#e8a33d;
+    --amber-deep:#a9741f;
+    --red:#d95757;
+    --green:#5fb26a;
+    --radius:14px;
+    --accent-ink:#161006;
+    --glow:0 6px 24px color-mix(in srgb, var(--amber) 28%, transparent),0 2px 8px rgba(0,0,0,.6);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:'Cairo',system-ui,sans-serif;min-height:100vh;
+    background-image:radial-gradient(ellipse 70% 36% at 50% -6%, color-mix(in srgb, var(--amber) 10%, transparent), transparent);
+  }
+  .wrap{max-width:1060px;margin:0 auto;padding:26px 20px 90px}
+
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+  h1{font-family:'Changa',sans-serif;font-weight:800;font-size:2.1rem;line-height:1.05;letter-spacing:.5px}
+  h1 .glow{color:var(--amber);text-shadow:0 0 22px color-mix(in srgb, var(--amber) 35%, transparent)}
+  .sub{color:var(--muted);font-size:.84rem;margin-top:3px}
+
+  .btn{
+    font-family:'Cairo',sans-serif;font-weight:700;font-size:.85rem;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink);
+    padding:10px 16px;border-radius:10px;cursor:pointer;transition:border-color .15s,background .15s,color .15s;
+  }
+  .btn:hover{border-color:var(--amber-deep)}
+  .btn:focus-visible,.tab:focus-visible,.pcard:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  .btn-amber{background:var(--amber);border-color:var(--amber);color:var(--accent-ink)}
+  .btn-amber:hover{filter:brightness(1.12)}
+  .btn-ghost{background:transparent}
+  .btn-sm{padding:6px 12px;font-size:.78rem}
+  .btn-danger:hover{border-color:var(--red);color:var(--red)}
+  .btn-watch{border-color:var(--amber-deep);color:var(--amber)}
+  .btn-watch:hover{background:var(--amber);color:var(--accent-ink)}
+
+  /* ---- الفورم ---- */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:22px}
+  .panel h2{font-family:'Changa',sans-serif;font-size:1.02rem;font-weight:700;margin-bottom:12px;color:var(--amber)}
+  details.panel{padding:0;overflow:hidden}
+  details.panel>summary{
+    list-style:none;cursor:pointer;padding:14px 18px;
+    font-family:'Changa',sans-serif;font-weight:700;color:var(--amber);font-size:1.02rem;
+    display:flex;align-items:center;gap:8px;user-select:none;
+  }
+  details.panel>summary::-webkit-details-marker{display:none}
+  details.panel>summary::after{content:'▾';margin-inline-start:auto;color:var(--muted);transition:transform .2s}
+  details.panel[open]>summary::after{transform:rotate(180deg)}
+  details.panel>.inner{padding:2px 18px 18px}
+  .grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+  label{display:block;font-size:.74rem;color:var(--muted);margin-bottom:5px;font-weight:600}
+  input[type=text],select{
+    width:100%;background:var(--bg);border:1px solid var(--line);border-radius:9px;
+    color:var(--ink);font-family:'Cairo',sans-serif;font-size:.92rem;padding:10px 12px;
+  }
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--amber-deep)}
+  .form-row{display:flex;gap:10px;margin-top:14px;align-items:center;flex-wrap:wrap}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg button{background:transparent;border:none;color:var(--muted);font-family:'Cairo',sans-serif;font-weight:700;font-size:.82rem;padding:9px 16px;cursor:pointer}
+  .seg button.on{background:var(--surface2);color:var(--amber)}
+
+  /* ---- الشريط ---- */
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  .tabs{display:flex;gap:6px}
+  .tab{
+    font-family:'Changa',sans-serif;font-weight:700;font-size:.95rem;
+    background:transparent;border:none;color:var(--muted);cursor:pointer;
+    padding:8px 14px;border-radius:9px;transition:.15s;
+  }
+  .tab.on{color:var(--ink);background:var(--surface2)}
+  .tab .count{font-size:.72rem;color:var(--amber);margin-inline-start:4px}
+  .search{flex:1;min-width:150px}
+  .sortbtn{white-space:nowrap}
+
+  /* ================= حائط البوسترات ================= */
+  .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:16px}
+  @media(max-width:480px){.wall{grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:12px}}
+  .pcard{
+    position:relative;aspect-ratio:2/3;border-radius:12px;overflow:hidden;cursor:pointer;
+    background:var(--surface2);border:1px solid var(--line);
+    transition:transform .22s ease,box-shadow .22s ease,border-color .22s;
+  }
+  .pcard:hover{transform:translateY(-5px) scale(1.02);box-shadow:var(--glow);border-color:var(--amber-deep)}
+  .pcard img{width:100%;height:100%;object-fit:cover;display:block}
+  .pcard .noimg{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    padding:14px;text-align:center;color:var(--muted);
+    background:linear-gradient(160deg,var(--surface2),var(--bg));
+  }
+  .pcard .noimg .fi{font-size:2rem;opacity:.5}
+  .pcard .noimg .nt{font-family:'Changa',sans-serif;font-weight:700;color:var(--ink);font-size:.95rem;word-break:break-word}
+  .pcard .grad{
+    position:absolute;inset-inline:0;bottom:0;padding:34px 10px 9px;pointer-events:none;
+    background:linear-gradient(to top,rgba(6,6,10,.94) 22%,transparent);
+  }
+  .pcard .ptitle{font-family:'Changa',sans-serif;font-weight:700;font-size:.9rem;line-height:1.25;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+  .pcard .pyear{font-size:.7rem;color:var(--muted);margin-top:1px}
+  .chip{
+    position:absolute;top:8px;font-size:.68rem;font-weight:700;padding:3px 8px;border-radius:20px;
+    background:rgba(8,8,12,.78);backdrop-filter:blur(3px);border:1px solid rgba(255,255,255,.08);
+  }
+  .chip.imdb{inset-inline-start:8px;color:var(--amber)}
+  .stamp{
+    position:absolute;top:8px;inset-inline-end:8px;width:34px;height:34px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Changa',sans-serif;font-weight:800;font-size:.95rem;
+    background:rgba(8,8,12,.82);border:2px solid var(--line);color:var(--muted);
+  }
+  .stamp.hi{border-color:var(--green);color:var(--green)}
+  .stamp.mid{border-color:var(--amber);color:var(--amber)}
+  .stamp.lo{border-color:var(--red);color:var(--red)}
+  .stamp.q{border-style:dashed}
+  .stamp.drop{border-style:dashed;border-color:var(--red);color:var(--red)}
+  .bell{
+    position:absolute;top:48px;inset-inline-end:8px;font-size:.66rem;font-weight:700;
+    background:var(--amber);color:var(--accent-ink);border:none;border-radius:20px;padding:4px 9px;cursor:pointer;
+    box-shadow:0 0 14px color-mix(in srgb, var(--amber) 55%, transparent);
+  }
+  .quick{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
+    background:rgba(8,8,12,.55);opacity:0;transition:opacity .18s;padding:12px;
+  }
+  .pcard:hover .quick{opacity:1}
+  @media(hover:none){.quick{display:none}}
+  .quick .btn{width:100%;max-width:150px;text-align:center;padding:7px 8px;font-size:.76rem;background:rgba(22,22,30,.92)}
+  .picked{animation:pickGlow 2.4s ease}
+  .pcard.draggable{cursor:grab}
+  .pcard.draggable:active{cursor:grabbing}
+  .pcard.dragging{opacity:.5;transform:scale(.96);box-shadow:0 0 0 2px var(--amber)}
+  .next-badge{
+    position:absolute;top:8px;inset-inline-start:8px;z-index:3;
+    font-family:'Changa',sans-serif;font-weight:800;font-size:.68rem;
+    background:var(--amber);color:var(--accent-ink);padding:4px 10px;border-radius:20px;
+    box-shadow:0 2px 12px color-mix(in srgb,var(--amber) 55%,transparent);
+  }
+  .pcard .chip.imdb{top:8px}
+  .next-badge~.chip.imdb{top:38px}
+  @keyframes pickGlow{0%,70%{box-shadow:0 0 0 2px var(--amber),0 0 30px color-mix(in srgb, var(--amber) 60%, transparent)}100%{box-shadow:none}}
+
+  /* ================= عرض القايمة ================= */
+  .rows{display:flex;flex-direction:column;gap:12px}
+  .row{
+    display:flex;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;cursor:pointer;transition:border-color .15s;
+  }
+  .row:hover{border-color:var(--amber-deep)}
+  .row .thumb{flex:0 0 66px;min-height:99px;background:var(--surface2);position:relative}
+  .row .thumb img{width:100%;height:100%;object-fit:cover;display:block;position:absolute;inset:0}
+  .row .thumb .fi{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--line);font-size:1.3rem}
+  .row .rbody{flex:1;padding:12px 14px;min-width:0}
+  .row .rtitle{font-family:'Changa',sans-serif;font-weight:700;font-size:1.05rem}
+  .row .rmeta{font-size:.74rem;color:var(--muted);margin-top:2px}
+  .row .rmeta .dot{margin:0 6px;opacity:.5}
+  .row .rmeta .iv{color:var(--amber);font-weight:700}
+  .row .rdesc{font-size:.78rem;color:var(--muted);margin-top:5px;line-height:1.5;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .row .ract{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+  .row .bell{position:static;margin-top:6px;box-shadow:none}
+
+  .empty{
+    text-align:center;color:var(--muted);padding:52px 18px;border:1px dashed var(--line);
+    border-radius:var(--radius);font-size:.9rem;
+  }
+  .empty b{color:var(--ink);font-family:'Changa',sans-serif;display:block;font-size:1.05rem;margin-bottom:4px}
+
+  /* ================= الإحصائيات والفلاتر والبانر ================= */
+  .statsbar{
+    display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;
+    font-size:.78rem;font-weight:700;color:var(--muted);
+  }
+  .statsbar span{background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:4px 12px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  .fchip{
+    font-family:'Cairo',sans-serif;font-weight:700;font-size:.74rem;
+    background:transparent;border:1px solid var(--line);color:var(--muted);
+    border-radius:20px;padding:5px 13px;cursor:pointer;transition:.15s;
+  }
+  .fchip:hover{border-color:var(--amber-deep)}
+  .fchip.on{background:var(--amber);border-color:var(--amber);color:var(--accent-ink)}
+  .fsep{width:1px;background:var(--line);margin:2px 4px}
+  .bkbanner{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;
+    background:color-mix(in srgb, var(--amber) 8%, transparent);border:1px solid var(--amber-deep);border-radius:10px;
+    padding:10px 14px;font-size:.82rem;font-weight:700;
+  }
+  .bkbanner span{flex:1;min-width:200px}
+
+  /* ================= المودال ================= */
+  .overlay{
+    position:fixed;inset:0;background:rgba(5,5,9,.78);backdrop-filter:blur(4px);
+    display:none;align-items:flex-start;justify-content:center;z-index:60;overflow-y:auto;padding:5vh 14px 40px;
+  }
+  .overlay.show{display:flex}
+  .modal{
+    width:100%;max-width:660px;background:var(--surface);border:1px solid var(--line);
+    border-radius:18px;overflow:hidden;position:relative;
+    animation:mIn .22s ease;
+  }
+  @keyframes mIn{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+  .bdrop{position:relative;height:220px;background:var(--surface2)}
+  .bdrop img{width:100%;height:100%;object-fit:cover;display:block}
+  .bdrop::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,var(--surface) 6%,rgba(22,22,30,.25) 55%,rgba(22,22,30,.15))}
+  .mclose{
+    position:absolute;top:12px;inset-inline-start:12px;z-index:3;width:34px;height:34px;border-radius:50%;
+    background:rgba(8,8,12,.7);border:1px solid rgba(255,255,255,.12);color:var(--ink);cursor:pointer;font-size:.9rem;
+  }
+  .mhead{display:flex;gap:16px;padding:0 20px;margin-top:-58px;position:relative;z-index:2;align-items:flex-end}
+  .mposter{
+    flex:0 0 108px;aspect-ratio:2/3;border-radius:10px;overflow:hidden;
+    border:1px solid var(--line);background:var(--surface2);box-shadow:0 8px 26px rgba(0,0,0,.55);
+  }
+  .mposter img{width:100%;height:100%;object-fit:cover;display:block}
+  .mposter .fi{display:flex;align-items:center;justify-content:center;height:100%;color:var(--line);font-size:1.6rem}
+  .mtitles{padding-bottom:6px;min-width:0}
+  .mtitle{font-family:'Changa',sans-serif;font-weight:800;font-size:1.45rem;line-height:1.15;word-break:break-word;text-shadow:0 2px 10px rgba(0,0,0,.6)}
+  .mchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+  .mchip{font-size:.7rem;font-weight:700;padding:3px 10px;border-radius:20px;background:var(--surface2);border:1px solid var(--line);color:var(--muted)}
+  .mchip.iv{color:var(--amber);border-color:var(--amber-deep)}
+  .mbody{padding:16px 20px 20px}
+  .mdesc{font-size:.86rem;color:var(--muted);line-height:1.65}
+  .msec{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}
+  .msec .sh{font-family:'Changa',sans-serif;font-weight:700;font-size:.86rem;color:var(--amber);margin-bottom:9px}
+  .pills{display:flex;gap:5px;flex-wrap:wrap}
+  .pill{
+    width:35px;height:35px;border-radius:8px;border:1px solid var(--line);background:var(--bg);
+    color:var(--muted);font-family:'Changa',sans-serif;font-weight:700;cursor:pointer;font-size:.9rem;
+  }
+  .pill.on{background:var(--amber);border-color:var(--amber);color:var(--accent-ink)}
+  .noterow{display:flex;gap:8px;margin-top:10px}
+  .noterow input{flex:1}
+  .mact{display:flex;gap:7px;flex-wrap:wrap}
+  .mnote-view{font-size:.83rem;color:var(--muted);border-inline-start:2px solid var(--amber-deep);padding-inline-start:9px;margin-top:4px}
+
+  /* ================= مواقع المشاهدة ================= */
+  .site-row{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 12px}
+  .site-row .site-name{font-weight:700;font-size:.85rem;white-space:nowrap}
+  .site-row .site-url{flex:1;font-size:.72rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+
+  /* ================= الاستيراد ================= */
+  #impText{
+    width:100%;min-height:130px;background:var(--bg);border:1px solid var(--line);border-radius:9px;
+    color:var(--ink);font-family:'Cairo',sans-serif;font-size:.85rem;padding:10px 12px;resize:vertical;
+  }
+  .impRow{
+    display:flex;align-items:center;gap:9px;padding:7px 10px;border:1px solid var(--line);
+    border-radius:8px;margin-top:6px;font-size:.85rem;cursor:pointer;
+  }
+  .impRow:hover{border-color:var(--amber-deep)}
+  .impRow input{accent-color:var(--amber)}
+  .impRow .iy{color:var(--muted);font-size:.75rem}
+
+  /* ================= متابعة الحلقات ================= */
+  .prog{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .prog .plab{font-size:.78rem;color:var(--muted);font-weight:700}
+  .stepbtn{
+    width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--bg);
+    color:var(--ink);font-weight:800;cursor:pointer;font-size:.95rem;
+  }
+  .stepbtn:hover{border-color:var(--amber-deep)}
+  .pnum{font-family:'Changa',sans-serif;font-weight:800;font-size:1.05rem;min-width:26px;text-align:center;color:var(--amber)}
+  .remain{font-size:.78rem;color:var(--muted);margin-top:9px}
+
+  /* ================= البلاير ================= */
+  .playerbox{
+    position:relative;background:#000;width:100%;
+    height:min(78vh, calc(min(1400px, 97vw) * 9 / 16));
+  }
+  .playerbox iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .playerbox:fullscreen{width:100vw;height:100vh}
+  .playerbox:-webkit-full-screen{width:100vw;height:100vh}
+  .playerbox:fullscreen iframe{width:100%;height:100%}
+  .playerbox .pload{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--muted);font-size:.9rem;font-weight:700;
+  }
+  .modal.wide{max-width:min(1400px,97vw)}
+  .overlay.theater{padding:2vh 8px 8px;align-items:center}
+  .pbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px dashed var(--line)}
+  .pbar .pt{font-family:'Changa',sans-serif;font-weight:700;flex:1;min-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pbar .pt .ep{color:var(--amber)}
+  .srv{
+    font-family:'Cairo',sans-serif;font-weight:700;font-size:.72rem;
+    background:var(--bg);border:1px solid var(--line);color:var(--muted);
+    border-radius:20px;padding:5px 12px;cursor:pointer;transition:.15s;
+  }
+  .srv:hover{border-color:var(--amber-deep)}
+  .srv.on{background:var(--amber);border-color:var(--amber);color:var(--accent-ink)}
+
+  /* ================= مودال الإعدادات والثيمات ================= */
+  .modal.settings{max-width:640px;max-height:90vh;overflow-y:auto}
+  .themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+  .theme-card{
+    border:2px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;
+    background:none;padding:0;text-align:center;transition:border-color .15s,transform .15s;
+  }
+  .theme-card:hover{transform:translateY(-2px)}
+  .theme-card.on{border-color:var(--amber)}
+  .theme-card .tprev{height:56px;display:flex;align-items:flex-end;justify-content:center;gap:5px;padding-bottom:9px}
+  .theme-card .tprev i{width:22px;height:30px;border-radius:4px;display:block}
+  .theme-card .tname{
+    display:block;font-family:'Cairo',sans-serif;font-weight:700;font-size:.76rem;
+    color:var(--ink);padding:7px 4px;background:var(--surface);
+  }
+
+  .toast{
+    position:fixed;bottom:24px;inset-inline-start:50%;transform:translateX(50%);
+    background:var(--amber);color:var(--accent-ink);font-weight:700;font-size:.85rem;
+    padding:11px 20px;border-radius:10px;opacity:0;pointer-events:none;transition:.25s;z-index:99;
+  }
+  .toast.show{opacity:1}
+
+  /* ============================================================
+     ثيمات بريميوم — عمق، توهج، حركة ناعمة (٣ أمزجة متميزة)
+     كل واحد بيغيّر المتغيرات + لمسات عمق على العناصر الأساسية
+     ============================================================ */
+
+  /* الافتراضي (سينما / كهرماني) هو تعريف :root نفسه */
+
+  /* ============ 🌊 ميدنايت (أزرق سيان بارد) ============ */
+  html[data-theme="midnight"]{
+    --bg:#080b14;--surface:#0f1522;--surface2:#161e30;--line:#243247;
+    --ink:#eaf2ff;--muted:#7d8ba6;
+    --amber:#2dd4bf;--amber-deep:#0f766e;--accent-ink:#04140f;
+    --green:#4ade80;--red:#f87171;
+    --glow:0 8px 30px color-mix(in srgb, var(--amber) 32%, transparent),0 2px 10px rgba(0,0,0,.65);
+  }
+  html[data-theme="midnight"] body{
+    background-image:
+      radial-gradient(ellipse 60% 40% at 15% -8%, rgba(45,212,191,.14), transparent 60%),
+      radial-gradient(ellipse 55% 45% at 92% 4%, rgba(59,130,246,.12), transparent 62%);
+  }
+
+  /* ============ 🔥 إمبر (أحمر برتقالي دافئ سينمائي) ============ */
+  html[data-theme="ember"]{
+    --bg:#120a08;--surface:#1c1210;--surface2:#271815;--line:#3d2620;
+    --ink:#fff3ec;--muted:#a88a7e;
+    --amber:#ff5c38;--amber-deep:#c0341a;--accent-ink:#1a0603;
+    --green:#7bc86c;--red:#ff5c38;
+    --glow:0 8px 30px color-mix(in srgb, var(--amber) 34%, transparent),0 2px 10px rgba(0,0,0,.7);
+  }
+  html[data-theme="ember"] body{
+    background-image:
+      radial-gradient(ellipse 70% 42% at 50% -10%, rgba(255,92,56,.16), transparent 60%),
+      radial-gradient(ellipse 40% 30% at 88% 8%, rgba(192,52,26,.13), transparent 64%);
+  }
+
+  /* ============ 💜 نوفا (بنفسجي نيون) ============ */
+  html[data-theme="nova"]{
+    --bg:#0c0a16;--surface:#141022;--surface2:#1d1732;--line:#2f2547;
+    --ink:#f3eeff;--muted:#8f84ac;
+    --amber:#a855f7;--amber-deep:#7c3aed;--accent-ink:#12061f;
+    --green:#4ade80;--red:#f472b6;
+    --glow:0 8px 32px color-mix(in srgb, var(--amber) 38%, transparent),0 2px 10px rgba(0,0,0,.68);
+  }
+  html[data-theme="nova"] body{
+    background-image:
+      radial-gradient(ellipse 62% 42% at 10% -8%, rgba(168,85,247,.16), transparent 60%),
+      radial-gradient(ellipse 58% 44% at 95% 2%, rgba(236,72,153,.13), transparent 62%);
+  }
+
+  /* ============ لمسات العمق المشتركة على كل الثيمات ============ */
+  html[data-theme] .pcard{
+    transition:transform .28s cubic-bezier(.34,1.3,.5,1), box-shadow .28s ease, border-color .28s ease;
+  }
+  html[data-theme] .pcard:hover{
+    transform:translateY(-8px) scale(1.035);
+    border-color:var(--amber);
+    box-shadow:var(--glow);
+  }
+  /* لمعة قطرية بتمر على البوستر عند الـ hover */
+  html[data-theme] .pcard::after{
+    content:'';position:absolute;inset:0;pointer-events:none;opacity:0;
+    background:linear-gradient(115deg, transparent 30%, color-mix(in srgb, var(--amber) 22%, transparent) 50%, transparent 70%);
+    transform:translateX(-100%);transition:opacity .1s;
+  }
+  html[data-theme] .pcard:hover::after{opacity:1;animation:sheen .7s ease}
+  @keyframes sheen{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+
+  /* الأزرار الأساسية بتوهج ناعم */
+  html[data-theme] .btn-amber{
+    box-shadow:0 3px 16px color-mix(in srgb, var(--amber) 40%, transparent);
+    transition:box-shadow .2s, filter .2s, transform .1s;
+  }
+  html[data-theme] .btn-amber:hover{
+    box-shadow:0 5px 22px color-mix(in srgb, var(--amber) 58%, transparent);
+    filter:brightness(1.08);
+  }
+  html[data-theme] .btn-amber:active{transform:translateY(1px)}
+
+  /* التبويب النشط بخط سفلي متوهج */
+  html[data-theme] .tab.on{
+    background:color-mix(in srgb, var(--surface2) 70%, transparent);
+    box-shadow:inset 0 -2px 0 var(--amber), 0 0 18px color-mix(in srgb, var(--amber) 22%, transparent);
+  }
+
+  /* البانلات والمودالات بتدرّج خفيف بدل السطح المسطح */
+  html[data-theme] .panel,
+  html[data-theme] .modal,
+  html[data-theme] .statsbar{
+    background-image:linear-gradient(180deg, color-mix(in srgb, var(--amber) 4%, transparent), transparent 40%);
+  }
+
+  /* العنوان بتوهج أقوى شوية */
+  html[data-theme] h1 .glow{text-shadow:0 0 26px color-mix(in srgb, var(--amber) 55%, transparent)}
+
+  /* الشرائح النشطة والحبوب بتوهج */
+  html[data-theme] .fchip.on,
+  html[data-theme] .pill.on{box-shadow:0 0 16px color-mix(in srgb, var(--amber) 45%, transparent)}
+
+  /* المودال يظهر بحركة أنعم */
+  html[data-theme] .modal{animation:mInPremium .3s cubic-bezier(.34,1.2,.5,1)}
+  @keyframes mInPremium{from{transform:translateY(20px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+
+  /* ================= صندوق الفيلم الغامض ================= */
+  .mystery-box{
+    position:relative;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    margin-bottom:18px;padding:18px 20px;border-radius:16px;overflow:hidden;
+    background:linear-gradient(135deg, color-mix(in srgb,var(--amber) 14%,var(--surface)), var(--surface2));
+    border:1px solid var(--amber-deep);
+    box-shadow:0 6px 26px color-mix(in srgb,var(--amber) 18%,transparent);
+  }
+  .mystery-box .mb-glow{
+    position:absolute;inset:-40% -10%;pointer-events:none;
+    background:radial-gradient(ellipse 40% 60% at 20% 40%, color-mix(in srgb,var(--amber) 30%,transparent), transparent 60%);
+    animation:mbFloat 6s ease-in-out infinite;
+  }
+  @keyframes mbFloat{0%,100%{transform:translateX(0)}50%{transform:translateX(30%)}}
+  .mystery-box .mb-gift{
+    font-size:2.6rem;position:relative;z-index:1;
+    animation:mbWobble 3s ease-in-out infinite;filter:drop-shadow(0 4px 10px rgba(0,0,0,.4));
+  }
+  @keyframes mbWobble{0%,100%{transform:rotate(-6deg) scale(1)}50%{transform:rotate(6deg) scale(1.08)}}
+  .mystery-box .mb-text{flex:1;min-width:180px;position:relative;z-index:1}
+  .mystery-box .mb-title{font-family:'Changa',sans-serif;font-weight:800;font-size:1.15rem;color:var(--ink)}
+  .mystery-box .mb-sub{font-size:.8rem;color:var(--muted);margin-top:3px;line-height:1.5;max-width:440px}
+  .mystery-box .mb-btn{position:relative;z-index:1;white-space:nowrap;font-size:.92rem;padding:11px 22px}
+  @media(max-width:520px){.mystery-box{padding:16px}.mystery-box .mb-btn{width:100%}}
+
+  /* ================= لوحة الإحصائيات والرؤى ================= */
+  .stat-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:22px}
+  .stat-card{
+    background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;
+    position:relative;overflow:hidden;
+  }
+  .stat-card .sc-num{font-family:'Changa',sans-serif;font-weight:800;font-size:1.7rem;color:var(--amber);line-height:1}
+  .stat-card .sc-lab{font-size:.72rem;color:var(--muted);margin-top:5px}
+  .stat-sec{margin-bottom:24px}
+  .stat-sec h3{font-family:'Changa',sans-serif;font-weight:700;font-size:.98rem;color:var(--ink);margin-bottom:12px;display:flex;align-items:center;gap:7px}
+
+  /* توزيع التقييمات — أعمدة */
+  .rating-bars{display:flex;align-items:flex-end;gap:5px;height:120px;padding-top:10px}
+  .rating-bars .rb{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end}
+  .rating-bars .rb-fill{width:100%;background:linear-gradient(180deg,var(--amber),var(--amber-deep));border-radius:5px 5px 0 0;min-height:3px;transition:height .5s cubic-bezier(.34,1.2,.5,1);position:relative}
+  .rating-bars .rb-fill .rb-c{position:absolute;top:-16px;inset-inline:0;text-align:center;font-size:.64rem;font-weight:700;color:var(--muted)}
+  .rating-bars .rb-x{font-size:.66rem;color:var(--muted);font-weight:700}
+
+  /* شرائط التصنيفات */
+  .gbar{margin-bottom:9px}
+  .gbar-top{display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:3px}
+  .gbar-top .gname{font-weight:700;color:var(--ink)}
+  .gbar-top .gcount{color:var(--muted)}
+  .gbar-track{height:9px;background:var(--bg);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+  .gbar-fill{height:100%;background:linear-gradient(90deg,var(--amber-deep),var(--amber));border-radius:20px;transition:width .5s ease}
+
+  /* نشاط شهري */
+  .month-grid{display:flex;align-items:flex-end;gap:4px;height:80px}
+  .month-grid .mo{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+  .month-grid .mo-fill{width:100%;background:var(--amber);border-radius:4px 4px 0 0;min-height:2px;opacity:.85;transition:height .5s ease}
+  .month-grid .mo-x{font-size:.58rem;color:var(--muted)}
+
+  /* أزرار الترجمة الافتراضية */
+  .sublangs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .sublangs .sl{
+    font-family:'Cairo',sans-serif;font-weight:700;font-size:.78rem;
+    background:var(--bg);border:1px solid var(--line);color:var(--muted);
+    border-radius:9px;padding:7px 13px;cursor:pointer;transition:.15s;
+  }
+  .sublangs .sl:hover{border-color:var(--amber-deep)}
+  .sublangs .sl.on{background:var(--amber);border-color:var(--amber);color:var(--accent-ink)}
+
+  /* غطاء الفيلم الغامض فوق البلاير (من طرف التطبيق) */
+  .wl-veil{
+    position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:15px;text-align:center;padding:28px;
+    background:linear-gradient(160deg,#0b0b10,#161018);
+    transition:opacity .4s ease;
+  }
+  .wl-veil-gift{font-size:4rem;animation:mbWobble 2.4s ease-in-out infinite;filter:drop-shadow(0 6px 16px rgba(0,0,0,.5))}
+  .wl-veil-t{font-family:'Changa',sans-serif;font-weight:800;font-size:1.35rem;color:var(--amber)}
+  .wl-veil-s{font-size:.86rem;color:var(--muted);max-width:400px;line-height:1.65}
+  .wl-veil .btn{margin-top:6px;font-size:.95rem;padding:12px 26px}
+
+  /* بلور البلاير أثناء الضغط على Play (وضع الميستري) */
+  .playerbox.wl-blurred iframe{filter:blur(70px) brightness(.45) saturate(.5);transform:scale(1.25)}
+  .playerbox.wl-blurred{position:relative}
+  .playerbox.wl-blurred::before{
+    content:'';position:absolute;inset:0;z-index:5;pointer-events:none;
+    background:rgba(11,11,16,.55);backdrop-filter:blur(24px);
+  }
+  .wl-hint{position:absolute;inset:0;z-index:6;display:flex;align-items:flex-end;justify-content:center;padding-bottom:30px;pointer-events:none}
+  .wl-hint .wl-hint-in{display:flex;flex-direction:column;align-items:center;gap:12px;pointer-events:auto}
+  .wl-hint-t{
+    background:rgba(11,11,16,.9);color:var(--amber);font-family:'Changa',sans-serif;font-weight:800;
+    font-size:1.05rem;padding:12px 24px;border-radius:12px;border:1px solid var(--amber-deep);
+    box-shadow:0 6px 20px rgba(0,0,0,.5);animation:mbWobble 2.5s ease-in-out infinite;
+  }
+  .wl-hint .btn{font-size:.9rem;padding:11px 22px;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+
+  /* شاشة تحميل الصندوق في البلاير */
+  .mystery-reveal{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;background:var(--bg);z-index:2;color:var(--ink);text-align:center;padding:20px;
+  }
+  .mystery-reveal .mr-gift{font-size:4rem;animation:mbWobble 2s ease-in-out infinite}
+  .mystery-reveal .mr-t{font-family:'Changa',sans-serif;font-weight:800;font-size:1.3rem}
+  .mystery-reveal .mr-s{font-size:.85rem;color:var(--muted)}
+
+  /* ================= أقسام الإعدادات المطوية ================= */
+  .setsec{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden}
+  .setsec>summary{
+    list-style:none;cursor:pointer;padding:12px 14px;user-select:none;
+    font-family:'Changa',sans-serif;font-weight:700;font-size:.92rem;color:var(--ink);
+    display:flex;align-items:center;
+  }
+  .setsec>summary::-webkit-details-marker{display:none}
+  .setsec>summary::after{content:'▾';margin-inline-start:auto;color:var(--muted);transition:transform .2s}
+  .setsec[open]>summary::after{transform:rotate(180deg)}
+  .setsec .ssin{padding:2px 14px 14px}
+
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>قائمة <span class="glow">المشاهدة</span></h1>
+      <div class="sub">حائط الأفلام والمسلسلات بتاعك — اضغط على أي بوستر للتفاصيل</div>
+    </div>
+    <button class="btn btn-amber" id="tasteBtn">🤖 الذوق والترشيحات</button>
+  </header>
+
+  <details class="panel" id="addBox">
+    <summary id="formTitle">＋ إضافة جديد</summary>
+    <div class="inner">
+      <div class="grid">
+        <div>
+          <label for="fTitle">الاسم</label>
+          <div style="display:flex;gap:6px">
+            <input type="text" id="fTitle" dir="auto" placeholder="مثال: Silo" style="flex:1">
+            <button class="btn" id="lookupBtn" title="يجيب البوستر والوصف وتقييم IMDb تلقائي">🔍 IMDb</button>
+          </div>
+          <div id="metaPreview" style="font-size:.75rem;color:var(--amber);margin-top:5px;min-height:1em"></div>
+          <div id="chooser" style="display:none;margin-top:6px;flex-direction:column;gap:5px"></div>
+        </div>
+        <div>
+          <label for="fType">النوع</label>
+          <select id="fType">
+            <option value="film">فيلم</option>
+            <option value="tv">مسلسل</option>
+          </select>
+        </div>
+        <div>
+          <label for="fGenre">التصنيف (اختياري)</label>
+          <input type="text" id="fGenre" dir="auto" placeholder="Sci-Fi, Crime...">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="seg" id="statusSeg">
+          <button type="button" data-s="queue" class="on">هشوفه قريب</button>
+          <button type="button" data-s="watched">شفته خلاص</button>
+        </div>
+        <button class="btn btn-amber" id="saveBtn">حفظ</button>
+        <button class="btn btn-ghost" id="cancelEdit" style="display:none">إلغاء التعديل</button>
+      </div>
+    </div>
+  </details>
+
+  <div class="toolbar">
+    <div class="tabs">
+      <button class="tab on" data-tab="queue">🎬 هشوفهم <span class="count" id="cQueue"></span></button>
+      <button class="tab" data-tab="watching">▶ بتفرج <span class="count" id="cWatching"></span></button>
+      <button class="tab" data-tab="watched">✔ شفتهم <span class="count" id="cWatched"></span></button>
+      <button class="tab" data-tab="dropped">✖ سبتهم <span class="count" id="cDropped"></span></button>
+    </div>
+    <input type="text" class="search" id="search" dir="auto" placeholder="بحث بالاسم أو التصنيف...">
+    <button class="btn btn-sm" id="randBtn" title="مش عارف تتفرج على إيه؟" style="display:none">🎲 اختارلي</button>
+    <button class="btn btn-sm sortbtn" id="sortBtn" style="display:none"></button>
+    <button class="btn btn-sm" id="statsToggle" title="إحصائيات المشاهدة">📊</button>
+    <button class="btn btn-sm" id="gearBtn" title="الإعدادات">⚙</button>
+    <button class="btn btn-sm" id="viewBtn" title="بدّل شكل العرض">☰</button>
+  </div>
+
+  <div class="statsbar" id="statsBar" style="display:none"></div>
+  <div class="mystery-box" id="mysteryBox" style="display:none">
+    <div class="mb-glow"></div>
+    <div class="mb-gift">🎁</div>
+    <div class="mb-text">
+      <div class="mb-title">فيلم غامض</div>
+      <div class="mb-sub">سيبني أختارلك فيلم من قايمتك وأشغّله على طول — من غير ما تعرف اسمه ولا أي تفاصيل. مفاجأة كاملة 🍿</div>
+    </div>
+    <button class="btn btn-amber mb-btn" data-act="mysteryPlay">🎬 افتح الصندوق</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="bkbanner" id="bkBanner" style="display:none">
+    <span>⏰ بقالك أكتر من أسبوعين من غير نسخة احتياطية — دقيقة واحدة وتبقى مطمّن</span>
+    <button class="btn btn-sm btn-amber" data-act="backup">⬇ نزّل دلوقتي</button>
+    <button class="btn btn-sm btn-ghost" data-act="bkSnooze">فكّرني بعدين</button>
+  </div>
+
+  <div id="list"></div>
+
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal"></div>
+</div>
+
+<div class="overlay" id="statsOverlay">
+  <div class="modal settings">
+    <button class="mclose" style="position:sticky;top:12px;float:left;margin:12px" data-act="statsClose" title="إغلاق">✕</button>
+    <div class="mbody" style="padding-top:18px">
+      <h2 style="font-family:'Changa',sans-serif;color:var(--amber);font-size:1.2rem;margin-bottom:4px">📊 ذوقك في أرقام</h2>
+      <div class="sub" id="statsIntro" style="margin-bottom:18px"></div>
+      <div id="statsContent"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="settingsOverlay">
+  <div class="modal settings">
+    <button class="mclose" style="position:sticky;top:12px;float:left;margin:12px" data-act="settingsClose" title="إغلاق">✕</button>
+    <div class="mbody" style="padding-top:18px">
+      <h2 style="font-family:'Changa',sans-serif;color:var(--amber);font-size:1.2rem;margin-bottom:14px">⚙ الإعدادات</h2>
+
+      <h2 class="sh2">🎨 الثيم</h2>
+      <div class="themes" id="themesBox">
+        <button class="theme-card" data-act="theme" data-v="cinema">
+          <span class="tprev" style="background:#0b0b10"><i style="background:#e8a33d"></i><i style="background:#16161e"></i><i style="background:#1e1e28"></i></span>
+          <span class="tname">🎬 سينما</span>
+        </button>
+        <button class="theme-card" data-act="theme" data-v="midnight">
+          <span class="tprev" style="background:#080b14"><i style="background:#2dd4bf"></i><i style="background:#0f1522"></i><i style="background:#161e30"></i></span>
+          <span class="tname">🌊 ميدنايت</span>
+        </button>
+        <button class="theme-card" data-act="theme" data-v="ember">
+          <span class="tprev" style="background:#120a08"><i style="background:#ff5c38"></i><i style="background:#1c1210"></i><i style="background:#271815"></i></span>
+          <span class="tname">🔥 إمبر</span>
+        </button>
+        <button class="theme-card" data-act="theme" data-v="nova">
+          <span class="tprev" style="background:#0c0a16"><i style="background:#a855f7"></i><i style="background:#141022"></i><i style="background:#1d1732"></i></span>
+          <span class="tname">💜 نوفا</span>
+        </button>
+      </div>
+
+      <div style="border-top:1px dashed var(--line);margin:16px 0"></div>
+    <details class="setsec"><summary>🔑 مفاتيح الـ API</summary><div class="ssin">
+    <label for="apiKey">مفتاح OMDb API — متسجّل بالفعل، غيّره بس لو عايز تستخدم مفتاح تاني</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="text" id="apiKey" dir="ltr" placeholder="مثال: a1b2c3d4" style="flex:1;min-width:180px">
+      <button class="btn btn-amber" data-act="saveKey">حفظ المفتاح</button>
+    </div>
+
+    <label for="tmdbKey" style="margin-top:12px">مفتاح TMDB API — لازم عشان لينكات {tmdbID} وخلفيات التفاصيل وتنبيهات المواسم (من themoviedb.org/settings/api)</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="text" id="tmdbKey" dir="ltr" placeholder="API Key أو eyJhbGci..." style="flex:1;min-width:180px">
+      <button class="btn btn-amber" data-act="saveTmdb">حفظ المفتاح</button>
+    </div>
+    </div></details>
+
+    <details class="setsec"><summary>📺 البلاير والتحميل</summary><div class="ssin">
+    <div class="sub" style="margin-bottom:10px">زرار "▶ شغّل هنا" في بانل التفاصيل بيشغّل من القالب ده جوه التطبيق. لو الدومين وقع، بدّله بواحد من: vidsrc-embed.ru • vidsrc-embed.su • vidsrcme.su • vsrc.su</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="text" id="playerTpl" dir="ltr" style="flex:1;min-width:260px">
+      <button class="btn btn-amber" data-act="savePlayer">حفظ القالب</button>
+    </div>
+
+    <label for="dlTpl" style="margin-top:12px">⬇ لينك التحميل — زرار "تحميل" في التفاصيل بيفتح من القالب ده. نفس الـ placeholders: <b dir="ltr">{type}</b> <b dir="ltr">{tmdbID}</b> <b dir="ltr">{imdbID}</b></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="text" id="dlTpl" dir="ltr" style="flex:1;min-width:260px">
+      <button class="btn btn-amber" data-act="saveDl">حفظ لينك التحميل</button>
+    </div>
+    <label style="margin-top:14px">💬 الترجمة الافتراضية — بتتفعّل تلقائياً وقت التشغيل من غير ما تفتح قايمة الترجمات</label>
+    <div class="sublangs" id="subLangs">
+      <button class="sl" data-act="subLang" data-v="ar">🇪🇬 عربي</button>
+      <button class="sl" data-act="subLang" data-v="en">🇬🇧 إنجليزي</button>
+      <button class="sl" data-act="subLang" data-v="fr">🇫🇷 فرنسي</button>
+      <button class="sl" data-act="subLang" data-v="es">🇪🇸 إسباني</button>
+      <button class="sl" data-act="subLang" data-v="off">✖ بدون</button>
+    </div>
+    <div class="sub" style="margin-top:5px">ملحوظة: بيعتمد على وجود ترجمة باللغة دي في السيرفر — لو مش موجودة البلاير بيبدأ من غير ترجمة</div>
+    <div style="margin-top:12px"><button class="btn" data-act="playerShield" id="shieldBtn">🛡 مانع الإعلانات الصارم: مقفول</button>
+    <div class="sub" style="margin-top:4px">الوضع العادي بيمنع الـ popups تلقائياً على السيرفرات المدمجة — فعّل الصارم بس لو بتستخدم دومين مخصص</div></div>
+    </div></details>
+
+    <details class="setsec"><summary>▶ مواقع المشاهدة</summary><div class="ssin">
+    <div class="sub" style="margin-bottom:10px">الـ placeholders المتاحة: <b dir="ltr">{q}</b> = اسم الفيلم في لينك بحث، <b dir="ltr">{tmdbID}</b> = رقم TMDB، <b dir="ltr">{type}</b> = movie أو tv، <b dir="ltr">{season}</b> و<b dir="ltr">{episode}</b> = موقفك في المسلسل (الحلقة الجاية تلقائياً — وبيتشالوا لوحدهم مع الأفلام). أمثلة: <span dir="ltr" style="color:var(--ink)">lordflix.org/watch/{type}/{tmdbID}</span> • <span dir="ltr" style="color:var(--ink)">shuttletv.pk/watch/{tmdbID}</span></div>
+    <div id="sitesList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="text" id="siteName" dir="auto" placeholder="اسم الموقع" style="flex:1;min-width:120px">
+      <input type="text" id="siteUrl" dir="ltr" placeholder="https://example.com/?s={q}" style="flex:2;min-width:200px">
+      <button class="btn btn-amber" data-act="addSite">إضافة</button>
+    </div>
+    </div></details>
+
+    <details class="setsec"><summary>💾 النسخ الاحتياطي ونقل الإعدادات</summary><div class="ssin">
+    <div class="sub" style="margin-bottom:10px">القايمة والتقييمات والمفاتيح والمواقع كلها في ملف واحد — خد نسخة قبل أي تجربة، والاسترجاع بيرجّع كل حاجة حتى على تثبيت جديد</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-amber" data-act="backup">⬇ تنزيل نسخة احتياطية</button>
+      <button class="btn" data-act="restore">⬆ استرجاع من ملف</button>
+      <input type="file" id="restoreFile" accept=".json,application/json" style="display:none">
+    </div>
+    <div style="border-top:1px dashed var(--line);margin:14px 0"></div>
+    <h2 style="font-size:.95rem">🔧 نقل الإعدادات بين المتصفحات</h2>
+    <div class="sub" style="margin-bottom:10px">بيصدّر الإعدادات بس (المفاتيح، مواقع المشاهدة، قالب البلاير، التفضيلات) من غير القايمة — عشان تفتح من متصفح تاني وتلاقي كل حاجة متظبطة زي ما هي. ده منفصل تماماً عن ملف الذوق وعن النسخة الاحتياطية الكاملة</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-amber" data-act="setExport">⬇ صدّر الإعدادات</button>
+      <button class="btn" data-act="setImport">⬆ استورد إعدادات</button>
+      <input type="file" id="setFile" accept=".json,application/json" style="display:none">
+    </div>
+    </div></details>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="importOverlay">
+  <div class="modal" style="max-width:580px">
+    <button class="mclose" data-act="importClose" title="إغلاق">✕</button>
+    <div class="mbody" style="padding-top:20px">
+      <h2 style="font-family:'Changa',sans-serif;color:var(--amber);font-size:1.15rem;margin-bottom:6px">🤖 الذوق والترشيحات</h2>
+      <div class="sub" style="margin-bottom:10px">الدورة كاملة من هنا: انسخ ذوقك وادّيه لأي AI، وبعدين الصق رده تحت وهنضيف الترشيحات لقايمتك</div>
+      <button class="btn btn-amber" id="exportBtn" style="margin-bottom:14px">📋 ١) انسخ ملف الذوق للـ AI</button>
+      <div style="border-top:1px dashed var(--line);margin-bottom:12px"></div>
+      <div class="sub" style="margin-bottom:8px"><b style="color:var(--ink)">٢) الصق رد الـ AI هنا</b> (قايمة مرقمة أو bullets) — هنستخرج العناوين وانت تختار اللي يدخل "هشوفهم"</div>
+      <textarea id="impText" dir="auto" placeholder="1. Dark (TV, 2017) — mind-bending German sci-fi...&#10;2. Sicario (2015) — ..."></textarea>
+      <div class="form-row">
+        <button class="btn btn-amber" data-act="importParse">استخرج العناوين</button>
+      </div>
+      <div id="impList"></div>
+      <div id="impStatus" style="font-size:.8rem;color:var(--amber);margin-top:10px;min-height:1em"></div>
+      <div class="form-row">
+        <button class="btn btn-amber" data-act="importAdd" id="impAddBtn" style="display:none">＋ ضيف المختار لـ"هشوفهم"</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
