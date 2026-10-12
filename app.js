@@ -39,7 +39,8 @@ function restorePlayerSrv(saved,savedLen){
   return ix>=len?PLAYER_SERVERS.length:Math.min(ix,PLAYER_SERVERS.length);
 }
 let playerSrv=0, playerShield=true, subLang='ar';
-const DEFAULT_DL='https://web.nxsha.app/dl/{type}/{tmdbID}';
+const DEFAULT_DL='https://web.nxsha.app/dl/{type}/{tmdbID}/{season}/{episode}';
+const LEGACY_DL='https://web.nxsha.app/dl/{type}/{tmdbID}'; // كان بيفتح S1E1 دايماً للمسلسلات
 
 /* ================= أدوات ================= */
 const $=id=>document.getElementById(id);
@@ -148,7 +149,7 @@ function parseItems(raw){
 }
 function parseSites(raw){
   const arr=JSON.parse(raw);
-  return Array.isArray(arr)?arr.filter(s=>s&&isHttp(s.url)).map(s=>({name:str(s.name)||s.url,url:s.url,...(s.noBlock===true?{noBlock:true}:{})})):null;
+  return Array.isArray(arr)?arr.filter(s=>s&&isHttp(s.url)).map(s=>({name:str(s.name)||s.url,url:s.url,...(s.noBlock===true?{noBlock:true}:{}),...(s.dl===true?{dl:true}:{})})):null;
 }
 
 /* ================= نافذة تأكيد جوه البرنامج =================
@@ -202,7 +203,7 @@ async function load(){
   $('apiKey').value=(await sget('watchlist:omdbkey'))||'';
   $('tmdbKey').value=(await sget('watchlist:tmdbkey'))||'';
   $('playerTpl').value=(await sget('watchlist:playerTpl'))||DEFAULT_PLAYER;
-  $('dlTpl').value=(await sget('watchlist:dlTpl'))||DEFAULT_DL;
+  {const d=await sget('watchlist:dlTpl');$('dlTpl').value=!d||d===LEGACY_DL?DEFAULT_DL:d;}
   playerSrv=restorePlayerSrv(await sget('watchlist:playerSrv'),await sget(SRV_LIST_LEN_KEY));
   playerShield=(await sget('watchlist:playerShield'))==='1';
   subLang=(await sget('watchlist:subLang'));if(subLang==null)subLang='ar';
@@ -1088,12 +1089,15 @@ function renderModal(){
       ${progSec}
       ${rateSec}
       ${it.recWhy||it.recFrom?`<div class="msec why"><div class="sh">${ic('spark')}اترشحلك ليه</div><div class="rw">${recWhyHtml(it.recWhy,it.recFrom)}</div></div>`:''}
-      ${active&&sites.length?`<div class="msec">
+      ${active&&sites.some(s=>!s.dl)?`<div class="msec">
         <div class="sh">اتفرج على موقع<span class="aside">بيفتح في نافذة جديدة</span></div>
-        <div class="sitegrid">${sites.map((s,ix)=>`<button class="site" data-act="watch" data-id="${it.id}" data-site="${ix}"><span dir="auto">${esc(s.name)}</span>${ic('ext','sm')}</button>`).join('')}</div>
+        <div class="sitegrid">${siteBtns(it,false)}</div>
       </div>`:''}
+      <div class="msec">
+        <div class="sh">حمّل من<span class="aside">${it.type==='tv'?`S${pad(it.curSeason||1)}E${pad((it.curEp||0)+1)} · `:''}ضيف مواقع تانية من الإعدادات ← مواقع</span></div>
+        <div class="sitegrid"><button class="site" data-act="download" data-id="${it.id}"><span dir="ltr">${esc(tplHost($('dlTpl').value.trim()||DEFAULT_DL))}</span>${ic('download','sm')}</button>${siteBtns(it,true)}</div>
+      </div>
       <div class="mtools">
-        <button class="tool" data-act="download" data-id="${it.id}">${ic('download')}تحميل</button>
         <button class="tool" data-act="trailer" data-id="${it.id}">${ic('film')}تريلر</button>
         ${active?`<button class="tool" data-act="drop" data-id="${it.id}">${ic('x')}سبته</button>`:''}
         ${it.status!=='queue'?`<button class="tool" data-act="toQueue" data-id="${it.id}">${ic('undo')}رجّعه للقايمة</button>`:''}
@@ -1224,13 +1228,16 @@ function renderSites(){
   const box=$('sitesList');
   box.innerHTML=sites.length?sites.map((s,ix)=>
     `<div class="site-row">
-      <span class="site-name" dir="auto">${ic('play','fill sm')}${esc(s.name)}</span>
+      <span class="site-name" dir="auto">${ic(s.dl?'download':'play',s.dl?'sm':'fill sm')}${esc(s.name)}${s.dl?'<span class="sub"> · تحميل</span>':''}</span>
       <span class="site-url" dir="ltr">${esc(s.url)}</span>
       ${window.__wlDesktop?`<button class="iconbtn blk" style="width:36px;height:36px;border:none" data-act="siteBlock" data-ix="${ix}" aria-pressed="${!s.noBlock}" title="${s.noBlock?'حظر الإعلانات مقفول للموقع ده — دوس تشغّله':'حظر الإعلانات شغال — دوس تقفله للموقع ده'}">${ic('shield','sm')}</button>`:''}
       <button class="iconbtn btn-danger" style="width:36px;height:36px;border:none" data-act="delSite" data-ix="${ix}" aria-label="امسح ${esc(s.name)}">${ic('x','sm')}</button>
     </div>`).join('')
     :'<div class="sub">مفيش مواقع متسجلة — ضيف واحد تحت</div>';
 }
+// زراير المواقع في صفحة العنوان — dl=true مواقع التحميل. ix = مكانه في sites (openWatch بيستخدمه)
+const siteBtns=(it,dl)=>sites.map((s,ix)=>!!s.dl!==dl?'':`<button class="site" data-act="watch" data-id="${it.id}" data-site="${ix}"><span dir="auto">${esc(s.name)}</span>${ic(dl?'download':'ext','sm')}</button>`).join('');
+const tplHost=t=>{try{return new URL(t.replace(/\{[^}]+\}/g,'x')).hostname.replace(/^www\./,'');}catch(e){return 'تحميل';}};
 async function addSite(){
   const name=$('siteName').value.trim();
   let url=$('siteUrl').value.trim();
@@ -1240,7 +1247,7 @@ async function addSite(){
     // لو مفيش placeholder نفترض بحث ووردبريس القياسي
     url=url.replace(/\/+$/,'')+'/?s={q}';
   }
-  sites.push({name,url});
+  sites.push($('siteKind').value==='dl'?{name,url,dl:true}:{name,url});
   await sset('watchlist:sites',JSON.stringify(sites));
   $('siteName').value='';$('siteUrl').value='';
   renderSites();render();toast('الموقع اتضاف ✔');
@@ -1426,26 +1433,30 @@ function mysteryReveal(id){
 }
 async function playerNext(id){
   // الحلقة اتحسبت تلقائي خلاص — نحمّل الجاية بس من غير ما نعدّ تاني
-  if(track&&track.id===id&&track.done){renderModal();return;}
+  if(track&&track.id===id&&track.done.size){renderModal();return;}
   await epPlus(id); // بيعمل persist + renderModal فالبلاير بيتحمّل بالحلقة الجديدة
 }
 
 /* ================= تتبع الحلقات تلقائي =================
-   سيرفر 1 (vsembed) و4 (vidlink) بيبعتوا مكانهم ومدتهم للصفحة. عند 90% الحلقة بتتعلّم اتشافت والعدّاد يتقدم،
+   بلايرات vsembed/vidsrc وvidlink (حتى في السيرفر المخصص) بيبعتوا مكانهم ومدتهم — وvidsrc بيبعت الحلقة اللي شغالة فعلاً.
+   عند 90% الحلقة بتتعلّم اتشافت والعدّاد يتقدم،
    ومكان الوقوف بيتحفظ. track = الحلقة اللي في البلاير دلوقتي (بيتعمل في renderPlayer) */
 const mmss=s=>Math.floor(s/60)+':'+pad(Math.floor(s%60));
 addEventListener('message',e=>{
   const f=document.querySelector('.playerbox iframe');
-  // بس من iframe البلاير نفسه ومن دومين السيرفر المختار (إعلان في فريم تاني ميقدرش يعلّم حلقات)
-  if(!track||!playerOpen||!f||e.source!==f.contentWindow||e.origin!==track.origin)return;
-  const ev=WlProgress.parse(track.srv,e.data);
+  // بس من فريم البلاير نفسه (إعلان في فريم جواه ميقدرش). مش بنقارن الدومين: السيرفرات بتعمل redirect (vidsrc-embed.ru → vidsrc.sh)
+  if(!track||!playerOpen||!f||e.source!==f.contentWindow)return;
+  const ev=WlProgress.parse(e.data);
   const it=ev&&items.find(i=>i.id===track.id);
   if(!it||it._party)return; // نسخة الـ Watch Party المؤقتة مبتتغيرش
-  const r=WlProgress.step(track,ev);
-  if(r==='save'){it.resume=it.type==='tv'?{s:track.s,e:track.e,pos:Math.floor(ev.pos)}:{pos:Math.floor(ev.pos)};persist();}
-  else if(r==='done')autoDone(it,track);
+  if(ev.tmdb!=null&&ev.tmdb!==it.tmdbId)return; // البلاير بيقول إنه شغال عنوان تاني
+  // الحلقة: اللي البلاير بيقول عليها (لو اختارتها من جواه)، وإلا اللي البرنامج فتحها
+  const tv=it.type==='tv', s=tv?(ev.s??track.s):0, ep=tv?(ev.e??track.e):0;
+  const r=WlProgress.step(track,ev,s+'x'+ep);
+  if(r==='save'){it.resume=tv?{s,e:ep,pos:Math.floor(ev.pos)}:{pos:Math.floor(ev.pos)};persist();}
+  else if(r==='done')autoDone(it,s,ep);
 });
-async function autoDone(it,t){
+async function autoDone(it,s,e){
   it.resume=undefined;
   if(it.type!=='tv'){
     if(it.status==='queue'||it.status==='watching'){
@@ -1454,11 +1465,13 @@ async function autoDone(it,t){
     }
     await persist();render();return;
   }
-  // لسه على نفس الحلقة؟ (لو غيّر العدّاد بإيده وهو بيتفرج منلمسوش). مسلسل خلص/اتساب منغيرش حالته
-  const same=(it.curSeason||1)===t.s&&(it.curEp||0)+1===t.e;
-  if(!same||(it.status!=='watching'&&it.status!=='queue')){await persist();return;}
-  if(it.status==='queue'){it.status='watching';it.curSeason=t.s;it.curEp=t.e-1;loadSeasonEps(it);}
-  toast(`حلقة ${t.e} اتعلّمت ✔`);
+  // حلقة قدّام العدّاد = العدّاد يتنقل لبعدها (حتى لو نطّيت حلقات من جوه البلاير).
+  // حلقة قديمة (بتعيدها) = العدّاد ميرجعش لورا. مسلسل خلص/اتساب منغيرش حالته
+  const cs=it.curSeason||1, ce=it.curEp||0;
+  if(!(s>cs||(s===cs&&e>ce))||(it.status!=='watching'&&it.status!=='queue')){await persist();return;}
+  if(it.status==='queue'){it.status='watching';loadSeasonEps(it);}
+  it.curSeason=s;it.curEp=e-1;
+  toast(`S${pad(s)}E${pad(e)} اتعلّمت ✔`);
   await epPlus(it.id,true);
   const b=document.querySelector('.pbar [data-act="playerNext"], .pbar [data-act="startWatch"]');
   if(b)b.outerHTML=`<button class="btn btn-ep" data-act="playerNext" data-id="${it.id}">${ic('play','fill sm')}شغّل الجاية</button>`;
@@ -1490,14 +1503,10 @@ function renderPlayer(it){
   const epTxt=it.type==='tv'?`<span class="ep">S${pad(s)} · E${pad(e)}</span>`:'';
   // حلقة/سيرفر جديد = تتبع جديد. نفس الحلقة (إعادة رسم عادية) = نكمّل بنفس الحالة عشان متتحسبش مرتين
   const key=[it.id,s,e,playerSrv].join('|');
-  if(src&&(!track||track.key!==key)){
-    let origin=null;
-    try{if(playerSrv<PLAYER_SERVERS.length)origin=new URL(src).origin;}catch(x){}
-    track={key,id:it.id,s,e,srv:playerSrv,origin,done:false,savedAt:null};
-  }
+  if(src&&(!track||track.key!==key))track={key,id:it.id,s,e,done:new Set(),ep:null,savedAt:null};
   const rs=it.resume;
-  const resumeTxt=!mystery&&rs&&rs.pos>=60&&(it.type!=='tv'||(rs.s===s&&rs.e===e))
-    ?`<span class="srv" title="آخر مرة وقفت هنا — قدّم البلاير للمكان ده">${ic('clock','sm')}وقفت عند ${mmss(rs.pos)}</span>`:'';
+  const resumeTxt=!mystery&&rs&&rs.pos>=60
+    ?`<span class="srv" title="آخر مرة وقفت هنا — قدّم البلاير للمكان ده">${ic('clock','sm')}وقفت عند ${it.type==='tv'&&rs.s&&rs.e?`S${pad(rs.s)}E${pad(rs.e)} · `:''}${mmss(rs.pos)}</span>`:'';
   const custom=$('playerTpl').value.trim();
   const nSrv=PLAYER_SERVERS.length+((custom&&custom!==DEFAULT_PLAYER)?1:0);
   const srvName=playerSrv<PLAYER_SERVERS.length?PLAYER_SERVERS[playerSrv].name:'مخصص';

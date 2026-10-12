@@ -310,6 +310,18 @@ try {
     assert.match(seen, /🍅 91%/); assert.doesNotMatch(seen, /8\.1/);
     await app.ev(`tab='queue';render();1`);
   });
+  await check('download sites: own "download from" section (default + added), not mixed with watch sites; TV default link has the episode', async () => {
+    const r = await app.ev(`(async()=>{sites=[{name:'W1',url:'https://w.example/{tmdbID}'}];$('siteKind').value='dl';$('siteName').value='D1';$('siteUrl').value='https://d.example/{type}/{tmdbID}';await addSite();
+      items.push(cleanItem({id:'dl1',title:'DL Show',type:'tv',status:'watching',tmdbId:77,curSeason:2,curEp:4}));openModal('dl1');
+      const secs=[...document.querySelectorAll('#modal .msec')].map(s=>s.innerText.replace(/\\s+/g,' '));
+      const u=fillUrl($('dlTpl').value,items.find(i=>i.id==='dl1'),77);closeModal();
+      return {saved:JSON.parse(await sget('watchlist:sites')).find(s=>s.name==='D1'),secs,u}})()`);
+    assert.deepEqual(r.saved, { name: 'D1', url: 'https://d.example/{type}/{tmdbID}', dl: true });
+    const watch = r.secs.find(s => /اتفرج على موقع/.test(s)), dl = r.secs.find(s => /حمّل من/.test(s));
+    assert.match(watch, /W1/); assert.doesNotMatch(watch, /D1/);
+    assert.match(dl, /D1/); assert.match(dl, /nxsha/);
+    assert.equal(r.u, 'https://web.nxsha.app/dl/tv/77/2/5');
+  });
   app.close();
 } finally { proc.kill(); }
 
@@ -343,7 +355,7 @@ try {
   app.on('Fetch.requestPaused', ({ requestId, request }) => {
     if (request.url.startsWith('https://vsembed.ru/')) { // بلاير مزيف: بيبعت PLAYER_EVENT زي vsembed لما التست يقوله
       return app('Fetch.fulfillRequest', { requestId, responseCode: 200, responseHeaders: [{ name: 'Content-Type', value: 'text/html' }],
-        body: Buffer.from(`<script>addEventListener('message',e=>{const d=e.data;if(d&&d.fake)parent.postMessage({type:'PLAYER_EVENT',data:{player_status:d.fake,player_progress:d.pos,player_duration:d.dur||2700}},'*')})</script>`).toString('base64') });
+        body: Buffer.from(`<script>addEventListener('message',e=>{const d=e.data;if(d&&d.fake)parent.postMessage({type:'PLAYER_EVENT',data:{player_status:d.fake,player_progress:d.pos,player_duration:d.dur||2700,...(d.info?{player_info:d.info}:{})}},'*')})</script>`).toString('base64') });
     }
     if (tmdbMode === 'offline') return app('Fetch.failRequest', { requestId, errorReason: 'InternetDisconnected' });
     const id = (request.url.match(/\/tv\/(\d+)/) || [])[1];
@@ -466,6 +478,23 @@ try {
     assert.equal((await itemOf('f700')).status, 'queue', '30s ad does not count');
     await fakeEv('playing', 2500);
     await until(async () => (await itemOf('f700')).status === 'watched', 4000, 'film watched');
+  });
+  await check('auto-track: custom server without {episode} — the episode the player reports is what counts', async () => {
+    // زي إعدادات المستخدم: سيرفر مخصص من غير موسم/حلقة، والحلقة بتتختار من جوه البلاير
+    await app.ev(`$('playerTpl').value='https://vsembed.ru/embed/{type}/{tmdbID}';1`);
+    const info = (e, tmdb = 650) => JSON.stringify({ tmdb: String(tmdb), mediaType: 'tv', season: 1, episode: e });
+    const ev = (pos, e, tmdb) => app.ev(`${frame}.contentWindow.postMessage({fake:'playing',pos:${pos},info:${info(e, tmdb)}},'*');1`);
+    await app.ev(`items.push(cleanItem({id:'s650',title:'Show H',type:'tv',status:'watching',tmdbId:650,imdbID:'tt650',curSeason:1,curEp:1}));playerSrv=PLAYER_SERVERS.length;openPlayer('s650').then(()=>1)`);
+    assert.equal(await app.ev(`${frame}.src.includes('episode')`), false);
+    await until(async () => { await ev(120, 5); return (await itemOf('s650')).resume?.e === 5; }, 8000, 'resume for S1E5');
+    assert.deepEqual((await itemOf('s650')).resume, { s: 1, e: 5, pos: 120 });
+    await ev(2450, 5);
+    await until(async () => (await itemOf('s650')).curEp === 5, 4000, 'counter jumps to E5 watched');
+    await ev(2600, 6, 999); await sleep(500);
+    assert.equal((await itemOf('s650')).curEp, 5, 'event for another title ignored');
+    await ev(2600, 3); await sleep(500);
+    assert.equal((await itemOf('s650')).curEp, 5, 'rewatching an old episode does not move the counter back');
+    await app.ev(`playerSrv=0;$('playerTpl').value='';closeModal();1`);
   });
   await check('auto-track: Watch Party temporary item is never changed', async () => {
     await app.ev(`items.push({id:'party-800',title:'P',type:'tv',status:'party',_party:true,tmdbId:800,imdbID:'tt800',curSeason:1,curEp:0});playerSrv=0;openPlayer('party-800').then(()=>1)`);
