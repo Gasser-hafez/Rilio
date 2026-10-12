@@ -33,6 +33,59 @@ const DEFAULT_DL='https://web.nxsha.app/dl/{type}/{tmdbID}';
 
 /* ================= أدوات ================= */
 const $=id=>document.getElementById(id);
+// الديسكتوب: شريط النافذة بتاعنا بيظهر بدل بتاع ويندوز
+if(window.__wlDesktop)document.documentElement.classList.add('desktop');
+
+/* ================= الأيقونات (SVG خطية — نصوص ثابتة، مفيهاش بيانات يوزر) ================= */
+const ICONS={
+  play:'<path d="M7 4.5v15l12-7.5z"/>',
+  playring:'<circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z" fill="currentColor"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  x:'<path d="M6 6l12 12M18 6L6 18"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  spark:'<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+  chart:'<path d="M5 20V11M12 20V4M19 20v-6"/>',
+  sliders:'<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+  users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2A5 5 0 0 1 21.5 19"/>',
+  dice:'<rect x="3" y="3" width="18" height="18" rx="4"/><path stroke-width="3" d="M8.5 8.5h.01M15.5 15.5h.01M15.5 8.5h.01M8.5 15.5h.01"/>',
+  sort:'<path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/>',
+  grid:'<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="9" rx="2"/><rect x="3" y="15" width="7" height="6" rx="2"/><rect x="14" y="15" width="7" height="6" rx="2"/>',
+  list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  gift:'<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+  download:'<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
+  upload:'<path d="M12 21V9M7 14l5-5 5 5M5 3h14"/>',
+  film:'<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M10 9.5v5l4-2.5z"/>',
+  undo:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/>',
+  edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  more:'<path stroke-width="3" d="M5 12h.01M12 12h.01M19 12h.01"/>',
+  server:'<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+  expand:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  window:'<rect x="3" y="7" width="14" height="14" rx="2"/><path d="M7 3h14v14"/>',
+  eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  copy:'<rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  bulb:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.8 10.6c.6.5.8 1.2.8 1.9V16h6v-.5c0-.7.3-1.4.8-1.9A6 6 0 0 0 12 3z"/>',
+  shield:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+  refresh:'<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8M21 3v5h-5"/>',
+  flask:'<path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.5L14 9V3"/>',
+  star:'<path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  bookmark:'<path d="M6 3h12v18l-6-4-6 4z"/>',
+  alert:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
+  clipboard:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/>'
+};
+const ic=(n,cls='')=>`<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]||''}</svg>`;
+document.querySelectorAll('i[data-ic]').forEach(el=>{el.outerHTML=ic(el.dataset.ic,el.className);});
+// بوستر بديل لما مفيش صورة: لون ثابت من الاسم نفسه
+const hue=t=>{let h=0;for(const c of String(t))h=(h*31+c.codePointAt(0))%360;return h;};
+const noimgHtml=(it,withTitle=true)=>`<div class="noimg" style="--h:${hue(it?it.title:'')}">${withTitle?`<span class="nt" dir="auto">${esc(it?it.title:'')}</span>`:''}</div>`;
+{const h=new Date().getHours(), morning=h>=5&&h<12;
+  $('hello').textContent=morning?'صباح الخير':'مساء الخير';
+  document.querySelector('.hello .ic').outerHTML=ic(morning?'sun':'moon');}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const esc=s=>(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sget=async k=>(await chrome.storage.local.get(k))[k];
@@ -115,7 +168,8 @@ async function load(){
   playerSrv=parseInt((await sget('watchlist:playerSrv'))||'0')||0;
   playerShield=(await sget('watchlist:playerShield'))==='1';
   subLang=(await sget('watchlist:subLang'));if(subLang==null)subLang='ar';
-  applyTheme((await sget('watchlist:theme'))||'cinema');
+  {const stored=await sget('watchlist:theme'), t=applyTheme(stored);
+    if(stored&&stored!==t)await sset('watchlist:theme',t);} // الثيمات القديمة بتتحول للمزاج المقابل مرة واحدة
   view=(await sget('watchlist:view'))||'grid';
   try{const s=await sget('watchlist:sites');sites=s?parseSites(s):null;}catch(e){sites=null;}
   if(!sites){sites=DEFAULT_SITES.slice();await sset('watchlist:sites',JSON.stringify(sites));}
@@ -140,25 +194,35 @@ async function bkSnooze(){
   $('bkBanner').style.display='none';
 }
 
-/* ================= الثيمات ================= */
+/* ================= الأمزجة ================= */
+// القيمة جاية من التخزين أو ملف إعدادات حد بعته — بتتقبل بس من الليستة
+const THEMES=['sahra','mint','coffee','sunrise'];
+const THEME_OLD={cinema:'sahra',nova:'sahra',midnight:'mint',ember:'coffee'};
 function applyTheme(t){
-  if(t==='cinema')delete document.documentElement.dataset.theme;
+  t=THEME_OLD[t]||t;
+  if(!THEMES.includes(t))t='sahra';
+  if(t==='sahra')delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme=t;
-  document.querySelectorAll('.theme-card').forEach(c=>c.classList.toggle('on',(c.dataset.v||'cinema')===t));
+  document.querySelectorAll('.theme-card').forEach(c=>c.classList.toggle('on',c.dataset.v===t));
+  if(window.__wlDesktop&&window.__wlDesktop.titlebar)window.__wlDesktop.titlebar(t).catch(()=>{});
+  return t;
 }
 async function setTheme(t){
-  applyTheme(t);
-  await sset('watchlist:theme',t);
-  render(); // تبديل الـ layout بين الحائط ووضع المنصات
-  toast('الثيم اتغيّر ✔');
+  await sset('watchlist:theme',applyTheme(t));
+  toast('المزاج اتغيّر ✔');
 }
 
 /* ================= مودال الإعدادات ================= */
 function openSettings(){
   shieldLabel();
   document.querySelectorAll('#subLangs .sl').forEach(b=>b.classList.toggle('on',b.dataset.v===(subLang||'ar')));
-  document.querySelectorAll('.theme-card').forEach(c=>c.classList.toggle('on',(document.documentElement.dataset.theme||'cinema')===c.dataset.v));
   $('settingsOverlay').classList.add('show');
+}
+function setNav(id){
+  const el=$(id);if(!el)return;
+  if(el.tagName==='DETAILS')el.open=true;
+  el.scrollIntoView({behavior:'smooth',block:'start'});
+  document.querySelectorAll('.setnav button').forEach(b=>b.classList.toggle('on',b.dataset.v===id));
 }
 function closeSettings(){$('settingsOverlay').classList.remove('show');}
 $('settingsOverlay').addEventListener('click',e=>{if(e.target===$('settingsOverlay'))closeSettings();});
@@ -260,10 +324,18 @@ function resetForm(){
   $('fTitle').value='';$('fGenre').value='';$('fType').value='film';
   formStatus='queue';pendingMeta=null;$('metaPreview').textContent='';hideChooser();
   document.querySelectorAll('#statusSeg button').forEach(x=>x.classList.toggle('on',x.dataset.s==='queue'));
-  $('formTitle').textContent='＋ إضافة جديد';
+  $('formTitle').textContent='ضيف حاجة جديدة';
   $('saveBtn').textContent='حفظ';
   $('cancelEdit').style.display='none';
   $('addBox').open=false;
+}
+// زرار "ضيف" اللي جنب البحث: لو كاتب اسم في البحث بيتنقل للفورم على طول
+function addOpen(){
+  const q=$('search').value.trim();
+  if(q&&!$('fTitle').value)$('fTitle').value=q;
+  $('addBox').open=true;
+  $('addBox').scrollIntoView({behavior:'smooth',block:'center'});
+  $('fTitle').focus({preventScroll:true});
 }
 
 function startEdit(id){
@@ -275,7 +347,7 @@ function startEdit(id){
   $('metaPreview').textContent=pendingMeta?`✔ ${it.year||'؟'} • IMDb ★ ${it.imdb||'؟'}`:'';
   formStatus=it.status==='dropped'?'queue':it.status;
   document.querySelectorAll('#statusSeg button').forEach(x=>x.classList.toggle('on',x.dataset.s===formStatus));
-  $('formTitle').textContent='✎ تعديل: '+it.title;
+  $('formTitle').textContent='تعديل: '+it.title;
   $('saveBtn').textContent='حفظ التعديل';
   $('cancelEdit').style.display='';
   $('addBox').open=true;
@@ -288,7 +360,7 @@ $('lookupBtn').onclick=async()=>{
   if(!title){toast('اكتب الاسم الأول');$('fTitle').focus();return;}
   const key=(await sget('watchlist:omdbkey'))||DEFAULT_OMDB_KEY;
   const btn=$('lookupBtn');
-  btn.disabled=true;btn.textContent='⏳ ...';
+  btn.disabled=true;btn.textContent='…';
   $('metaPreview').textContent='بدور على البيانات...';
   hideChooser();
   try{
@@ -312,7 +384,7 @@ $('lookupBtn').onclick=async()=>{
     $('metaPreview').textContent='';
     toast(e.message==='Invalid API key!'?'مفتاح OMDb غلط أو لسه متفعّلش — بص على إيميل التفعيل':'ملقتش حاجة بالاسم ده — جرب تكتبه أدق');
   }
-  btn.disabled=false;btn.textContent='🔍 IMDb';
+  btn.disabled=false;btn.innerHTML=ic('search')+'IMDb';
 };
 
 function hideChooser(){const ch=$('chooser');ch.style.display='none';ch.innerHTML='';}
@@ -359,45 +431,26 @@ $('viewBtn').onclick=async()=>{
   render();
 };
 
-$('randBtn').onclick=()=>{
-  const pool=items.filter(i=>i.status==='queue');
-  if(!pool.length){toast('قايمة "هشوفهم" فاضية');return;}
-  const weights=pool.map(i=>Math.pow(i.imdb||6,2)); // الأعلى على IMDb فرصته أكبر
-  const tot=weights.reduce((a,b)=>a+b,0);
-  let r=Math.random()*tot,pick=pool[0];
-  for(let j=0;j<pool.length;j++){r-=weights[j];if(r<=0){pick=pool[j];break;}}
-  render();
-  const el=document.querySelector(`[data-itemid="${pick.id}"]`);
-  if(el){
-    el.scrollIntoView({behavior:'smooth',block:'center'});
-    el.classList.add('picked');
-    setTimeout(()=>el.classList.remove('picked'),2500);
-  }
-  toast('🎲 '+pick.title);
-};
+// زرار النرد في "اختيار الليلة": اختيار عشوائي من "هشوفهم"، والأعلى على IMDb فرصته أكبر
+function weightedPick(pool){
+  const weights=pool.map(i=>Math.pow(i.imdb||6,2));
+  let r=Math.random()*weights.reduce((a,b)=>a+b,0);
+  for(let j=0;j<pool.length;j++){r-=weights[j];if(r<=0)return pool[j];}
+  return pool[0];
+}
+function heroShuffle(){
+  const cur=heroItem();
+  const pool=items.filter(i=>i.status==='queue'&&(!cur||i.id!==cur.id));
+  if(!pool.length){toast('مفيش غيره في "هشوفهم"');return;}
+  heroId=weightedPick(pool).id;
+  renderHome();
+}
 
 $('sortBtn').onclick=()=>{
   if(tab==='watched'){sortDesc=!sortDesc;}
   else{queueSort=queueSort==='manual'?'added':queueSort==='added'?'imdbDesc':queueSort==='imdbDesc'?'imdbAsc':'manual';}
   render();
 };
-
-/* ================= الإحصائيات ================= */
-function renderStats(){
-  const bar=$('statsBar');
-  if(!bar)return;
-  bar.style.display='none';
-  return;
-  if(!statsOpen)return;
-  const w=items.filter(i=>i.status==='watched');
-  const films=w.filter(i=>i.type==='film').length, tv=w.filter(i=>i.type==='tv').length;
-  const rated=w.filter(i=>i.rating);
-  const avg=rated.length?(rated.reduce((a,b)=>a+b.rating,0)/rated.length).toFixed(1):'—';
-  const g={};w.forEach(i=>(i.genre||'').split(',').map(x=>x.trim()).filter(Boolean).forEach(x=>g[x]=(g[x]||0)+1));
-  const top=Object.entries(g).sort((a,b)=>b[1]-a[1])[0];
-  const hours=films*2+tv*12; // تقدير: فيلم ~ساعتين، مسلسل ~12 ساعة
-  bar.innerHTML=`<span>🎬 ${films} فيلم</span><span>📺 ${tv} مسلسل</span><span>★ متوسط تقييمك ${avg}</span>${top?`<span>🏷 أكتر نوع: ${esc(top[0])} (${top[1]})</span>`:''}<span>⏱ ~${hours} ساعة مشاهدة</span>`;
-}
 
 /* ================= لوحة الإحصائيات والرؤى ================= */
 function openStats(){buildStats();$('statsOverlay').classList.add('show');}
@@ -423,24 +476,23 @@ function buildStats(){
   }
   $('statsIntro').textContent=intro;
 
-  let html='';
-  // كروت سريعة
-  html+=`<div class="stat-cards">
-    <div class="stat-card"><div class="sc-num">${watched.length}</div><div class="sc-lab">اتفرجت عليها</div></div>
-    <div class="stat-card"><div class="sc-num">${all.filter(i=>i.status==='queue').length}</div><div class="sc-lab">في قايمة الانتظار</div></div>
-    <div class="stat-card"><div class="sc-num">${avg?avg.toFixed(1):'—'}</div><div class="sc-lab">متوسط تقييمك</div></div>
-    <div class="stat-card"><div class="sc-num">~${hours}</div><div class="sc-lab">ساعة مشاهدة</div></div>
-  </div>`;
+  const RAMP=['#FF7A9A','#FF7A9A','#FF8A80','#FF9466','#FFAA6A','#FFC56E','#FFD36E','#C9E08A','#9BE4A8','#6EE7C8'];
+  let html=`<div class="stat-cards">
+    <div class="stat-card">${ic('check','')}<div class="sc-num">${watched.length}</div><div class="sc-lab">اتفرجت عليها</div></div>
+    <div class="stat-card">${ic('bookmark','')}<div class="sc-num">${all.filter(i=>i.status==='queue').length}</div><div class="sc-lab">في قايمة الانتظار</div></div>
+    <div class="stat-card">${ic('star','fill')}<div class="sc-num">${avg?avg.toFixed(1):'—'}</div><div class="sc-lab">متوسط تقييمك</div></div>
+    <div class="stat-card">${ic('clock','')}<div class="sc-num">${hours}</div><div class="sc-lab">ساعة مشاهدة تقريباً</div></div>
+  </div><div class="stat-grid">`;
 
   // توزيع التقييمات
   if(rated.length){
     const dist={};for(let n=1;n<=10;n++)dist[n]=0;
     rated.forEach(i=>dist[i.rating]=(dist[i.rating]||0)+1);
     const maxD=Math.max(...Object.values(dist));
-    html+=`<div class="stat-sec"><h3>⭐ توزيع تقييماتك</h3><div class="rating-bars">`;
+    html+=`<div class="stat-sec w3"><h3>توزيع تقييماتك</h3><div class="rating-bars">`;
     for(let n=1;n<=10;n++){
       const c=dist[n],h=maxD?Math.round(c/maxD*100):0;
-      html+=`<div class="rb"><div class="rb-fill" style="height:${h}%">${c?`<span class="rb-c">${c}</span>`:''}</div><div class="rb-x">${n}</div></div>`;
+      html+=`<div class="rb"><span class="rb-c">${c||''}</span><div class="rb-fill" style="height:${h}%;${c?'background:'+RAMP[n-1]:''}"></div><div class="rb-x">${n}</div></div>`;
     }
     html+=`</div></div>`;
   }
@@ -449,19 +501,23 @@ function buildStats(){
   const totFT=films.length+tv.length;
   if(totFT){
     const fPct=Math.round(films.length/totFT*100);
-    html+=`<div class="stat-sec"><h3>🎬 أفلام مقابل مسلسلات</h3>
-      <div class="gbar"><div class="gbar-top"><span class="gname">🎬 أفلام</span><span class="gcount">${films.length} (${fPct}%)</span></div><div class="gbar-track"><div class="gbar-fill" style="width:${fPct}%"></div></div></div>
-      <div class="gbar"><div class="gbar-top"><span class="gname">📺 مسلسلات</span><span class="gcount">${tv.length} (${100-fPct}%)</span></div><div class="gbar-track"><div class="gbar-fill" style="width:${100-fPct}%"></div></div></div>
-    </div>`;
+    html+=`<div class="stat-sec w2"><h3>أفلام مقابل مسلسلات</h3>
+      <div class="donut-row">
+        <div class="donut" role="img" aria-label="${fPct}٪ أفلام و${100-fPct}٪ مسلسلات" style="background:conic-gradient(var(--accent) 0 ${fPct}%,var(--watched) ${fPct}% 100%)"><div><b>${totFT}</b><small>عنوان</small></div></div>
+        <div class="legend">
+          <div><i style="background:var(--accent)"></i><div><b>أفلام</b><small>${films.length} · ${fPct}٪</small></div></div>
+          <div><i style="background:var(--watched)"></i><div><b>مسلسلات</b><small>${tv.length} · ${100-fPct}٪</small></div></div>
+        </div>
+      </div></div>`;
   }
 
   // أكتر التصنيفات (من كل القايمة)
   const gc=genreCounts(all).slice(0,6);
   if(gc.length){
-    const maxG=gc[0][1];
-    html+=`<div class="stat-sec"><h3>🏷 التصنيفات اللي بتحبها</h3>`;
-    gc.forEach(([name,c])=>{
-      html+=`<div class="gbar"><div class="gbar-top"><span class="gname">${esc(name)}</span><span class="gcount">${c}</span></div><div class="gbar-track"><div class="gbar-fill" style="width:${Math.round(c/maxG*100)}%"></div></div></div>`;
+    const maxG=gc[0][1], GC=['var(--accent)','var(--queue)','var(--watching)','var(--watched)','var(--dropped)','#9BE4A8'];
+    html+=`<div class="stat-sec w3"><h3>التصنيفات اللي بتحبها</h3>`;
+    gc.forEach(([name,c],ix)=>{
+      html+=`<div class="gbar"><span class="gname" dir="auto">${esc(name)}</span><div class="gbar-track"><div class="gbar-fill" style="width:${Math.round(c/maxG*100)}%;background:${GC[ix]}"></div></div><span class="gcount">${c}</span></div>`;
     });
     html+=`</div>`;
   }
@@ -472,12 +528,13 @@ function buildStats(){
   for(let k=5;k>=0;k--){const d=new Date(now.getFullYear(),now.getMonth()-k,1);months.push({y:d.getFullYear(),m:d.getMonth(),c:0});}
   watched.forEach(i=>{const t=i.watchedAt||i.added;if(!t)return;const d=new Date(t);const slot=months.find(x=>x.y===d.getFullYear()&&x.m===d.getMonth());if(slot)slot.c++;});
   const maxM=Math.max(1,...months.map(x=>x.c));
-  const monthNames=['ينا','فبر','مار','أبر','ماي','يون','يول','أغس','سبت','أكت','نوف','ديس'];
+  const monthNames=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
   if(watched.length){
-    html+=`<div class="stat-sec"><h3>📅 نشاطك آخر ٦ شهور</h3><div class="month-grid">`;
-    months.forEach(x=>{html+=`<div class="mo"><div class="mo-fill" style="height:${Math.round(x.c/maxM*100)}%" title="${x.c}"></div><div class="mo-x">${monthNames[x.m]}</div></div>`;});
+    html+=`<div class="stat-sec w2"><h3>نشاطك آخر ٦ شهور</h3><div class="month-grid">`;
+    months.forEach(x=>{html+=`<div class="mo"><span class="mo-c">${x.c||''}</span><div class="mo-fill" style="height:${Math.round(x.c/maxM*100)}%"></div><div class="mo-x">${monthNames[x.m]}</div></div>`;});
     html+=`</div></div>`;
   }
+  html+='</div>';
 
   $('statsContent').innerHTML=html;
 }
@@ -502,69 +559,168 @@ function renderChips(tabRows){
 }
 
 /* ================= العرض ================= */
-function stampClass(r){return r>=7?'hi':r>=5?'mid':'lo';}
+const KIND=it=>it.type==='tv'?'مسلسل':'فيلم';
 function stampHtml(it){
-  if(it.status==='watched'&&it.rating)return `<div class="stamp ${stampClass(it.rating)}">${it.rating}</div>`;
+  if(it.status==='watched'&&it.rating)return `<div class="stamp">${it.rating}</div>`;
   if(it.status==='watched')return `<div class="stamp q">?</div>`;
-  if(it.status==='dropped')return `<div class="stamp drop">✖</div>`;
-  if(it.status==='watching')return `<div class="stamp mid q">▶</div>`;
-  return `<div class="stamp q">▶</div>`;
+  if(it.status==='dropped')return `<div class="stamp drop">سبته</div>`;
+  if(it.status==='watching'){
+    const p=epPct(it);
+    return p==null?'':`<div class="pprog"><i style="width:${p}%"></i></div>`;
+  }
+  return '';
 }
 const pad=n=>String(n).padStart(2,'0');
 function progLabel(it){return `S${pad(it.curSeason||1)}E${pad(it.curEp||0)}`;}
+// نسبة الموسم الحالي — null لو عدد الحلقات لسه مجاش من TMDB
+function epPct(it){
+  const total=it.seasonEps?it.seasonEps[it.curSeason||1]:null;
+  return total>0?Math.min(100,Math.round((it.curEp||0)/total*100)):null;
+}
 function pcardHtml(it,ix){
   const draggable=(tab==='queue'&&queueSort==='manual');
-  const nextBadge=(draggable&&ix===0)?`<span class="next-badge">⭐ التالي</span>`:'';
+  const nextBadge=(draggable&&ix===0)?`<span class="pill-badge next-badge">${ic('play','fill sm')}التالي</span>`:'';
+  const showImdb=it.imdb&&(it.status==='queue'||it.status==='watching');
   return `
     <article class="pcard${draggable?' draggable':''}" ${draggable?'draggable="true"':''} data-act="open" data-id="${it.id}" data-itemid="${it.id}" tabindex="0" role="button" aria-label="${esc(it.title)}">
-      ${nextBadge}
-      ${it.poster
-        ?`<img src="${esc(it.poster)}" alt="" loading="lazy">`
-        :`<div class="noimg"><span class="fi">🎞</span><span class="nt" dir="auto">${esc(it.title)}</span></div>`}
-      ${it.imdb?`<span class="chip imdb">★ ${it.imdb}</span>`:''}
-      ${stampHtml(it)}
-      ${it.newSeason?`<button class="bell" data-act="ackSeason" data-id="${it.id}" title="اضغط لما تشوفه">🔔 موسم جديد</button>`:''}
-      ${quickHtml(it)}
-      <div class="grad">
+      <div class="art">
+        ${it.poster?`<img src="${esc(it.poster)}" alt="" loading="lazy">`:noimgHtml(it)}
+        ${nextBadge}
+        ${stampHtml(it)}
+        ${it.newSeason?`<button class="pill-badge bell" data-act="ackSeason" data-id="${it.id}" title="اضغط لما تشوفه">${ic('bell','sm')}موسم جديد</button>`:''}
+        ${quickHtml(it)}
+      </div>
+      <div class="pmeta">
         <div class="ptitle" dir="auto">${esc(it.title)}</div>
-        <div class="pyear">${it.status==='watching'?progLabel(it)+' • ':''}${it.type==='tv'?'مسلسل':'فيلم'}${it.year?' • '+it.year:''}</div>
+        <div class="pyear">${it.status==='watching'?`<span class="pep">${progLabel(it)}</span><span class="dotsep"></span>`:''}<span>${KIND(it)}${it.year?' · '+it.year:''}</span>${showImdb?`<span class="pimdb">★ ${it.imdb}</span>`:''}</div>
       </div>
     </article>`;
 }
 function quickHtml(it){
   if(it.status==='queue'){
     return `<div class="quick">
-      <button class="btn btn-amber" data-act="player" data-id="${it.id}">▶ شغّل</button>
-      <button class="btn" data-act="watched" data-id="${it.id}">✔ شفته</button>
+      <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill sm')}شغّل</button>
+      <button class="btn" data-act="watched" data-id="${it.id}">${ic('check','sm')}شفته</button>
     </div>`;
   }
   if(it.status==='watching'){
     return `<div class="quick">
-      <button class="btn btn-amber" data-act="player" data-id="${it.id}">▶ كمّل</button>
-      <button class="btn" data-act="epPlus" data-id="${it.id}">＋ حلقة</button>
+      <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill sm')}كمّل</button>
+      <button class="btn" data-act="epPlus" data-id="${it.id}">${ic('plus','sm')}حلقة</button>
     </div>`;
   }
   return '';
 }
 
+/* ================= اختيار الليلة + كمّل اللي بدأته ================= */
+let heroId=null, heroKey='', heroCurId=null;
+// التالي في "هشوفهم" (ترتيبك اليدوي)، أو اللي النرد اختاره
+function heroItem(){
+  const q=items.filter(i=>i.status==='queue');
+  if(!q.length)return null;
+  return q.find(i=>i.id===heroId)||q.slice().sort((a,b)=>(a.order??a.added??0)-(b.order??b.added??0))[0];
+}
+function renderHome(){
+  $('homeTop').hidden=!!$('search').value.trim();
+  const it=heroItem();
+  heroCurId=it?it.id:null;
+  // بنعيد بناء الـ hero بس لو اتغيّر فعلاً — عشان الصورة متعملش وميض مع كل render
+  const key=it?[it.id,it.title,it.backdrop,it.poster,it.imdb,it.year,it.desc,it.genre,heroId===it.id].join('|'):'empty';
+  if(key!==heroKey){
+    heroKey=key;
+    const h=$('hero');
+    h.classList.toggle('empty',!it);
+    if(!it){
+      h.innerHTML=`<div class="hbg art"></div><div class="hin">
+        <span class="hbadge">${ic('star','fill sm')}اختيار الليلة</span>
+        <div class="htitle">قايمتك لسه فاضية</div>
+        <p class="hdesc">ضيف أول فيلم أو مسلسل، وكل ليلة هنختارلك حاجة تتفرج عليها</p>
+        <div class="hact"><button class="btn btn-amber" data-act="addOpen">${ic('plus')}ضيف أول حاجة</button></div></div>`;
+    }else{
+      const bg=it.backdrop?`<div class="hbg"><img src="https://image.tmdb.org/t/p/w1280${esc(it.backdrop)}" alt=""></div>`
+        :it.poster?`<div class="hbg poster"><img src="${esc(it.poster)}" alt=""></div>`:`<div class="hbg art"></div>`;
+      h.innerHTML=`${bg}<div class="hin">
+        <span class="hbadge">${ic('star','fill sm')}${heroId===it.id?'اختيار عشوائي الليلة':'اختيار الليلة · التالي في قايمتك'}</span>
+        <div class="htitle" dir="auto">${esc(it.title)}</div>
+        <div class="hmeta"><span>${KIND(it)}${it.year?' · '+it.year:''}</span>${it.imdb?`<span class="dotsep"></span><span class="imdb">IMDb ★ ${it.imdb}</span>`:''}${it.genre?`<span class="dotsep"></span><span dir="auto">${esc(it.genre)}</span>`:''}</div>
+        ${it.desc?`<p class="hdesc" dir="auto">${esc(it.desc)}</p>`:''}
+        <div class="hact">
+          <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل</button>
+          <button class="btn btn-glass" data-act="open" data-id="${it.id}">التفاصيل</button>
+          <button class="iconbtn" data-act="heroShuffle" title="اختارلي حاجة تانية" aria-label="اختارلي حاجة تانية">${ic('dice')}</button>
+        </div></div>`;
+      if(it.backdrop==null)loadBackdrop(it);
+    }
+  }
+  if(!modalId)setAmbient(it);
+
+  const watching=items.filter(i=>i.status==='watching').slice(0,3);
+  $('cwBox').hidden=!watching.length;
+  $('cwList').innerHTML=watching.map(w=>{
+    const p=epPct(w);
+    return `<div class="cwrow" data-act="open" data-id="${w.id}" tabindex="0" role="button" aria-label="${esc(w.title)}">
+      <div class="cwthumb">${w.poster?`<img src="${esc(w.poster)}" alt="" loading="lazy">`:noimgHtml(w,false)}</div>
+      <div class="cwbody">
+        <div class="cwtop"><span class="cwtitle" dir="auto">${esc(w.title)}</span><span class="cwep">${progLabel(w)}</span></div>
+        ${p!=null?`<div class="bar"><i style="width:${p}%"></i></div>`:''}
+      </div>
+      <button class="cwplay" data-act="player" data-id="${w.id}" aria-label="كمّل ${esc(w.title)}">${ic('play','fill sm')}</button>
+    </div>`;
+  }).join('');
+  const hasFilms=items.some(i=>i.status==='queue'&&i.type==='film');
+  $('mysteryBox').style.display=hasFilms?'flex':'none';
+  $('side').hidden=!watching.length&&!hasFilms;
+}
+
+/* الإضاءة المحيطة: لونين من خلفية العمل المعروض (زي Ambilight) — لو الصورة مش متاحة بنرجع لألوان المزاج */
+let ambSrc=null;
+function setAmbient(it){
+  const src=it&&it.backdrop?`https://image.tmdb.org/t/p/w300${it.backdrop}`:null;
+  if(src===ambSrc)return;
+  ambSrc=src;
+  const st=document.documentElement.style;
+  if(!src){st.removeProperty('--amb-a');st.removeProperty('--amb-b');return;}
+  const img=new Image();
+  img.crossOrigin='anonymous';
+  img.onload=()=>{
+    if(ambSrc!==src)return;
+    try{
+      const c=document.createElement('canvas');c.width=c.height=8;
+      const x=c.getContext('2d');x.drawImage(img,0,0,8,8);
+      const d=x.getImageData(0,0,8,8).data;
+      const avg=(y0,y1)=>{let r=0,g=0,b=0,n=0;for(let y=y0;y<y1;y++)for(let k=0;k<8;k++){const o=(y*8+k)*4;r+=d[o];g+=d[o+1];b+=d[o+2];n++;}return vivid(r/n,g/n,b/n);};
+      st.setProperty('--amb-a',avg(0,4));st.setProperty('--amb-b',avg(4,8));
+    }catch(e){} // صورة من غير CORS — نفضل على ألوان المزاج
+  };
+  img.src=src;
+}
+// متوسط الصورة بيطلع باهت — نرفع التشبع ونثبّت الإضاءة عشان التوهج يبان من غير ما يزغلل
+function vivid(r,g,b){
+  r/=255;g/=255;b/=255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2,dl=mx-mn;
+  let h=0;
+  if(dl){h=mx===r?((g-b)/dl)%6:mx===g?(b-r)/dl+2:(r-g)/dl+4;h=Math.round(h*60+360)%360;}
+  const s=dl?dl/(1-Math.abs(2*l-1)):0;
+  return `hsl(${h} ${Math.round(Math.max(s,.55)*100)}% ${Math.round(Math.min(Math.max(l,.55),.68)*100)}%)`;
+}
+
 function render(){
-  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  document.querySelectorAll('.tab').forEach(b=>{b.classList.toggle('on',b.dataset.tab===tab);b.setAttribute('aria-selected',b.dataset.tab===tab);});
   $('cQueue').textContent=items.filter(i=>i.status==='queue').length||'';
   $('cWatching').textContent=items.filter(i=>i.status==='watching').length||'';
   $('cWatched').textContent=items.filter(i=>i.status==='watched').length||'';
   $('cDropped').textContent=items.filter(i=>i.status==='dropped').length||'';
-  $('randBtn').style.display=tab==='queue'?'':'none';
-  const hasFilms=items.some(i=>i.status==='queue'&&i.type==='film');
-  $('mysteryBox').style.display=(tab==='queue'&&hasFilms)?'flex':'none';
+  $('footCount').textContent=`${items.filter(i=>!i._party).length} عنوان في قايمتك · اتعمل للسهرات الحلوة`;
   $('sortBtn').style.display=(tab==='dropped'||tab==='watching')?'none':'';
-  $('sortBtn').textContent=tab==='watched'
-    ?(sortDesc?'⇅ ★ الأعلى':'⇅ ★ الأقل')
-    :(queueSort==='manual'?'✋ ترتيبي':queueSort==='added'?'⇅ الأحدث':queueSort==='imdbDesc'?'⇅ IMDb ↑':'⇅ IMDb ↓');
+  $('sortBtn').innerHTML=ic('sort','sm')+(tab==='watched'
+    ?(sortDesc?'★ الأعلى':'★ الأقل')
+    :(queueSort==='manual'?'ترتيبي':queueSort==='added'?'الأحدث':queueSort==='imdbDesc'?'IMDb ↑':'IMDb ↓'));
   $('sortBtn').title='اضغط لتغيير الترتيب';
-  $('viewBtn').textContent=view==='grid'?'☰':'▦';
+  $('viewBtn').innerHTML=ic(view==='grid'?'list':'grid');
   $('viewBtn').title=view==='grid'?'اعرض كقايمة':'اعرض كحائط بوسترات';
+  $('viewBtn').setAttribute('aria-label',$('viewBtn').title);
+  renderHome();
 
-  renderStats();
   const q=$('search').value.trim().toLowerCase();
   const tabRows=items.filter(i=>i.status===tab);
   renderChips(tabRows);
@@ -582,7 +738,7 @@ function render(){
   if(!rows.length){
     list.className='';
     list.innerHTML=`<div class="empty"><b>${tab==='queue'?'الحائط فاضي':tab==='watching'?'مش بتتفرج على حاجة دلوقتي':tab==='dropped'?'مفيش حاجة مسبوتة':'لسه مقيمتش حاجة'}</b>${
-      (q||filterType!=='all'||filterGenre)?'مفيش نتايج بالفلاتر دي':(tab==='queue'?'ضيف أول فيلم أو مسلسل من "＋ إضافة جديد" أو من أي صفحة على IMDb':tab==='watching'?'افتح أي مسلسل في "هشوفهم" ودوس "▶ بدأته"':tab==='dropped'?'لو بدأت حاجة وزهقت منها، افتحها ودوس "✖ سبته"':'لما تخلص حاجة من القايمة، افتحها وقيمها')}</div>`;
+      (q||filterType!=='all'||filterGenre)?'مفيش نتايج بالفلاتر دي — لو مش عندك، دوس "ضيف" جنب البحث':(tab==='queue'?'ضيف أول فيلم أو مسلسل من زرار "ضيف" فوق أو من أي صفحة على IMDb':tab==='watching'?'افتح أي مسلسل في "هشوفهم" ودوس "بدأته"':tab==='dropped'?'لو بدأت حاجة وزهقت منها، افتحها ودوس "سبته"':'لما تخلص حاجة من القايمة، افتحها وقيّمها')}</div>`;
     return;
   }
 
@@ -594,20 +750,20 @@ function render(){
     list.className='rows';
     list.innerHTML=rows.map(it=>`
       <article class="row" data-act="open" data-id="${it.id}" data-itemid="${it.id}" tabindex="0" role="button" aria-label="${esc(it.title)}">
-        <div class="thumb"><span class="fi">🎞</span>${it.poster?`<img src="${esc(it.poster)}" alt="" loading="lazy">`:''}</div>
+        <div class="thumb">${it.poster?`<img src="${esc(it.poster)}" alt="" loading="lazy">`:noimgHtml(it)}</div>
         <div class="rbody">
           <div class="rtitle" dir="auto">${esc(it.title)}</div>
-          <div class="rmeta">${it.status==='watching'?`<span class="iv">${progLabel(it)}</span><span class="dot">•</span>`:''}${it.type==='tv'?'مسلسل':'فيلم'}${it.year?`<span class="dot">•</span>${it.year}`:''}${it.genre?`<span class="dot">•</span><span dir="auto">${esc(it.genre)}</span>`:''}${it.imdb?`<span class="dot">•</span><span class="iv">IMDb ★ ${it.imdb}</span>`:''}${it.status==='watched'&&it.rating?`<span class="dot">•</span><span class="iv">تقييمي ${it.rating}/10</span>`:''}</div>
-          ${it.newSeason?`<div><button class="bell" data-act="ackSeason" data-id="${it.id}">🔔 موسم جديد</button></div>`:''}
+          <div class="rmeta">${it.status==='watching'?`<span class="ep">${progLabel(it)}</span><span class="dotsep"></span>`:''}<span>${KIND(it)}</span>${it.year?`<span class="dotsep"></span>${it.year}`:''}${it.genre?`<span class="dotsep"></span><span dir="auto">${esc(it.genre)}</span>`:''}${it.imdb?`<span class="dotsep"></span><span class="iv">IMDb ★ ${it.imdb}</span>`:''}${it.status==='watched'&&it.rating?`<span class="dotsep"></span><span class="iv" style="color:var(--watched)">تقييمي ${it.rating}/10</span>`:''}</div>
+          ${it.newSeason?`<div><button class="pill-badge bell" data-act="ackSeason" data-id="${it.id}">${ic('bell','sm')}موسم جديد</button></div>`:''}
           ${it.desc?`<div class="rdesc" dir="auto">${esc(it.desc)}</div>`:''}
           <div class="ract">
             ${it.status==='queue'
-              ?`<button class="btn btn-sm btn-amber" data-act="watched" data-id="${it.id}">✔ شفته</button>`+
-                (it.type==='tv'?`<button class="btn btn-sm" data-act="startWatch" data-id="${it.id}">▶ بدأته</button>`:'')+
-                sites.map((s,ix)=>`<button class="btn btn-sm btn-watch" data-act="watch" data-id="${it.id}" data-site="${ix}">▶ ${esc(s.name)}</button>`).join('')
+              ?`<button class="btn btn-sm btn-amber" data-act="watched" data-id="${it.id}">${ic('check','sm')}شفته</button>`+
+                (it.type==='tv'?`<button class="btn btn-sm" data-act="startWatch" data-id="${it.id}">${ic('play','fill sm')}بدأته</button>`:'')+
+                sites.map((s,ix)=>`<button class="btn btn-sm btn-watch" data-act="watch" data-id="${it.id}" data-site="${ix}">${esc(s.name)} ↗</button>`).join('')
               :it.status==='watching'
-              ?`<button class="btn btn-sm btn-amber" data-act="epPlus" data-id="${it.id}">＋ حلقة</button>
-                 <button class="btn btn-sm" data-act="watched" data-id="${it.id}">✔ خلصته</button>`
+              ?`<button class="btn btn-sm btn-amber" data-act="epPlus" data-id="${it.id}">${ic('plus','sm')}حلقة</button>
+                 <button class="btn btn-sm" data-act="watched" data-id="${it.id}">${ic('check','sm')}خلصته</button>`
               :''}
           </div>
         </div>
@@ -660,6 +816,7 @@ function closeModal(){
   $('overlay').classList.remove('theater');
   $('modal').classList.remove('wide');
   $('overlay').classList.remove('show');
+  setAmbient(heroItem());
 }
 $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal();});
 document.addEventListener('keydown',e=>{
@@ -680,98 +837,103 @@ async function loadBackdrop(it){
     const d=await tmdbFetch(`/${it.type==='tv'?'tv':'movie'}/${tid}`);
     it.backdrop=d.backdrop_path||'';
     await persist();
-    if(modalId===it.id)renderModal();
+    if(modalId===it.id&&!playerOpen)renderModal(); // البلاير لأ — الـ iframe كان هيتحمّل من الأول
+    if(heroCurId===it.id)renderHome();
   }catch(e){}
 }
 
 function renderModal(){
   const it=items.find(i=>i.id===modalId);
   if(!it){closeModal();return;}
+  setAmbient(it);
   $('modal').classList.toggle('wide',playerOpen);
   $('overlay').classList.toggle('theater',playerOpen);
   if(playerOpen){$('modal').innerHTML=renderPlayer(it);partySyncMedia(it);return;}
   const bd=it.backdrop?`https://image.tmdb.org/t/p/w780${it.backdrop}`:null;
   const sitesBtns=(it.status==='queue'||it.status==='watching')
-    ?sites.map((s,ix)=>`<button class="btn btn-sm btn-watch" data-act="watch" data-id="${it.id}" data-site="${ix}">▶ ${esc(s.name)}</button>`).join('')
+    ?sites.map((s,ix)=>`<button class="btn btn-sm btn-watch" data-act="watch" data-id="${it.id}" data-site="${ix}">${esc(s.name)} ↗</button>`).join('')
     :'';
   const total=it.seasonEps?it.seasonEps[it.curSeason||1]:null;
   const remain=total!=null?Math.max(0,total-(it.curEp||0)):null;
+  const ep=it.curEp||0;
   const progSec=it.status==='watching'?`
     <div class="msec">
-      <div class="sh">متابعة الحلقات</div>
+      <div class="sh">متابعة الحلقات<span class="aside">${
+        remain==null?'واقف عند '+progLabel(it)
+        :remain>0?`فاضل ${remain} من ${total} في موسم ${it.curSeason||1}`:'خلصت الموسم ده ✔'}</span></div>
       <div class="prog">
-        <span class="plab">الموسم</span>
-        <button class="stepbtn" data-act="sMinus" data-id="${it.id}">−</button>
-        <span class="pnum">${it.curSeason||1}</span>
-        <button class="stepbtn" data-act="sPlus" data-id="${it.id}">+</button>
-        <span class="plab" style="margin-inline-start:10px">الحلقة</span>
-        <button class="stepbtn" data-act="eMinus" data-id="${it.id}">−</button>
-        <span class="pnum">${it.curEp||0}</span>
-        <button class="btn btn-sm btn-amber" data-act="epPlus" data-id="${it.id}">＋ حلقة اتفرجت</button>
+        <div class="stepper">
+          <button class="stepbtn" data-act="sMinus" data-id="${it.id}" aria-label="موسم أقل">−</button>
+          <div class="stepval"><small>موسم</small><span class="pnum">${it.curSeason||1}</span></div>
+          <button class="stepbtn" data-act="sPlus" data-id="${it.id}" aria-label="موسم أكتر">+</button>
+        </div>
+        <div class="stepper">
+          <button class="stepbtn" data-act="eMinus" data-id="${it.id}" aria-label="حلقة أقل">−</button>
+          <div class="stepval"><small>حلقة</small><span class="pnum">${ep}</span></div>
+        </div>
+        <button class="btn btn-ep" data-act="epPlus" data-id="${it.id}">${ic('check')}حلقة اتفرجت</button>
       </div>
-      <div class="remain">${
-        remain==null?'واقف عند '+progLabel(it)+(it.tmdbId?'':' — عدد حلقات المواسم بيتجاب من TMDB لو المفتاح متسجل')
-        :remain>0?`فاضلك ${remain} من ${total} حلقات في موسم ${it.curSeason||1}${it.totalSeasons?' — إجمالي '+it.totalSeasons+' مواسم':''}`
-        :'خلصت الموسم ده ✔'}</div>
+      ${total>0&&total<=40?`<div class="epdots" role="img" aria-label="اتفرجت ${ep} من ${total} حلقات">${Array.from({length:total},(_,i)=>`<i class="${i<ep-1?'on':i===ep-1?'cur':''}"></i>`).join('')}</div>`:''}
+      ${remain==null&&!it.tmdbId?'<div class="remain">عدد حلقات المواسم بيتجاب من TMDB لو المفتاح متسجل</div>':''}
+      ${it.totalSeasons?`<div class="remain">إجمالي ${it.totalSeasons} مواسم</div>`:''}
     </div>`:'';
   const rateSec=it.status==='watched'?`
     <div class="msec">
-      <div class="sh">تقييمي من 10</div>
+      <div class="sh">تقييمي${it.rating?`<span class="aside"><b style="font-family:var(--display);font-size:22px;color:var(--watched)">${it.rating}</b> / 10</span>`:''}</div>
       <div class="pills">${[1,2,3,4,5,6,7,8,9,10].map(n=>
-        `<button class="pill ${it.rating===n?'on':''}" data-act="rate" data-id="${it.id}" data-n="${n}">${n}</button>`).join('')}</div>
+        `<button class="pill ${it.rating===n?'on':''}" data-act="rate" data-id="${it.id}" data-n="${n}" aria-label="تقييم ${n}">${n}</button>`).join('')}</div>
       <div class="noterow">
-        <input type="text" id="mNote" dir="auto" value="${esc(it.note)}" placeholder="ليه عجبك / معجبكش؟ — سطر واحد بيحسّن ترشيحات الـ AI">
-        <button class="btn btn-sm btn-amber" data-act="saveNote" data-id="${it.id}">حفظ</button>
+        <input type="text" id="mNote" dir="auto" value="${esc(it.note)}" placeholder="ليه عجبك / معجبكش؟ — سطر واحد بيحسّن ترشيحات الـ AI" aria-label="ملاحظتي">
+        <button class="btn btn-amber" data-act="saveNote" data-id="${it.id}">حفظ</button>
       </div>
     </div>`
     :it.status==='dropped'?`
     <div class="msec">
       <div class="sh">ليه سبته؟</div>
       <div class="noterow">
-        <input type="text" id="mNote" dir="auto" value="${esc(it.note)}" placeholder="بيدخل ملف الذوق كإشارة سلبية قوية للـ AI">
-        <button class="btn btn-sm btn-amber" data-act="saveNote" data-id="${it.id}">حفظ</button>
+        <input type="text" id="mNote" dir="auto" value="${esc(it.note)}" placeholder="بيدخل ملف الذوق كإشارة سلبية قوية للـ AI" aria-label="ليه سبته">
+        <button class="btn btn-amber" data-act="saveNote" data-id="${it.id}">حفظ</button>
       </div>
     </div>`
     :(it.note?`<div class="msec"><div class="sh">ملاحظتي</div><div class="mnote-view" dir="auto">${esc(it.note)}</div></div>`:'');
+  const ST={queue:'هشوفه',watching:'بتفرج',watched:'شفته',dropped:'سبته'};
 
   $('modal').innerHTML=`
-    <div class="bdrop">${bd?`<img src="${esc(bd)}" alt="">`:''}</div>
-    <button class="mclose" data-act="closeModal" title="إغلاق">✕</button>
+    <div class="bdrop">${bd?`<img src="${esc(bd)}" alt="">`:noimgHtml(it,false)}</div>
+    <button class="mclose" data-act="closeModal" title="إغلاق" aria-label="إغلاق">${ic('x')}</button>
     <div class="mhead">
-      <div class="mposter">${it.poster?`<img src="${esc(it.poster)}" alt="">`:`<div class="fi">🎞</div>`}</div>
+      <div class="mposter">${it.poster?`<img src="${esc(it.poster)}" alt="">`:noimgHtml(it)}</div>
       <div class="mtitles">
         <div class="mtitle" dir="auto">${esc(it.title)}</div>
         <div class="mchips">
-          <span class="mchip">${it.type==='tv'?'مسلسل':'فيلم'}</span>
-          ${it.year?`<span class="mchip">${it.year}</span>`:''}
-          ${it.imdb?`<span class="mchip iv">IMDb ★ ${it.imdb}</span>`:''}
+          ${ST[it.status]?`<span class="mchip st st-${it.status}">${ST[it.status]}</span>`:''}
+          <span class="mchip">${KIND(it)}${it.year?' · '+it.year:''}</span>
           ${it.genre?`<span class="mchip" dir="auto">${esc(it.genre)}</span>`:''}
+          ${it.imdb?`<span class="mchip iv">IMDb ★ ${it.imdb}</span>`:''}
         </div>
       </div>
     </div>
     <div class="mbody">
-      ${it.newSeason?`<div style="margin-bottom:12px"><button class="bell" style="position:static;box-shadow:none" data-act="ackSeason" data-id="${it.id}">🔔 موسم جديد نزل — اضغط لما تشوفه</button></div>`:''}
       ${it.desc?`<div class="mdesc" dir="auto">${esc(it.desc)}</div>`:''}
-      ${it.recWhy||it.recFrom?`<div class="msec"><div class="sh">🤖 اترشحلك ليه</div><div class="rw">${recWhyHtml(it.recWhy,it.recFrom)}</div></div>`:''}
+      ${it.newSeason?`<button class="newseason" data-act="ackSeason" data-id="${it.id}">${ic('bell')}<span>موسم جديد نزل!</span><small>اضغط لما تشوفه</small></button>`:''}
       ${progSec}
       ${rateSec}
-      <div class="msec">
-        <div class="mact">
-          <button class="btn btn-amber" data-act="player" data-id="${it.id}">▶ شغّل هنا</button>
-          ${it.status==='queue'?`<button class="btn" data-act="watched" data-id="${it.id}">✔ شفته — قيمه</button>`:''}
-          ${it.status==='queue'&&it.type==='tv'?`<button class="btn" data-act="startWatch" data-id="${it.id}">▶ بدأته</button>`:''}
-          ${it.status==='watching'?`<button class="btn" data-act="watched" data-id="${it.id}">✔ خلصته — قيمه</button>`:''}
-          <button class="btn btn-ghost" data-act="moreToggle">⋯ المزيد</button>
-        </div>
-        <div class="mact more" id="moreActs" style="display:none;margin-top:9px">
-          <button class="btn btn-sm" data-act="download" data-id="${it.id}">⬇ تحميل</button>
-          ${sitesBtns}
-          <button class="btn btn-sm btn-ghost" data-act="trailer" data-id="${it.id}">🎬 تريلر</button>
-          ${(it.status==='queue'||it.status==='watching')?`<button class="btn btn-sm btn-ghost" data-act="drop" data-id="${it.id}">✖ سبته</button>`:''}
-          ${it.status!=='queue'?`<button class="btn btn-sm btn-ghost" data-act="toQueue" data-id="${it.id}">↩ رجعه للقايمة</button>`:''}
-          <button class="btn btn-sm btn-ghost" data-act="edit" data-id="${it.id}">تعديل</button>
-          <button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="${it.id}">حذف</button>
-        </div>
+      ${it.recWhy||it.recFrom?`<div class="msec why"><div class="sh">${ic('spark')}اترشحلك ليه</div><div class="rw">${recWhyHtml(it.recWhy,it.recFrom)}</div></div>`:''}
+      <div class="mact">
+        <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل هنا</button>
+        ${it.status==='queue'?`<button class="btn" data-act="watched" data-id="${it.id}">${ic('check')}شفته — قيّمه</button>`:''}
+        ${it.status==='queue'&&it.type==='tv'?`<button class="btn" data-act="startWatch" data-id="${it.id}">${ic('play','fill sm')}بدأته</button>`:''}
+        ${it.status==='watching'?`<button class="btn" data-act="watched" data-id="${it.id}">${ic('check')}خلصته — قيّمه</button>`:''}
+        <button class="btn btn-ghost" data-act="moreToggle" aria-label="المزيد">${ic('more')}المزيد</button>
+      </div>
+      <div class="mact more" id="moreActs" style="display:none">
+        <button class="btn btn-sm" data-act="download" data-id="${it.id}">${ic('download','sm')}تحميل</button>
+        ${sitesBtns}
+        <button class="btn btn-sm" data-act="trailer" data-id="${it.id}">${ic('film','sm')}تريلر</button>
+        ${(it.status==='queue'||it.status==='watching')?`<button class="btn btn-sm" data-act="drop" data-id="${it.id}">${ic('x','sm')}سبته</button>`:''}
+        ${it.status!=='queue'?`<button class="btn btn-sm" data-act="toQueue" data-id="${it.id}">${ic('undo','sm')}رجّعه للقايمة</button>`:''}
+        <button class="btn btn-sm" data-act="edit" data-id="${it.id}">${ic('edit','sm')}تعديل</button>
+        <button class="btn btn-sm btn-danger" data-act="del" data-id="${it.id}">${ic('trash','sm')}حذف</button>
       </div>
     </div>`;
 }
@@ -806,7 +968,7 @@ async function epPlus(id){
       it.curSeason++;it.curEp=0;
     }else{
       it.curEp=total;
-      toast('خلصت المسلسل كله 🎉 دوس "✔ خلصته" وقيمه');
+      toast('خلصت المسلسل كله — دوس "خلصته" وقيّمه');
     }
   }
   await persist();render();if(modalId)renderModal();
@@ -902,11 +1064,11 @@ function renderSites(){
   const box=$('sitesList');
   box.innerHTML=sites.length?sites.map((s,ix)=>
     `<div class="site-row">
-      <span class="site-name" dir="auto">▶ ${esc(s.name)}</span>
+      <span class="site-name" dir="auto">${ic('play','fill sm')}${esc(s.name)}</span>
       <span class="site-url" dir="ltr">${esc(s.url)}</span>
-      <button class="btn btn-sm btn-ghost btn-danger" data-act="delSite" data-ix="${ix}">✕</button>
+      <button class="iconbtn btn-danger" style="width:36px;height:36px;border:none" data-act="delSite" data-ix="${ix}" aria-label="امسح ${esc(s.name)}">${ic('x','sm')}</button>
     </div>`).join('')
-    :'<div style="font-size:.8rem;color:var(--muted)">مفيش مواقع متسجلة — ضيف واحد تحت</div>';
+    :'<div class="sub">مفيش مواقع متسجلة — ضيف واحد تحت</div>';
 }
 async function addSite(){
   const name=$('siteName').value.trim();
@@ -1030,14 +1192,14 @@ async function openPlayer(id){
   renderModal();
 }
 function shieldLabel(){
-  if($('shieldBtn'))$('shieldBtn').textContent='🛡 مانع الإعلانات الصارم: '+(playerShield?'شغال':'مقفول');
+  if($('shieldBtn'))$('shieldBtn').setAttribute('aria-checked',playerShield?'true':'false');
 }
 async function togglePlayerShield(){
   playerShield=!playerShield;
   await sset('watchlist:playerShield',playerShield?'1':'0');
   shieldLabel();
   if(modalId&&playerOpen)renderModal();
-  toast(playerShield?'🛡 الوضع الصارم اشتغل — لو سيرفر رفض يشغّل، اقفله':'رجعنا للوضع العادي');
+  toast(playerShield?'الوضع الصارم اشتغل — لو سيرفر رفض يشغّل، اقفله':'رجعنا للوضع العادي');
 }
 function playerFs(){
   const box=document.querySelector('.playerbox');
@@ -1046,7 +1208,7 @@ function playerFs(){
   if(el){(document.exitFullscreen||document.webkitExitFullscreen).call(document);return;}
   const req=box.requestFullscreen||box.webkitRequestFullscreen;
   if(req)req.call(box);
-  else toast('المتصفح رافض ملء الشاشة — جرّب زرار النافذة 🗗');
+  else toast('المتصفح رافض ملء الشاشة — جرّب زرار "نافذة"');
 }
 function playerPop(id){
   const it=items.find(i=>i.id===id);if(!it||!it.tmdbId)return;
@@ -1071,11 +1233,8 @@ function currentPlayerTpl(){
 }
 async function mysteryPlay(){
   const pool=items.filter(i=>i.status==='queue'&&i.type==='film');
-  if(!pool.length){toast('محتاج أفلام في "هشوفهم" الأول 🎬');return;}
-  const weights=pool.map(i=>Math.pow(i.imdb||6,2));
-  const tot=weights.reduce((a,b)=>a+b,0);
-  let r=Math.random()*tot,pick=pool[0];
-  for(let j=0;j<pool.length;j++){r-=weights[j];if(r<=0){pick=pool[j];break;}}
+  if(!pool.length){toast('محتاج أفلام في "هشوفهم" الأول');return;}
+  const pick=weightedPick(pool);
   mysteryMode=true;mysteryId=pick.id;
   if(!pick.tmdbId){
     try{await resolveTmdb(pick);}
@@ -1107,7 +1266,7 @@ function mysteryReveal(id){
   mysteryMode=false;
   renderModal();
   const it=items.find(i=>i.id===id);
-  if(it)toast('🎬 '+it.title);
+  if(it)toast(it.title);
 }
 async function playerNext(id){
   await epPlus(id); // بيعمل persist + renderModal فالبلاير بيتحمّل بالحلقة الجديدة
@@ -1133,42 +1292,39 @@ async function saveSubLang(v){
   toast(v==='off'?'الترجمة التلقائية اتقفلت':'الترجمة الافتراضية: '+({ar:'عربي',en:'إنجليزي',fr:'فرنسي',es:'إسباني'}[v]||v));
 }
 function renderPlayer(it){
-  const tplP=currentPlayerTpl();
   const src=playerSrc(it);
   const mystery=mysteryMode&&mysteryId===it.id;
-  const epTxt=it.type==='tv'?` — <span class="ep">S${pad(it.curSeason||1)}E${pad((it.curEp||0)+1)}</span>`:'';
+  const epTxt=it.type==='tv'?`<span class="ep">S${pad(it.curSeason||1)} · E${pad((it.curEp||0)+1)}</span>`:'';
   const custom=$('playerTpl').value.trim();
   const nSrv=PLAYER_SERVERS.length+((custom&&custom!==DEFAULT_PLAYER)?1:0);
   const srvName=playerSrv<PLAYER_SERVERS.length?PLAYER_SERVERS[playerSrv].name:'مخصص';
   const srvHost=(()=>{try{return new URL(currentPlayerTpl().replace(/\{[^}]+\}/g,'x')).hostname;}catch(e){return'';}})();
-  const srvChips=`<button class="srv on" data-act="playerSrvCycle" data-n="${nSrv}" title="بدّل السيرفر لو مش شغال — دلوقتي: ${esc(srvHost)}">🖧 ${srvName} ▸</button>`;
-  const shieldChip='';
+  const srvChips=`<button class="srv on" data-act="playerSrvCycle" data-n="${nSrv}" title="بدّل السيرفر لو مش شغال — دلوقتي: ${esc(srvHost)}">${ic('server','sm')}${srvName} — بدّل</button>`;
   const frame=!src?'':playerShield
     ?`<iframe src="${esc(src)}" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock" allow="fullscreen 'src' *; encrypted-media *; autoplay *; picture-in-picture *" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="no-referrer"></iframe>`
     :`<iframe src="${esc(src)}" allow="fullscreen 'src' *; encrypted-media *; autoplay *; picture-in-picture *" allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>`;
   return `
     <div class="pbar">
-      <button class="mclose" style="position:static" data-act="playerClose" title="رجوع للتفاصيل">✕</button>
-      <div class="pt" dir="auto">${mystery?'🎁 فيلم غامض':'▶ '+esc(it.title)+epTxt}</div>
+      <button class="mclose plain" data-act="playerClose" title="رجوع للتفاصيل" aria-label="رجوع للتفاصيل">${ic('x','sm')}</button>
+      <div class="pt">${mystery?`<b>فيلم غامض</b>`:`<b dir="auto">${esc(it.title)}</b>${epTxt}`}</div>
       ${mystery?'':srvChips}
-      ${mystery?'':shieldChip}
       ${mystery?'':`<span id="partyBadge">${partyBadgeHtml()}</span>`}
-      <button class="srv" data-act="playerFs" title="ملء الشاشة">⛶ ملء الشاشة</button>
+      <button class="srv" data-act="playerFs" title="ملء الشاشة">${ic('expand','sm')}ملء الشاشة</button>
       ${mystery
-        ?`<button class="srv" data-act="mysteryReveal" data-id="${it.id}" title="اكشف الفيلم">👁 اكشف الاسم</button>`
-        :`<button class="srv" data-act="playerPop" data-id="${it.id}" title="افتح البلاير في نافذة مستقلة">🗗 نافذة</button>`}
+        ?`<button class="srv" data-act="mysteryReveal" data-id="${it.id}" title="اكشف الفيلم">${ic('eye','sm')}اكشف الاسم</button>`
+        :`<button class="srv" data-act="playerPop" data-id="${it.id}" title="افتح البلاير في نافذة مستقلة">${ic('window','sm')}نافذة</button>`}
       ${!mystery&&it.type==='tv'&&it.status==='watching'
-        ?`<button class="btn btn-sm btn-amber" data-act="playerNext" data-id="${it.id}">✔ خلصتها — شغّل الجاية</button>`
+        ?`<button class="btn btn-ep" data-act="playerNext" data-id="${it.id}">${ic('check','sm')}خلصتها — شغّل الجاية</button>`
         :!mystery&&it.type==='tv'&&it.status==='queue'
-        ?`<button class="btn btn-sm" data-act="startWatch" data-id="${it.id}">▶ فعّل متابعة الحلقات</button>`:''}
+        ?`<button class="btn btn-sm" data-act="startWatch" data-id="${it.id}">${ic('play','fill sm')}فعّل متابعة الحلقات</button>`:''}
     </div>
     <div class="playerbox">
-      ${frame||`<div class="mystery-reveal"><div class="mr-gift">🎁</div><div class="mr-t">بجهّزلك المفاجأة...</div><div class="mr-s">استنى ثانية، الفيلم جاي</div></div>`}
+      ${frame||`<div class="mystery-reveal"><div class="giftbig">${ic('gift')}</div><div class="mr-t">بجهّزلك المفاجأة…</div><div class="mr-s">استنى ثانية، الفيلم جاي</div></div>`}
       ${mystery?`<div class="wl-veil" id="wlVeil">
-        <div class="wl-veil-gift">🎁</div>
+        <div class="giftbig">${ic('gift')}</div>
         <div class="wl-veil-t" id="wlVeilT">فيلمك الغامض جاهز</div>
-        <div class="wl-veil-s">لما تضغط، الفيلم هيبدأ لوحده ونعديك على شاشة البداية — فمتشوفش بوستر ولا اسم، على طول مشهد من الفيلم 🍿</div>
-        <button class="btn btn-amber" data-act="mysteryStart">🍿 ابدأ المفاجأة</button>
+        <div class="wl-veil-s">لما تضغط، الفيلم هيبدأ لوحده ونعدّيك على شاشة البداية — فمتشوفش بوستر ولا اسم، على طول مشهد من الفيلم</div>
+        <button class="btn btn-amber" data-act="mysteryStart">${ic('play','fill')}ابدأ المفاجأة</button>
       </div>`:''}
     </div>`;
 }
@@ -1212,7 +1368,8 @@ $('restoreFile').addEventListener('change',async e=>{
 $('tasteBtn').onclick=()=>{
   impCands=[];
   $('impText').value='';$('impList').innerHTML='';$('impStatus').textContent='';
-  $('impAddBtn').style.display='none';
+  $('impAddBtn').style.display='none';$('impFoot').hidden=true;
+  $('pasteBox').open=!window.__wlAi; // الاكستنشن مفيهوش AI مدمج — اللصق هو الطريق الوحيد
   $('importOverlay').classList.add('show');
 };
 function importClose(){$('importOverlay').classList.remove('show');}
@@ -1256,7 +1413,7 @@ function importParse(){
   impCands=parseRecs($('impText').value);
   if(!impCands.length){
     $('impStatus').textContent='مقدرتش أستخرج عناوين — اتأكد إن الرد فيه قايمة مرقمة أو bullets';
-    $('impList').innerHTML='';$('impAddBtn').style.display='none';
+    $('impList').innerHTML='';$('impAddBtn').style.display='none';$('impFoot').hidden=true;
     return;
   }
   const have=new Set(items.map(i=>i.title.toLowerCase()));
@@ -1264,20 +1421,20 @@ function importParse(){
     const dup=have.has(c.title.toLowerCase());
     return `<label class="impRow" style="${dup?'opacity:.45':''}">
       <input type="checkbox" data-ix="${ix}" ${dup?'':'checked'} ${dup?'disabled':''}>
-      <span class="impP">⏳</span>
+      <span class="impP">…</span>
       <span dir="auto">${esc(c.title)}${c.why?`<span class="iwhy" dir="auto">${esc(c.why)}</span>`:''}</span>
       ${c.year?`<span class="iy">${c.year}</span>`:''}
-      ${c.why||c.from.length?`<button type="button" class="impWhyBtn" data-act="impWhy" data-ix="${ix}" title="اترشح ليه؟">💡</button>`:''}
-      ${dup?'<span class="iy">موجود بالفعل</span>':`<select class="impSeen" title="شفته قبل كده؟ قيّمه ويتضاف لـ'شفتها' — كده الترشيحات الجاية بتبقى أدق">
-        <option value="">＋ هشوفه</option>
-        ${[10,9,8,7,6,5,4,3,2,1].map(n=>`<option value="${n}">👁 شفته ★${n}</option>`).join('')}
-        <option value="w">👁 شفته (من غير تقييم)</option>
+      ${c.why||c.from.length?`<button type="button" class="impWhyBtn" data-act="impWhy" data-ix="${ix}" title="اترشح ليه؟" aria-label="اترشح ليه؟" aria-expanded="false">${ic('bulb')}</button>`:''}
+      ${dup?'<span class="iy">موجود في قايمتك</span>':`<select class="impSeen" aria-label="هشوفه ولا شفته؟" title="شفته قبل كده؟ قيّمه ويتضاف لـ'شفتها' — كده الترشيحات الجاية بتبقى أدق">
+        <option value="">+ هشوفه</option>
+        ${[10,9,8,7,6,5,4,3,2,1].map(n=>`<option value="${n}">شفته ★${n}</option>`).join('')}
+        <option value="w">شفته (من غير تقييم)</option>
       </select>`}
     </label><div class="impWhyBox" data-ix="${ix}" hidden></div>
     <div class="impNoteRow" data-ix="${ix}" hidden><input type="text" class="impNote" dir="auto" maxlength="300" placeholder="رأيك فيه في سطر (اختياري) — عجبك ليه / معجبكش ليه؟ ده بيحسّن الترشيحات الجاية"></div>`;
   }).join('');
-  $('impStatus').textContent=`لقيت ${impCands.length} عنوان — شيل علامة اللي مش عايزه، واضغط 💡 عشان تعرف اترشح ليه`;
-  $('impAddBtn').style.display='';
+  $('impStatus').textContent=`لقيتلك ${impCands.length} عنوان`;
+  $('impAddBtn').style.display='';$('impFoot').hidden=false;
   return importPosters();
 }
 
@@ -1299,7 +1456,7 @@ let impGen=0;
 async function importPosters(){
   const gen=++impGen, cands=impCands;
   const boxes=[...document.querySelectorAll('#impList .impP')];
-  if(!(await sget('watchlist:tmdbkey'))){boxes.forEach(b=>b.textContent='🎞');return;}
+  if(!(await sget('watchlist:tmdbkey'))){boxes.forEach(b=>b.innerHTML=ic('film'));return;}
   await Promise.all(cands.map(async(c,ix)=>{
     try{c.tm=await tmdbBest(c);}catch(e){c.tm=undefined;} // undefined = الإضافة تجرب تاني
     const box=boxes[ix];
@@ -1308,13 +1465,13 @@ async function importPosters(){
     const p=c.tm&&c.tm.poster_path;
     if(typeof p==='string'&&/^\/[\w.-]+$/.test(p)){
       const img=document.createElement('img');img.alt='';img.src='https://image.tmdb.org/t/p/w92'+p;box.appendChild(img);
-    }else box.textContent='🎞';
+    }else box.innerHTML=ic('film');
     const row=box.closest('.impRow'), cb=row.querySelector('input');
     if(c.tm&&!cb.disabled&&items.some(i=>i.tmdbId===c.tm.id&&(i.type==='tv')===(c.tm.media_type==='tv'))){
       cb.checked=false;cb.disabled=true;row.style.opacity='.45';
       row.querySelector('.impSeen')?.remove();
       document.querySelector(`.impNoteRow[data-ix="${ix}"]`).hidden=true;
-      row.insertAdjacentHTML('beforeend','<span class="iy">موجود بالفعل</span>');
+      row.insertAdjacentHTML('beforeend','<span class="iy">موجود في قايمتك</span>');
     }
   }));
 }
@@ -1395,7 +1552,7 @@ const AI_PRESETS={
 const AI_NOT_CHAT=/embed|whisper|tts|dall-e|moderation|transcri|realtime|audio|image|imagen|veo|aqa|rerank/i;
 let aiWant=[], aiModelsReq=0, aiModelList=[];
 const AI_ERR={
-  NOT_CONFIGURED:'ظبط الـ AI من الإعدادات الأول (⚙ ← 🤖 الذكاء الاصطناعي)',
+  NOT_CONFIGURED:'ظبّط الـ AI من الإعدادات الأول (الإعدادات ← الذكاء الاصطناعي)',
   BUSY:'فيه طلب شغال بالفعل — استنى يخلص',
   TIMEOUT:'الـ AI اتأخر أكتر من 3 دقايق — جرب موديل أسرع',
   UNREACHABLE:'مقدرتش أوصل للسيرفر — اتأكد من الرابط وإن السيرفر المحلي شغال',
@@ -1428,17 +1585,24 @@ function aiRenderModels(selected){
 $('aiModelQ').addEventListener('input',()=>aiRenderModels($('aiModel').value));
 async function aiLoad(){
   if(!window.__wlAi)return; // الاكستنشن: يفضل النسخ واللصق اليدوي بس
-  $('aiSec').style.display='';$('aiRunBtn').style.display='';
+  $('aiSec').style.display='';$('aiRunBtn').style.display='';$('navAi').style.display='';
   const c=await window.__wlAi.get();
   $('aiKind').value=c.kind;$('aiUrl').value=c.url;$('aiKey').value='';
   aiFillModels(c.model?[c.model]:[],c.model); // القايمة الكاملة بتتجاب لما تفتح القسم
   $('aiKey').placeholder=c.hasKey?'محفوظ ●●●● — سيبه فاضي عشان يفضل زي ما هو':'sk-...';
-  $('aiNote').textContent=c.url?`متظبط: ${c.model} — ${c.hasKey?'بمفتاح':'من غير مفتاح'}`:'لسه مش متظبط — اختار من "اختيار سريع"';
+  $('aiNote').textContent=c.url?`متظبط: ${c.model} — ${c.hasKey?'بمفتاح':'من غير مفتاح'}`:'لسه مش متظبط — اختار خدمة من فوق';
+  $('aiRunNote').textContent=c.url?c.model:'ظبّط الـ AI من الإعدادات الأول';
+  aiMarkProv();
+}
+// الكارت المتعلّم = الخدمة اللي رابطها مطابق للمكتوب
+function aiMarkProv(){
+  const u=$('aiUrl').value.trim();
+  document.querySelectorAll('#aiProviders .prov').forEach(b=>{const p=AI_PRESETS[b.dataset.v];b.classList.toggle('on',!!p&&p.url===u);});
 }
 async function aiFetchModels(){
   if(!window.__wlAi||!$('aiUrl').value.trim())return;
   const n=++aiModelsReq, keep=$('aiModel').value;
-  $('aiNote').textContent='⏳ بجيب الموديلات من السيرفر...';
+  $('aiNote').textContent='بجيب الموديلات من السيرفر…';
   const r=await window.__wlAi.models(aiForm());
   if(n!==aiModelsReq)return; // اتغيّر الرابط/المفتاح والطلب ده بقى قديم
   if(!r.ok){$('aiNote').textContent='⚠ '+aiErrText(r);return;}
@@ -1450,7 +1614,7 @@ async function aiFetchModels(){
 }
 async function aiTest(){
   if(!$('aiModel').value){toast('اختار موديل الأول');return;}
-  $('aiNote').textContent='🧪 ببعت رسالة تجربة للموديل...';
+  $('aiNote').textContent='ببعت رسالة تجربة للموديل…';
   const r=await window.__wlAi.test(aiForm());
   $('aiNote').textContent=r.ok?`✔ شغال! الموديل رد في ${(r.ms/1000).toFixed(1)} ثانية: "${r.reply}"`:'✖ '+aiErrText(r);
   return r.ok;
@@ -1470,22 +1634,22 @@ async function aiClear(){
   await window.__wlAi.set({url:''});
   await aiLoad();toast('إعدادات الـ AI اتمسحت');
 }
-$('aiPreset').addEventListener('change',e=>{
-  const p=AI_PRESETS[e.target.value];
+function aiPresetPick(v){
+  const p=AI_PRESETS[v];
   if(!p)return;
   $('aiKind').value=p.kind;$('aiUrl').value=p.url;aiWant=p.want||[];
-  aiFillModels([],'');
-  e.target.value='';
+  aiFillModels([],'');aiMarkProv();
   if(p.local||$('aiKey').value.trim())aiFetchModels();
-  else{$('aiNote').textContent='🔑 حط المفتاح وهجيب الموديلات لوحدي';$('aiKey').focus();}
-});
+  else{$('aiNote').textContent='حط المفتاح وهجيب الموديلات لوحدي';$('aiKey').focus();}
+}
 // أي تغيير في الرابط/النوع/المفتاح = هات القايمة تاني. وأول ما تفتح القسم بنجيبها لو فيه إعدادات محفوظة
 ['aiUrl','aiKind','aiKey'].forEach(id=>$(id).addEventListener('change',aiFetchModels));
+$('aiUrl').addEventListener('input',aiMarkProv);
 $('aiSec').addEventListener('toggle',e=>{if(e.target.open&&aiModelList.length<=1)aiFetchModels();});
 async function aiRun(){
   const btn=$('aiRunBtn');
   btn.disabled=true;
-  $('impStatus').textContent='✨ الـ AI بيفكر في ذوقك... (الموديلات المحلية ممكن تاخد دقيقة)';
+  $('impStatus').textContent='الـ AI بيفكر في ذوقك… (الموديلات المحلية ممكن تاخد دقيقة)';
   try{
     const r=await window.__wlAi.run(tasteProfile());
     if(!r.ok){$('impStatus').textContent='⚠ '+aiErrText(r);return;}
@@ -1571,6 +1735,7 @@ function impWhyToggle(ix){
   if(!box||!c)return;
   box.hidden=!box.hidden;
   if(!box.hidden)box.innerHTML=recWhyHtml(c.why,c.from);
+  document.querySelector(`.impWhyBtn[data-ix="${ix}"]`)?.setAttribute('aria-expanded',String(!box.hidden));
 }
 
 $('exportBtn').onclick=async()=>{
@@ -1630,43 +1795,57 @@ function partyOpenMedia(m){
   modalId=it.id;playerOpen=true;
   $('overlay').classList.add('show');
   renderModal();
-  toast('👥 الأوضة شغّالة: '+it.title);
+  toast('الأوضة شغّالة: '+it.title);
 }
 function partyBadgeHtml(){
   if(!partyApi||!party.enabled)return'';
-  const txt=party.status==='connected'?`👥 ${esc(fmtCode(party.code))} · ${party.peers}`
-    :party.status==='connecting'||party.status==='reconnecting'?'👥 بيتصل...':'👥 Watch Party';
-  return `<button class="srv${party.status==='connected'?' on':''}" data-act="partyOpen" title="Watch Party">${txt}</button>`;
+  if(party.status==='connected')
+    return `<button class="srv live" data-act="partyOpen" title="Watch Party"><span class="mono" dir="ltr">${esc(fmtCode(party.code))}</span> · ${Number(party.peers)||0}</button>`;
+  if(party.status==='connecting'||party.status==='reconnecting')
+    return `<button class="srv" data-act="partyOpen" title="Watch Party">${ic('refresh','sm')}بيتصل…</button>`;
+  return `<button class="srv" data-act="partyOpen" title="Watch Party">${ic('users','sm')}<span dir="ltr">Watch Party</span></button>`;
 }
 function renderParty(){
   const badge=$('partyBadge');if(badge)badge.innerHTML=partyBadgeHtml(); // من غير renderModal — الـ iframe ميتعملوش reload
+  // نقطة نعناعي على زرار الهيدر طول ما انت جوه أوضة
+  $('partyBtn').innerHTML=ic('users')+(party.status==='connected'?'<span class="ndot" style="background:var(--watching)"></span>':'');
   const body=$('partyBody');if(!body)return;
-  const err=party.error?`<div style="color:#ff7a7a;font-size:.85rem;margin-bottom:12px">${esc(PARTY_ERRORS[party.error]||'حصلت مشكلة — جرب تاني')}</div>`:'';
+  const err=party.error?`<div class="perr">${ic('alert','sm')}${esc(PARTY_ERRORS[party.error]||'حصلت مشكلة — جرب تاني')}</div>`:'';
   if(!party.enabled){body.innerHTML=`<div class="sub">${PARTY_ERRORS.no_server}</div>`;return;}
   if(party.status==='idle'){
-    body.innerHTML=err+`
-      <button class="btn btn-amber" data-act="partyCreate" style="width:100%">＋ اعمل أوضة جديدة</button>
-      <div class="sub" style="margin:10px 0 6px;text-align:center">أو ادخل أوضة صاحبك</div>
-      <div style="display:flex;gap:6px">
-        <input type="text" id="partyCode" dir="ltr" maxlength="9" placeholder="ABCD-EFGH" style="flex:1;text-transform:uppercase;letter-spacing:2px;text-align:center">
-        <button class="btn" data-act="partyJoin">ادخل</button>
-      </div>`;
+    body.innerHTML=`
+      <button class="btn btn-amber" data-act="partyCreate" style="height:52px">${ic('plus')}اعمل أوضة جديدة</button>
+      <div class="or">أو ادخل أوضة صاحبك</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="partyCode" class="codein" dir="ltr" maxlength="9" placeholder="ABCD-EFGH" aria-label="كود الأوضة" style="flex:1">
+        <button class="btn" data-act="partyJoin" style="height:50px">ادخل</button>
+      </div>`+err;
     return;
   }
   if(party.status!=='connected'){
-    body.innerHTML=err+`<div class="sub" style="margin-bottom:12px">${party.status==='reconnecting'?'النت فصل — بحاول أرجع تاني...':'بيتصل بالأوضة...'}</div>
+    const re=party.status==='reconnecting';
+    body.innerHTML=err+`<div style="text-align:center">
+        <div class="spin"></div>
+        <b style="display:block;font-family:var(--display);font-size:20px">${re?'النت فصل…':'بيتصل بالأوضة…'}</b>
+        <div class="sub">${re?'بحاول أرجع للأوضة لوحدي':'ثانية واحدة'}</div>
+      </div>
       <button class="btn btn-ghost" data-act="partyLeave">إلغاء</button>`;
     return;
   }
+  const peers=Math.min(Number(party.peers)||0,8);
+  const dots=['var(--accent)','var(--watched)','var(--queue)','var(--watching)','var(--dropped)'];
+  const m=party.media;
   body.innerHTML=err+`
-    <div style="text-align:center;margin-bottom:14px">
-      <div class="sub">كود الأوضة — ابعته لصاحبك</div>
-      <div dir="ltr" style="font-family:monospace;font-size:2rem;letter-spacing:4px;color:var(--amber);margin:6px 0">${esc(fmtCode(party.code))}</div>
-      <button class="btn btn-sm" data-act="partyCopy">📋 انسخ الكود</button>
+    <div class="peers"><span class="livedot"></span><span style="color:var(--watching);font-weight:600;flex:1">الأوضة شغّالة</span>
+      <span class="who">${Array.from({length:Math.min(peers,5)},(_,i)=>`<b style="background:${dots[i]}"></b>`).join('')}</span><span>${peers} في الأوضة</span></div>
+    <div class="ticket">
+      <small>كود الأوضة — ابعته لصاحبك</small>
+      <div class="code">${esc(fmtCode(party.code))}</div>
+      <button class="btn btn-sm" data-act="partyCopy">${ic('copy','sm')}انسخ الكود</button>
     </div>
-    <div class="sub" style="margin-bottom:6px">👥 في الأوضة: ${party.peers}</div>
-    <div class="sub" style="margin-bottom:14px">${party.media?'🎬 '+esc(party.media.title)+(party.media.type==='tv'?` — S${pad(party.media.season)}E${pad(party.media.episode)}`:''):'مستنيين حد يفتح فيلم أو حلقة من البلاير'}</div>
-    ${party.media&&!(playerOpen&&itemMatchesMedia(items.find(i=>i.id===modalId),party.media))?`<button class="btn btn-amber" data-act="partyWatch" style="width:100%;margin-bottom:10px">▶ افتح البلاير</button>`:''}
+    <div class="nowon">${m?`${ic('film')}<div><small>بتتفرجوا على</small><b dir="auto">${esc(m.title)}</b>${m.type==='tv'?` <span dir="ltr" style="color:var(--watching);font-weight:600">S${pad(Number(m.season)||1)}E${pad(Number(m.episode)||1)}</span>`:''}</div>`
+      :'<span class="sub">مستنيين حد يفتح فيلم أو حلقة من البلاير</span>'}</div>
+    ${m&&!(playerOpen&&itemMatchesMedia(items.find(i=>i.id===modalId),m))?`<button class="btn btn-ep" data-act="partyWatch">${ic('play','fill sm')}افتح البلاير</button>`:''}
     <button class="btn btn-ghost btn-danger" data-act="partyLeave">اخرج من الأوضة</button>`;
 }
 function partyOpen(){renderParty();$('partyOverlay').classList.add('show');}
@@ -1777,6 +1956,10 @@ document.addEventListener('click',(e)=>{
     case 'aiModels': aiFetchModels(); break;
     case 'aiTest': aiTest(); break;
     case 'impWhy': e.preventDefault(); impWhyToggle(parseInt(el.dataset.ix)); break;
+    case 'addOpen': addOpen(); break;
+    case 'heroShuffle': heroShuffle(); break;
+    case 'setNav': setNav(el.dataset.v); break;
+    case 'aiPreset': aiPresetPick(el.dataset.v); break;
   }
 });
 // "/" يوصلك للبحث فوراً
@@ -1795,13 +1978,14 @@ document.addEventListener('keydown',(e)=>{
 document.addEventListener('error',(e)=>{
   const img=e.target;
   if(img.tagName!=='IMG')return;
-  if(img.closest('.pcard')){
-    const card=img.closest('.pcard');
+  const box=img.closest('.pcard .art, .row .thumb, .mposter, .cwthumb');
+  if(box){
+    const card=img.closest('[data-itemid],[data-id]');
     img.remove();
-    if(!card.querySelector('.noimg')){
-      const it=items.find(i=>i.id===card.dataset.itemid);
-      card.insertAdjacentHTML('afterbegin',
-        `<div class="noimg"><span class="fi">🎞</span><span class="nt" dir="auto">${esc(it?it.title:'')}</span></div>`);
+    if(!box.querySelector('.noimg')){
+      const id=card?(card.dataset.itemid||card.dataset.id):modalId; // البوستر في التفاصيل مالوش كارت
+      const it=items.find(i=>i.id===id);
+      box.insertAdjacentHTML('afterbegin',noimgHtml(it||{title:''},!box.classList.contains('cwthumb')));
     }
   }else{
     img.remove();

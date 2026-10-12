@@ -22,6 +22,7 @@ if (process.isMainFrame && location.origin === 'app://local') {
   contextBridge.exposeInMainWorld('__wlAllowOpen', () => ipcRenderer.sendSync('wl:allowOpen'));
   contextBridge.exposeInMainWorld('__wlDesktop', {
     notify: p => ipcRenderer.invoke('wl:notify', p),
+    titlebar: mood => ipcRenderer.invoke('wl:titlebar', mood),
     onOpenItem: fn => ipcRenderer.on('wl:openItem', (e, id) => fn(id)),
     party: {
       create: () => ipcRenderer.invoke('wl:party:create'),

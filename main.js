@@ -301,18 +301,40 @@ function updateBadge() {
   let n = 0;
   try { n = JSON.parse(store['watchlist:data'] || '[]').filter(i => i && i.status === 'queue').length; } catch (e) {}
   // ponytail: tooltip بس — ويندوز مفيهوش badge رقمي؛ overlay icon لو احتجناه
-  const base = `قائمة المشاهدة v${app.getVersion()}`;
+  const base = `rilio v${app.getVersion()}`;
   tray && tray.setToolTip(n ? `${base} — ${n} هشوفهم` : base);
 }
 
 function show() { win.show(); win.focus(); }
 
+/* ================= شريط النافذة بلون المزاج ================= */
+// أزرار ويندوز الأصلية بتفضل، بس بلون المزاج. الواجهة بتبعت اسم المزاج بس — مفيش ألوان جاية من برا
+const MOODS = {
+  sahra: { bar: '#130F1A', sym: '#A99CB8', bg: '#15111C' },
+  mint: { bar: '#0B1615', sym: '#8FB3AA', bg: '#0D1918' },
+  coffee: { bar: '#140E0B', sym: '#B59F8C', bg: '#19120F' },
+  sunrise: { bar: '#F6EBDD', sym: '#6E5F78', bg: '#FBF3E8' },
+};
+const OLD_THEMES = { cinema: 'sahra', nova: 'sahra', midnight: 'mint', ember: 'coffee' };
+const moodOf = t => MOODS[OLD_THEMES[t] || t] || MOODS.sahra;
+ipcMain.handle('wl:titlebar', (e, t) => {
+  if (!fromApp(e)) throw new Error('forbidden');
+  if (typeof t !== 'string' || !Object.hasOwn(MOODS, t)) throw new Error('bad payload');
+  const m = MOODS[t];
+  if (win.setTitleBarOverlay) win.setTitleBarOverlay({ color: m.bar, symbolColor: m.sym, height: 40 });
+  win.setBackgroundColor(m.bg);
+  return true;
+});
+
 function createWindow() {
+  const mood = moodOf(store['watchlist:theme']);
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 900, minHeight: 600,
-    backgroundColor: '#0b0b10', autoHideMenuBar: true,
+    backgroundColor: mood.bg, autoHideMenuBar: true,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: mood.bar, symbolColor: mood.sym, height: 40 },
     icon: path.join(__dirname, 'icon128.png'),
-    title: 'قائمة المشاهدة',
+    title: 'rilio',
     webPreferences,
   });
   guardPopups(win.webContents, true);
@@ -358,7 +380,7 @@ app.whenReady().then(() => {
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: `النسخة ${app.getVersion()}`, enabled: false },
       { type: 'separator' },
-      { label: 'افتح القايمة', click: show },
+      { label: 'افتح rilio', click: show },
       ...(readyVersion ? [{ label: `أعد التشغيل للتحديث (${readyVersion})`, click: updater.install }] : []),
       { label: 'خروج', click: () => app.quit() },
     ]));

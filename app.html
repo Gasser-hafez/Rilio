@@ -5,594 +5,666 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- مفيش inline scripts ولا javascript: URLs، والـ fetch مسموح بس لـ OMDb/TMDB — يقفل تسريب البيانات لو حصل HTML injection -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src https://www.omdbapi.com https://api.themoviedb.org; frame-src https:; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>قائمة المشاهدة</title>
+<title>rilio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Changa:wght@600;700;800&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@600;700;800&family=Readex+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* ============ المزاج الافتراضي: سهرة ============ */
   :root{
-    --bg:#0b0b10;
-    --surface:#16161e;
-    --surface2:#1e1e28;
-    --line:#292936;
-    --ink:#edeaf3;
-    --muted:#8d8b9c;
-    --amber:#e8a33d;
-    --amber-deep:#a9741f;
-    --red:#d95757;
-    --green:#5fb26a;
-    --radius:14px;
-    --accent-ink:#161006;
-    --glow:0 6px 24px color-mix(in srgb, var(--amber) 28%, transparent),0 2px 8px rgba(0,0,0,.6);
+    --bg:#15111C; --solid:#211B2C; --raised:#2B2439; --surface:rgba(33,27,44,.72); --surface-2:rgba(33,27,44,.5);
+    --field:rgba(15,12,21,.6); --hover:rgba(246,238,227,.06); --line:rgba(246,238,227,.09); --line-2:#3A3149;
+    --ink:#F6EEE3; --ink-2:#D9CFE6; --muted:#A99CB8; --faint:#8A7D9A;
+    --accent:#FF9466; --accent-ink:#2A1206; --accent-hi:#FFB48F;
+    --queue:#FFD36E; --queue-ink:#2B1D05; --watching:#6EE7C8; --watching-ink:#0F2A23;
+    --watched:#B9A2FF; --watched-ink:#1E1340; --dropped:#FF7A9A; --dropped-ink:#3A0716;
+    --glow-a:#FF9466; --glow-b:#B9A2FF; --glow-op:.16; --grain-op:.09; --grain-blend:overlay;
+    --scrim:21,17,28; --backdrop:rgba(10,8,14,.62); --titlebar:#130F1A;
+    --r-sm:12px; --r:18px; --r-lg:26px;
+    --display:'Baloo Bhaijaan 2','Readex Pro',system-ui,sans-serif;
+    /* أسماء قديمة لسه مستخدمة في style="" جوه app.js */
+    --amber:var(--accent); --amber-deep:var(--accent); --red:var(--dropped); --green:var(--watching); --surface2:var(--raised);
   }
+  html[data-theme="mint"]{
+    --bg:#0D1918; --solid:#16272A; --raised:#1E3538; --surface:rgba(22,39,42,.72); --surface-2:rgba(22,39,42,.5);
+    --field:rgba(8,18,17,.6); --line-2:#24403B; --ink:#EAF6F1; --ink-2:#C8E3DA; --muted:#8FB3AA; --faint:#7FA39A;
+    --accent:#6EE7C8; --accent-ink:#0F2A23; --accent-hi:#9BF0DA; --glow-a:#6EE7C8; --glow-b:#5E9DF5;
+    --scrim:13,25,24; --titlebar:#0B1615;
+  }
+  html[data-theme="coffee"]{
+    --bg:#19120F; --solid:#261C17; --raised:#33251E; --surface:rgba(38,28,23,.72); --surface-2:rgba(38,28,23,.5);
+    --field:rgba(18,12,9,.6); --line-2:#3D2E26; --ink:#F8EEE2; --ink-2:#E5D6C4; --muted:#B59F8C; --faint:#A08B78;
+    --accent:#FFC56E; --accent-ink:#2B1D05; --accent-hi:#FFD99A; --glow-a:#FFB062; --glow-b:#FF7A5C;
+    --scrim:25,18,15; --titlebar:#140E0B;
+  }
+  html[data-theme="sunrise"]{
+    --bg:#FBF3E8; --solid:#FFFFFF; --raised:#F4E9DA; --surface:rgba(255,255,255,.8); --surface-2:rgba(255,255,255,.62);
+    --field:#FFFDF9; --hover:rgba(42,31,51,.05); --line:rgba(42,31,51,.1); --line-2:#EADCC8;
+    --ink:#2A1F33; --ink-2:#4A3D55; --muted:#6E5F78; --faint:#7A6A84;
+    --accent:#F2774A; --accent-ink:#2A1206; --accent-hi:#D9602F;
+    --queue:#9A6A00; --queue-ink:#FFFFFF; --watching:#13876C; --watching-ink:#FFFFFF;
+    --watched:#6A4FD1; --watched-ink:#FFFFFF; --dropped:#C93A63; --dropped-ink:#FFFFFF;
+    --glow-a:#FFB38A; --glow-b:#C9B6FF; --glow-op:.38; --grain-op:.05; --grain-blend:multiply;
+    --scrim:42,31,51; --backdrop:rgba(42,31,51,.32); --titlebar:#F6EBDD;
+  }
+
   *{box-sizing:border-box;margin:0;padding:0}
+  html{background:var(--bg)}
   body{
-    background:var(--bg);color:var(--ink);
-    font-family:'Cairo',system-ui,sans-serif;min-height:100vh;
-    background-image:radial-gradient(ellipse 70% 36% at 50% -6%, color-mix(in srgb, var(--amber) 10%, transparent), transparent);
+    background:var(--bg);color:var(--ink);min-height:100vh;
+    font-family:'Readex Pro',system-ui,sans-serif;font-size:15px;line-height:1.6;
   }
-  .wrap{max-width:1060px;margin:0 auto;padding:26px 20px 90px}
+  button,input,select,textarea{font-family:inherit;color:inherit}
+  button{cursor:pointer}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  ::selection{background:color-mix(in srgb,var(--accent) 40%,transparent)}
+  [hidden]{display:none!important}
 
-  header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
-  h1{font-family:'Changa',sans-serif;font-weight:800;font-size:2.1rem;line-height:1.05;letter-spacing:.5px}
-  h1 .glow{color:var(--amber);text-shadow:0 0 22px color-mix(in srgb, var(--amber) 35%, transparent)}
-  .sub{color:var(--muted);font-size:.84rem;margin-top:3px}
+  /* ============ الجو: إضاءة محيطة + حبيبات فيلم ============ */
+  #ambient{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+  #ambient i{position:absolute;border-radius:50%;filter:blur(110px);opacity:var(--glow-op);transition:background 1.2s ease}
+  #ambient .a1{width:760px;height:520px;top:-180px;right:6%;background:var(--amb-a,var(--glow-a));animation:drift 16s ease-in-out infinite}
+  #ambient .a2{width:560px;height:420px;top:-80px;left:2%;background:var(--amb-b,var(--glow-b));opacity:calc(var(--glow-op)*.8);animation:drift 19s ease-in-out infinite reverse}
+  #ambient .a3{width:520px;height:360px;top:60vh;left:30%;background:var(--glow-a);opacity:calc(var(--glow-op)*.3)}
+  @keyframes drift{0%,100%{transform:translate(0,0)}50%{transform:translate(-40px,20px)}}
+  body::after{
+    content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:var(--grain-op);mix-blend-mode:var(--grain-blend);
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
 
+  /* ============ شريط النافذة (الديسكتوب بس) ============ */
+  .titlebar{display:none}
+  html.desktop .titlebar{
+    display:flex;align-items:center;gap:9px;height:40px;padding:0 14px;padding-right:150px;
+    position:sticky;top:0;z-index:80;-webkit-app-region:drag;user-select:none;
+    background:color-mix(in srgb,var(--titlebar) 82%,transparent);backdrop-filter:blur(14px);
+  }
+  html.desktop .overlay{top:40px}
+  .tb-mark{width:22px;height:22px;border-radius:7px;background:var(--accent);position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .tb-mark .ic{width:14px;height:14px;color:var(--accent-ink);stroke-width:3}
+  .tb-mark::after{content:'';position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:var(--watching)}
+
+  /* الوردمارك: الـ o زرار تشغيل */
+  .wordmark{font-family:var(--display);font-weight:800;line-height:1;color:var(--ink);letter-spacing:-.3px;direction:ltr;unicode-bidi:isolate;white-space:nowrap}
+  .wordmark .i1{color:var(--accent)} .wordmark .i2{color:var(--watching)}
+  .wordmark .o{display:inline-block;width:.52em;height:.52em;border:.1em solid currentColor;border-radius:50%;position:relative;margin-left:.03em;vertical-align:baseline}
+  .wordmark .o::after{content:'';position:absolute;top:50%;left:50%;margin:-.09em 0 0 -.05em;border-top:.09em solid transparent;border-bottom:.09em solid transparent;border-left:.14em solid var(--accent)}
+
+  /* ============ أيقونات ============ */
+  .ic{width:18px;height:18px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}
+  .ic.fill{fill:currentColor;stroke:none}
+  .ic.sm{width:14px;height:14px} .ic.lg{width:24px;height:24px}
+
+  .wrap{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:18px 24px 64px;display:flex;flex-direction:column;gap:30px}
+
+  /* ============ الأزرار ============ */
   .btn{
-    font-family:'Cairo',sans-serif;font-weight:700;font-size:.85rem;
-    border:1px solid var(--line);background:var(--surface);color:var(--ink);
-    padding:10px 16px;border-radius:10px;cursor:pointer;transition:border-color .15s,background .15s,color .15s;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    height:44px;padding:0 18px;border-radius:999px;border:1.5px solid var(--line-2);background:transparent;
+    color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;
+    transition:background .2s,border-color .2s,color .2s,transform .1s,box-shadow .2s;
   }
-  .btn:hover{border-color:var(--amber-deep)}
-  .btn:focus-visible,.tab:focus-visible,.pcard:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
-  .btn-amber{background:var(--amber);border-color:var(--amber);color:var(--accent-ink)}
-  .btn-amber:hover{filter:brightness(1.12)}
-  .btn-ghost{background:transparent}
-  .btn-sm{padding:6px 12px;font-size:.78rem}
-  .btn-danger:hover{border-color:var(--red);color:var(--red)}
-  .btn-watch{border-color:var(--amber-deep);color:var(--amber)}
-  .btn-watch:hover{background:var(--amber);color:var(--accent-ink)}
+  .btn:hover{background:var(--hover);border-color:color-mix(in srgb,var(--ink) 22%,transparent)}
+  .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:.55;cursor:default}
+  .btn-amber,.btn-accent{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600;
+    box-shadow:0 10px 24px -12px color-mix(in srgb,var(--accent) 85%,transparent),inset 0 -2px 0 rgba(0,0,0,.12)}
+  .btn-amber:hover,.btn-accent:hover{background:var(--accent);border-color:var(--accent);filter:brightness(1.06)}
+  .btn-ghost{border-color:transparent;color:var(--muted)}
+  .btn-ghost:hover{color:var(--ink)}
+  .btn-sm{height:36px;padding:0 14px;font-size:13px}
+  .btn-danger{color:var(--dropped)}
+  .btn-danger:hover{color:var(--dropped);border-color:color-mix(in srgb,var(--dropped) 45%,transparent);background:color-mix(in srgb,var(--dropped) 10%,transparent)}
+  .btn-watch{color:var(--accent-hi);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+  .btn-watch:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+  .btn-glass{background:rgba(var(--scrim),.45);border-color:rgba(246,238,227,.25);color:#F6EEE3;backdrop-filter:blur(8px)}
+  .btn-glass:hover{background:rgba(var(--scrim),.6);border-color:rgba(246,238,227,.4)}
+  .iconbtn{
+    width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--muted);
+    display:inline-flex;align-items:center;justify-content:center;position:relative;transition:background .2s,color .2s;flex-shrink:0;
+  }
+  .iconbtn:hover{background:var(--hover);color:var(--ink)}
+  .iconbtn .ndot{position:absolute;top:9px;inset-inline-end:9px;width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 2.5px var(--bg)}
+  .pillbtn{height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--line-2);background:transparent;color:var(--muted);font-size:13px;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+  .pillbtn:hover{background:var(--hover);color:var(--ink)}
 
-  /* ---- الفورم ---- */
-  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:22px}
-  .panel h2{font-family:'Changa',sans-serif;font-size:1.02rem;font-weight:700;margin-bottom:12px;color:var(--amber)}
-  details.panel{padding:0;overflow:hidden}
-  details.panel>summary{
-    list-style:none;cursor:pointer;padding:14px 18px;
-    font-family:'Changa',sans-serif;font-weight:700;color:var(--amber);font-size:1.02rem;
-    display:flex;align-items:center;gap:8px;user-select:none;
+  /* ============ الحقول ============ */
+  label{display:block;font-size:13px;color:var(--ink-2);margin-bottom:6px;font-weight:500}
+  input[type=text],input[type=password],input[type=search],select,textarea{
+    width:100%;height:46px;padding:0 14px;background:var(--field);border:1.5px solid var(--line-2);border-radius:14px;
+    color:var(--ink);font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s;
   }
-  details.panel>summary::-webkit-details-marker{display:none}
-  details.panel>summary::after{content:'▾';margin-inline-start:auto;color:var(--muted);transition:transform .2s}
-  details.panel[open]>summary::after{transform:rotate(180deg)}
-  details.panel>.inner{padding:2px 18px 18px}
-  .grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
-  @media(max-width:640px){.grid{grid-template-columns:1fr}}
-  label{display:block;font-size:.74rem;color:var(--muted);margin-bottom:5px;font-weight:600}
-  input[type=text],input[type=password],input[type=search],select{
-    width:100%;background:var(--bg);border:1px solid var(--line);border-radius:9px;
-    color:var(--ink);font-family:'Cairo',sans-serif;font-size:.92rem;padding:10px 12px;
-  }
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--amber-deep)}
-  .form-row{display:flex;gap:10px;margin-top:14px;align-items:center;flex-wrap:wrap}
-  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
-  .seg button{background:transparent;border:none;color:var(--muted);font-family:'Cairo',sans-serif;font-weight:700;font-size:.82rem;padding:9px 16px;cursor:pointer}
-  .seg button.on{background:var(--surface2);color:var(--amber)}
+  textarea{height:auto;padding:12px 14px;line-height:1.7}
+  select{appearance:none;padding-inline-end:36px;cursor:pointer;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A99CB8' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat:no-repeat;background-position:left 14px center}
+  select option{background:var(--solid);color:var(--ink)}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 16%,transparent)}
+  input::placeholder,textarea::placeholder{color:var(--faint)}
+  .sub{color:var(--muted);font-size:13px;line-height:1.65}
+  .mono{font-family:ui-monospace,'Cascadia Mono',monospace}
 
-  /* ---- الشريط ---- */
-  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
-  .tabs{display:flex;gap:6px}
+  /* ============ الهيدر ============ */
+  header.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .greet{flex:1 1 230px;min-width:0}
+  .hello{display:flex;align-items:center;gap:7px;color:var(--ink-2);font-size:14px}
+  .hello .ic{color:var(--queue);width:16px;height:16px}
+  .tonight{font-family:var(--display);font-weight:800;font-size:28px;line-height:1.2;margin-top:2px}
+  .searchbox{
+    flex:0 1 460px;display:flex;align-items:center;gap:10px;height:52px;margin:0;padding-inline:18px 6px;
+    background:var(--surface);border:1px solid var(--line);border-radius:999px;backdrop-filter:blur(14px);
+    transition:border-color .2s,box-shadow .2s;
+  }
+  .searchbox:focus-within{border-color:color-mix(in srgb,var(--accent) 60%,transparent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 12%,transparent)}
+  .searchbox .ic{color:var(--muted)}
+  .searchbox input{flex:1;min-width:0;height:auto;padding:0;background:transparent;border:none;box-shadow:none!important;font-size:15px}
+  .searchbox kbd{font-family:inherit;font-size:11px;color:var(--faint);border:1px solid var(--line-2);border-radius:6px;padding:0 6px}
+  .tools{display:flex;gap:6px;align-items:center}
+  .tools .iconbtn{border-color:transparent}
+
+  /* ============ فورم الإضافة ============ */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);backdrop-filter:blur(18px)}
+  details.addbox>summary{
+    list-style:none;cursor:pointer;padding:16px 20px;display:flex;align-items:center;gap:12px;user-select:none;
+    font-family:var(--display);font-weight:700;font-size:19px;
+  }
+  details.addbox>summary::-webkit-details-marker{display:none}
+  details.addbox>summary .sq{width:34px;height:34px;border-radius:11px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);display:flex;align-items:center;justify-content:center}
+  details.addbox>summary::after{content:'';margin-inline-start:auto;width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .2s}
+  details.addbox[open]>summary::after{transform:rotate(-135deg)}
+  details.addbox:not([open]){display:none}
+  details.addbox .inner{padding:0 20px 20px}
+  .grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
+  @media(max-width:700px){.grid{grid-template-columns:1fr}}
+  .form-row{display:flex;gap:10px;margin-top:16px;align-items:center;flex-wrap:wrap}
+  #metaPreview{font-size:13px;color:var(--accent-hi);margin-top:6px;min-height:1.2em}
+  #chooser .btn{height:auto;min-height:40px;padding:8px 14px;justify-content:flex-start;border-radius:12px;white-space:normal}
+  .seg{display:inline-flex;background:var(--field);border:1.5px solid var(--line-2);border-radius:14px;padding:4px;gap:2px}
+  .seg button{height:36px;padding:0 16px;border:none;border-radius:10px;background:transparent;color:var(--muted);font-size:13px;font-weight:500}
+  .seg button.on{background:var(--raised);color:var(--ink);font-weight:600}
+
+  /* ============ اختيار الليلة + كمّل ============ */
+  .hometop{display:flex;gap:20px;flex-wrap:wrap;align-items:stretch}
+  .hero{
+    flex:999 1 600px;min-width:0;position:relative;min-height:400px;border-radius:30px;overflow:hidden;
+    background:var(--solid);box-shadow:0 40px 80px -34px color-mix(in srgb,var(--amb-a,var(--glow-a)) 55%,transparent),inset 0 0 0 1px rgba(255,255,255,.06);
+    isolation:isolate;
+  }
+  .hero .hbg{position:absolute;inset:0;z-index:-1}
+  .hero .hbg img{width:100%;height:100%;object-fit:cover;display:block;animation:breathe 18s ease-in-out infinite}
+  .hero .hbg.poster img{filter:blur(28px) saturate(1.2);transform:scale(1.25);animation:none}
+  .hero .hbg.art{background:radial-gradient(circle at 26% 30%,var(--accent) 0 18%,transparent 19%),radial-gradient(ellipse 120% 60% at 30% 105%,color-mix(in srgb,var(--accent) 35%,var(--bg)) 0 50%,transparent 51%),linear-gradient(var(--raised),var(--solid))}
+  .hero .hbg::after{content:'';position:absolute;inset:0;background:linear-gradient(to left,rgba(var(--scrim),.94),rgba(var(--scrim),.55) 55%,rgba(var(--scrim),.1)),linear-gradient(to top,rgba(var(--scrim),.7),transparent 45%)}
+  @keyframes breathe{0%,100%{transform:scale(1.02)}50%{transform:scale(1.07)}}
+  .hero .hin{position:relative;height:100%;min-height:400px;padding:36px 40px;display:flex;flex-direction:column;justify-content:flex-end;gap:14px;max-width:560px;color:#F6EEE3}
+  .hero .hbadge{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:999px;background:rgba(255,211,110,.16);color:#FFD36E;font-size:13px;font-weight:600}
+  .hero .htitle{font-family:var(--display);font-weight:800;font-size:clamp(34px,4.4vw,56px);line-height:1.02;letter-spacing:-.5px;text-shadow:0 4px 24px rgba(0,0,0,.45);overflow-wrap:anywhere}
+  .hero .hmeta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px;color:#E4D9EE}
+  .hero .hmeta .imdb{color:#FFD36E;font-weight:600}
+  .hero .hdesc{font-size:14px;line-height:1.75;color:#D9CFE6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .hero .hact{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+  .hero .hact .btn{height:52px;padding:0 26px;font-size:16px}
+  .hero .hact .iconbtn{width:52px;height:52px;background:rgba(var(--scrim),.45);border-color:rgba(246,238,227,.25);color:#F6EEE3;backdrop-filter:blur(8px)}
+  .hero.empty .hin{justify-content:center}
+  .dotsep{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.4;flex-shrink:0}
+
+  .side{flex:1 1 300px;display:flex;flex-direction:column;gap:14px;min-width:0}
+  .cw{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px 14px 12px;backdrop-filter:blur(16px);display:flex;flex-direction:column;gap:4px}
+  .cw-h{display:flex;align-items:center;gap:9px;padding:0 8px 8px}
+  .cw-h h2{font-family:var(--display);font-weight:700;font-size:18px;flex:1}
+  .ldot{width:8px;height:8px;border-radius:50%;background:var(--watching);box-shadow:0 0 0 4px color-mix(in srgb,var(--watching) 18%,transparent)}
+  .cwrow{display:flex;align-items:center;gap:12px;padding:8px;border-radius:16px;cursor:pointer;transition:background .2s}
+  .cwrow:hover{background:var(--hover)}
+  .cwthumb{width:52px;height:52px;border-radius:14px;flex-shrink:0;overflow:hidden;background:var(--raised);position:relative}
+  .cwthumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .cwbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+  .cwtop{display:flex;align-items:baseline;gap:6px}
+  .cwtitle{font-weight:600;font-size:14px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cwep{font-size:12px;color:var(--watching);font-weight:600;direction:ltr}
+  .bar{height:4px;border-radius:999px;background:var(--hover);overflow:hidden}
+  .bar>i{display:block;height:100%;border-radius:999px;background:var(--watching)}
+  .cwplay{width:44px;height:44px;border-radius:50%;border:none;flex-shrink:0;background:color-mix(in srgb,var(--watching) 15%,transparent);color:var(--watching);display:flex;align-items:center;justify-content:center}
+  .cwplay:hover{background:var(--watching);color:var(--watching-ink)}
+  .mystery{
+    display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:22px;text-align:start;
+    border:1.5px dashed color-mix(in srgb,var(--queue) 45%,transparent);background:color-mix(in srgb,var(--queue) 6%,transparent);color:var(--ink);
+    transition:background .2s,transform .2s;
+  }
+  .mystery:hover{background:color-mix(in srgb,var(--queue) 11%,transparent);transform:translateY(-2px)}
+  .mystery .gift{width:46px;height:46px;border-radius:14px;background:color-mix(in srgb,var(--queue) 15%,transparent);color:var(--queue);display:flex;align-items:center;justify-content:center;flex-shrink:0;animation:wob 3.4s ease-in-out infinite}
+  .mystery b{display:block;font-family:var(--display);font-weight:700;font-size:17px;color:var(--queue);line-height:1.3}
+  .mystery small{display:block;font-size:12px;color:var(--muted)}
+  @keyframes wob{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg) scale(1.06)}}
+
+  /* ============ التابات والفلاتر ============ */
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .tabs{display:flex;gap:4px;flex-wrap:wrap}
   .tab{
-    font-family:'Changa',sans-serif;font-weight:700;font-size:.95rem;
-    background:transparent;border:none;color:var(--muted);cursor:pointer;
-    padding:8px 14px;border-radius:9px;transition:.15s;
+    height:46px;padding:0 16px;border-radius:999px;border:none;background:transparent;color:var(--faint);
+    font-family:var(--display);font-weight:700;font-size:18px;display:inline-flex;align-items:center;gap:9px;transition:background .2s,color .2s;
   }
-  .tab.on{color:var(--ink);background:var(--surface2)}
-  .tab .count{font-size:.72rem;color:var(--amber);margin-inline-start:4px}
-  .search{flex:1;min-width:150px}
-  .sortbtn{white-space:nowrap}
-
-  /* ================= حائط البوسترات ================= */
-  .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:16px}
-  @media(max-width:480px){.wall{grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:12px}}
-  .pcard{
-    position:relative;aspect-ratio:2/3;border-radius:12px;overflow:hidden;cursor:pointer;
-    background:var(--surface2);border:1px solid var(--line);
-    transition:transform .22s ease,box-shadow .22s ease,border-color .22s;
-  }
-  .pcard:hover{transform:translateY(-5px) scale(1.02);box-shadow:var(--glow);border-color:var(--amber-deep)}
-  .pcard img{width:100%;height:100%;object-fit:cover;display:block}
-  .pcard .noimg{
-    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-    padding:14px;text-align:center;color:var(--muted);
-    background:linear-gradient(160deg,var(--surface2),var(--bg));
-  }
-  .pcard .noimg .fi{font-size:2rem;opacity:.5}
-  .pcard .noimg .nt{font-family:'Changa',sans-serif;font-weight:700;color:var(--ink);font-size:.95rem;word-break:break-word}
-  .pcard .grad{
-    position:absolute;inset-inline:0;bottom:0;padding:34px 10px 9px;pointer-events:none;
-    background:linear-gradient(to top,rgba(6,6,10,.94) 22%,transparent);
-  }
-  .pcard .ptitle{font-family:'Changa',sans-serif;font-weight:700;font-size:.9rem;line-height:1.25;
-    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
-  .pcard .pyear{font-size:.7rem;color:var(--muted);margin-top:1px}
-  .chip{
-    position:absolute;top:8px;font-size:.68rem;font-weight:700;padding:3px 8px;border-radius:20px;
-    background:rgba(8,8,12,.78);backdrop-filter:blur(3px);border:1px solid rgba(255,255,255,.08);
-  }
-  .chip.imdb{inset-inline-start:8px;color:var(--amber)}
-  .stamp{
-    position:absolute;top:8px;inset-inline-end:8px;width:34px;height:34px;border-radius:50%;
-    display:flex;align-items:center;justify-content:center;
-    font-family:'Changa',sans-serif;font-weight:800;font-size:.95rem;
-    background:rgba(8,8,12,.82);border:2px solid var(--line);color:var(--muted);
-  }
-  .stamp.hi{border-color:var(--green);color:var(--green)}
-  .stamp.mid{border-color:var(--amber);color:var(--amber)}
-  .stamp.lo{border-color:var(--red);color:var(--red)}
-  .stamp.q{border-style:dashed}
-  .stamp.drop{border-style:dashed;border-color:var(--red);color:var(--red)}
-  .bell{
-    position:absolute;top:48px;inset-inline-end:8px;font-size:.66rem;font-weight:700;
-    background:var(--amber);color:var(--accent-ink);border:none;border-radius:20px;padding:4px 9px;cursor:pointer;
-    box-shadow:0 0 14px color-mix(in srgb, var(--amber) 55%, transparent);
-  }
-  .quick{
-    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
-    background:rgba(8,8,12,.55);opacity:0;transition:opacity .18s;padding:12px;
-  }
-  .pcard:hover .quick{opacity:1}
-  @media(hover:none){.quick{display:none}}
-  .quick .btn{width:100%;max-width:150px;text-align:center;padding:7px 8px;font-size:.76rem;background:rgba(22,22,30,.92)}
-  .picked{animation:pickGlow 2.4s ease}
-  .pcard.draggable{cursor:grab}
-  .pcard.draggable:active{cursor:grabbing}
-  .pcard.dragging{opacity:.5;transform:scale(.96);box-shadow:0 0 0 2px var(--amber)}
-  .next-badge{
-    position:absolute;top:8px;inset-inline-start:8px;z-index:3;
-    font-family:'Changa',sans-serif;font-weight:800;font-size:.68rem;
-    background:var(--amber);color:var(--accent-ink);padding:4px 10px;border-radius:20px;
-    box-shadow:0 2px 12px color-mix(in srgb,var(--amber) 55%,transparent);
-  }
-  .pcard .chip.imdb{top:8px}
-  .next-badge~.chip.imdb{top:38px}
-  @keyframes pickGlow{0%,70%{box-shadow:0 0 0 2px var(--amber),0 0 30px color-mix(in srgb, var(--amber) 60%, transparent)}100%{box-shadow:none}}
-
-  /* ================= عرض القايمة ================= */
-  .rows{display:flex;flex-direction:column;gap:12px}
-  .row{
-    display:flex;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
-    overflow:hidden;cursor:pointer;transition:border-color .15s;
-  }
-  .row:hover{border-color:var(--amber-deep)}
-  .row .thumb{flex:0 0 66px;min-height:99px;background:var(--surface2);position:relative}
-  .row .thumb img{width:100%;height:100%;object-fit:cover;display:block;position:absolute;inset:0}
-  .row .thumb .fi{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--line);font-size:1.3rem}
-  .row .rbody{flex:1;padding:12px 14px;min-width:0}
-  .row .rtitle{font-family:'Changa',sans-serif;font-weight:700;font-size:1.05rem}
-  .row .rmeta{font-size:.74rem;color:var(--muted);margin-top:2px}
-  .row .rmeta .dot{margin:0 6px;opacity:.5}
-  .row .rmeta .iv{color:var(--amber);font-weight:700}
-  .row .rdesc{font-size:.78rem;color:var(--muted);margin-top:5px;line-height:1.5;
-    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .row .ract{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
-  .row .bell{position:static;margin-top:6px;box-shadow:none}
-
-  .empty{
-    text-align:center;color:var(--muted);padding:52px 18px;border:1px dashed var(--line);
-    border-radius:var(--radius);font-size:.9rem;
-  }
-  .empty b{color:var(--ink);font-family:'Changa',sans-serif;display:block;font-size:1.05rem;margin-bottom:4px}
-
-  /* ================= الإحصائيات والفلاتر والبانر ================= */
-  .statsbar{
-    display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;
-    background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;
-    font-size:.78rem;font-weight:700;color:var(--muted);
-  }
-  .statsbar span{background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:4px 12px}
-  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
-  .fchip{
-    font-family:'Cairo',sans-serif;font-weight:700;font-size:.74rem;
-    background:transparent;border:1px solid var(--line);color:var(--muted);
-    border-radius:20px;padding:5px 13px;cursor:pointer;transition:.15s;
-  }
-  .fchip:hover{border-color:var(--amber-deep)}
-  .fchip.on{background:var(--amber);border-color:var(--amber);color:var(--accent-ink)}
-  .fsep{width:1px;background:var(--line);margin:2px 4px}
+  .tab:hover{color:var(--ink)}
+  .tab .tdot{width:9px;height:9px;border-radius:50%;background:var(--c)}
+  .tab .count{font-family:'Readex Pro',sans-serif;font-size:12px;font-weight:600;min-width:22px;height:22px;padding:0 7px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:var(--surface);color:var(--faint)}
+  .tab .count:empty{display:none}
+  .tab.on{background:var(--ink);color:var(--bg)}
+  .tab.on .tdot{box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 35%,transparent)}
+  .tab.on .count{background:var(--c);color:var(--ci)}
+  .tab[data-tab="queue"]{--c:var(--queue);--ci:var(--queue-ink)}
+  .tab[data-tab="watching"]{--c:var(--watching);--ci:var(--watching-ink)}
+  .tab[data-tab="watched"]{--c:var(--watched);--ci:var(--watched-ink)}
+  .tab[data-tab="dropped"]{--c:var(--dropped);--ci:var(--dropped-ink)}
+  .spacer{flex:1}
+  .chips{display:flex;gap:4px;flex-wrap:wrap;align-items:center;background:var(--surface);border-radius:999px;padding:4px}
+  .chips:empty{display:none}
+  .fchip{height:34px;padding:0 14px;border-radius:999px;border:none;background:transparent;color:var(--muted);font-size:13px;white-space:nowrap}
+  .fchip:hover{color:var(--ink)}
+  .fchip.on{background:var(--raised);color:var(--ink);font-weight:600}
+  .fsep{width:1px;height:18px;background:var(--line-2);margin:0 4px}
   .bkbanner{
-    display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;
-    background:color-mix(in srgb, var(--amber) 8%, transparent);border:1px solid var(--amber-deep);border-radius:10px;
-    padding:10px 14px;font-size:.82rem;font-weight:700;
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;border-radius:18px;
+    background:var(--surface-2);border:1px dashed color-mix(in srgb,var(--watched) 45%,transparent);font-size:14px;color:var(--ink-2)
   }
-  .bkbanner span{flex:1;min-width:200px}
+  .bkbanner .ic{color:var(--watched)}
+  .bkbanner span{flex:1;min-width:220px}
+  .bkbanner .btn-amber{background:var(--watched);border-color:var(--watched);color:var(--watched-ink);box-shadow:none}
 
-  /* ================= المودال ================= */
+  /* ============ حائط البوسترات ============ */
+  .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:30px 22px}
+  @media(max-width:520px){.wall{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:22px 14px}}
+  .pcard{display:flex;flex-direction:column;gap:12px;cursor:pointer;outline:none;transition:transform .3s cubic-bezier(.34,1.4,.5,1)}
+  .pcard:hover,.pcard:focus-visible{transform:translateY(-6px)}
+  .pcard .art{position:relative;aspect-ratio:2/3;border-radius:18px;overflow:hidden;background:var(--raised);
+    box-shadow:0 14px 28px -18px rgba(0,0,0,.9),inset 0 0 0 1px rgba(255,255,255,.06);transition:box-shadow .3s}
+  .pcard:hover .art,.pcard:focus-visible .art{box-shadow:0 22px 40px -16px color-mix(in srgb,var(--accent) 55%,transparent),0 0 0 2px var(--accent)}
+  .pcard .art img{width:100%;height:100%;object-fit:cover;display:block}
+  .noimg{position:absolute;inset:0;z-index:0;overflow:hidden;background:hsl(var(--h) 34% 22%)}
+  .noimg::before{content:'';position:absolute;width:56%;aspect-ratio:1;border-radius:50%;top:14%;left:18%;background:hsl(calc(var(--h) + 40) 78% 70%)}
+  .noimg::after{content:'';position:absolute;width:180%;aspect-ratio:1.6;border-radius:50%;top:60%;left:-40%;background:hsl(var(--h) 40% 15%)}
+  .noimg .nt{position:absolute;inset-inline:14px;bottom:14px;z-index:1;font-family:var(--display);font-weight:800;font-size:19px;line-height:1.05;color:#F6EEE3;overflow-wrap:anywhere}
+  .pmeta{padding:0 2px;min-width:0}
+  .ptitle{font-weight:600;font-size:15px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pyear{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+  .pyear .pimdb{margin-inline-start:auto;color:var(--queue);direction:ltr;white-space:nowrap}
+  .pyear .pep{color:var(--watching);font-weight:600;direction:ltr}
+  .pill-badge{position:absolute;z-index:2;height:26px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px}
+  .next-badge{top:10px;inset-inline-start:10px;background:var(--queue);color:var(--queue-ink)}
+  .bell{top:30px;inset-inline-start:10px;border:none;background:var(--queue);color:var(--queue-ink);box-shadow:0 6px 16px -4px color-mix(in srgb,var(--queue) 70%,transparent)}
+  .stamp{position:absolute;top:10px;inset-inline-end:10px;z-index:2;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-family:var(--display);font-weight:800;font-size:17px;background:var(--watched);color:var(--watched-ink);box-shadow:0 0 0 3px rgba(23,19,31,.5)}
+  .stamp.q{background:rgba(23,19,31,.7);color:#F6EEE3;border:1.5px dashed rgba(246,238,227,.4);box-shadow:none}
+  .stamp.drop{width:auto;height:26px;padding:0 10px;border-radius:999px;font-family:'Readex Pro',sans-serif;font-size:12px;font-weight:600;
+    background:rgba(23,19,31,.78);color:#FF7A9A;border:1.5px dashed #FF7A9A;box-shadow:none}
+  .pprog{position:absolute;inset-inline:12px;top:12px;z-index:2;height:6px;border-radius:999px;background:rgba(23,19,31,.65);overflow:hidden}
+  .pprog>i{display:block;height:100%;background:#6EE7C8;border-radius:999px}
+  .quick{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px;background:rgba(23,19,31,.66);opacity:0;transition:opacity .2s}
+  .pcard:hover .quick,.pcard:focus-within .quick{opacity:1}
+  @media(hover:none){.quick{display:none}}
+  .quick .btn{width:100%;max-width:136px;height:40px;font-size:13px}
+  .quick .btn:not(.btn-amber){background:rgba(23,19,31,.7);border-color:rgba(246,238,227,.3);color:#F6EEE3}
+  .pcard.draggable{cursor:grab}
+  .pcard.dragging{opacity:.5;transform:scale(.96)}
+  .picked .art{animation:pickGlow 2.4s ease}
+  @keyframes pickGlow{0%,70%{box-shadow:0 0 0 3px var(--accent),0 0 40px color-mix(in srgb,var(--accent) 60%,transparent)}}
+
+  /* ============ عرض القايمة ============ */
+  .rows{display:flex;flex-direction:column;gap:12px}
+  .row{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:22px;overflow:hidden;cursor:pointer;backdrop-filter:blur(14px);transition:border-color .2s,transform .2s}
+  .row:hover{border-color:color-mix(in srgb,var(--accent) 45%,transparent);transform:translateY(-2px)}
+  .row .thumb{flex:0 0 76px;min-height:112px;position:relative;background:var(--raised)}
+  .row .thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+  .row .thumb .noimg .nt{font-size:12px;inset-inline:6px;bottom:6px}
+  .row .rbody{flex:1;padding:14px 16px;min-width:0}
+  .row .rtitle{font-family:var(--display);font-weight:700;font-size:18px;line-height:1.3}
+  .row .rmeta{font-size:13px;color:var(--muted);margin-top:2px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+  .row .rmeta .iv{color:var(--queue);font-weight:600}
+  .row .rmeta .ep{color:var(--watching);font-weight:600;direction:ltr}
+  .row .rdesc{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .row .ract{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .row .bell{position:static;margin-top:6px}
+
+  .empty{text-align:center;color:var(--muted);padding:56px 18px;border:1.5px dashed var(--line-2);border-radius:var(--r-lg);font-size:14px;background:var(--surface-2)}
+  .empty b{display:block;color:var(--ink);font-family:var(--display);font-weight:700;font-size:20px;margin-bottom:4px}
+  .foot{display:flex;align-items:center;justify-content:center;gap:10px;padding-top:24px;border-top:1px dashed var(--line-2);color:var(--faint);font-size:13px}
+  .foot .wordmark{font-size:18px;color:var(--ink-2)}
+
+  /* ============ المودالات ============ */
   .overlay{
-    position:fixed;inset:0;background:rgba(5,5,9,.78);backdrop-filter:blur(4px);
-    display:none;align-items:flex-start;justify-content:center;z-index:60;overflow-y:auto;padding:5vh 14px 40px;
+    position:fixed;inset:0;background:var(--backdrop);backdrop-filter:blur(6px);
+    display:none;align-items:flex-start;justify-content:center;z-index:60;overflow-y:auto;padding:5vh 16px 40px;
   }
   .overlay.show{display:flex}
   .modal{
-    width:100%;max-width:660px;background:var(--surface);border:1px solid var(--line);
-    border-radius:18px;overflow:hidden;position:relative;
-    animation:mIn .22s ease;
+    width:100%;max-width:740px;position:relative;overflow:hidden;
+    background:color-mix(in srgb,var(--solid) 95%,transparent);backdrop-filter:blur(24px);
+    border:1px solid var(--line);border-radius:30px;
+    box-shadow:0 50px 100px -30px color-mix(in srgb,var(--amb-a,var(--glow-a)) 35%,transparent),0 30px 60px -20px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);
+    animation:mIn .32s cubic-bezier(.34,1.2,.5,1);
   }
-  @keyframes mIn{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
-  .bdrop{position:relative;height:220px;background:var(--surface2)}
-  .bdrop img{width:100%;height:100%;object-fit:cover;display:block}
-  .bdrop::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,var(--surface) 6%,rgba(22,22,30,.25) 55%,rgba(22,22,30,.15))}
+  @keyframes mIn{from{transform:translateY(18px) scale(.985);opacity:0}to{transform:none;opacity:1}}
   .mclose{
-    position:absolute;top:12px;inset-inline-start:12px;z-index:3;width:34px;height:34px;border-radius:50%;
-    background:rgba(8,8,12,.7);border:1px solid rgba(255,255,255,.12);color:var(--ink);cursor:pointer;font-size:.9rem;
+    position:absolute;top:16px;inset-inline-start:16px;z-index:5;width:42px;height:42px;border-radius:50%;
+    border:1px solid rgba(246,238,227,.18);background:rgba(var(--scrim),.6);color:#F6EEE3;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)
   }
-  .mhead{display:flex;gap:16px;padding:0 20px;margin-top:-58px;position:relative;z-index:2;align-items:flex-end}
-  .mposter{
-    flex:0 0 108px;aspect-ratio:2/3;border-radius:10px;overflow:hidden;
-    border:1px solid var(--line);background:var(--surface2);box-shadow:0 8px 26px rgba(0,0,0,.55);
-  }
+  .mclose:hover{background:rgba(var(--scrim),.8)}
+  .mclose.plain{position:static;border-color:var(--line);background:var(--hover);color:var(--ink)}
+  .mhead-plain{display:flex;align-items:flex-start;gap:16px;margin-bottom:20px}
+  .mhead-plain .sq{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .mhead-plain h2{font-family:var(--display);font-weight:800;font-size:28px;line-height:1.2}
+  .mhead-plain h2 em{font-style:normal;color:var(--c,var(--accent))}
+  .mhead-plain .grow{flex:1;min-width:0}
+
+  /* تفاصيل العمل */
+  .bdrop{position:relative;height:240px;background:var(--raised);overflow:hidden}
+  .bdrop img{width:100%;height:100%;object-fit:cover;display:block}
+  .bdrop::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,color-mix(in srgb,var(--solid) 92%,transparent) 4%,rgba(var(--scrim),.25) 60%,rgba(var(--scrim),.1))}
+  .mhead{display:flex;gap:20px;padding:0 28px;margin-top:-86px;position:relative;z-index:2;align-items:flex-end}
+  .mposter{flex:0 0 128px;aspect-ratio:2/3;border-radius:16px;overflow:hidden;position:relative;background:var(--raised);box-shadow:0 16px 32px -10px rgba(0,0,0,.7),0 0 0 4px var(--solid)}
   .mposter img{width:100%;height:100%;object-fit:cover;display:block}
-  .mposter .fi{display:flex;align-items:center;justify-content:center;height:100%;color:var(--line);font-size:1.6rem}
-  .mtitles{padding-bottom:6px;min-width:0}
-  .mtitle{font-family:'Changa',sans-serif;font-weight:800;font-size:1.45rem;line-height:1.15;word-break:break-word;text-shadow:0 2px 10px rgba(0,0,0,.6)}
-  .mchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
-  .mchip{font-size:.7rem;font-weight:700;padding:3px 10px;border-radius:20px;background:var(--surface2);border:1px solid var(--line);color:var(--muted)}
-  .mchip.iv{color:var(--amber);border-color:var(--amber-deep)}
-  .mbody{padding:16px 20px 20px}
-  .mdesc{font-size:.86rem;color:var(--muted);line-height:1.65}
-  .msec{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}
-  .msec .sh{font-family:'Changa',sans-serif;font-weight:700;font-size:.86rem;color:var(--amber);margin-bottom:9px}
-  .pills{display:flex;gap:5px;flex-wrap:wrap}
-  .pill{
-    width:35px;height:35px;border-radius:8px;border:1px solid var(--line);background:var(--bg);
-    color:var(--muted);font-family:'Changa',sans-serif;font-weight:700;cursor:pointer;font-size:.9rem;
-  }
-  .pill.on{background:var(--amber);border-color:var(--amber);color:var(--accent-ink)}
-  .noterow{display:flex;gap:8px;margin-top:10px}
+  .mposter .noimg .nt{font-size:15px;inset-inline:10px;bottom:10px}
+  .mtitles{padding-bottom:4px;min-width:0;display:flex;flex-direction:column;gap:10px}
+  .mtitle{font-family:var(--display);font-weight:800;font-size:34px;line-height:1.05;overflow-wrap:anywhere;text-shadow:0 2px 14px rgba(0,0,0,.4)}
+  .mchips{display:flex;gap:6px;flex-wrap:wrap}
+  .mchip{height:28px;padding:0 12px;border-radius:999px;background:var(--raised);color:var(--ink-2);font-size:12px;display:inline-flex;align-items:center;gap:6px}
+  .mchip.iv{background:color-mix(in srgb,var(--queue) 15%,transparent);color:var(--queue);font-weight:600}
+  .mchip.st{background:color-mix(in srgb,var(--c) 15%,transparent);color:var(--c);font-weight:600}
+  .mchip.st::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--c)}
+  .st-queue{--c:var(--queue)} .st-watching{--c:var(--watching)} .st-watched{--c:var(--watched)} .st-dropped{--c:var(--dropped)}
+  .mbody{padding:20px 28px 28px;display:flex;flex-direction:column;gap:18px}
+  .mdesc{font-size:15px;color:var(--ink-2);line-height:1.8;opacity:.9}
+  .msec{background:var(--field);border:1px solid var(--line);border-radius:22px;padding:18px 20px}
+  .msec .sh{font-family:var(--display);font-weight:700;font-size:18px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .msec .sh .aside{margin-inline-start:auto;font-family:'Readex Pro',sans-serif;font-weight:400;font-size:13px;color:var(--muted)}
+  .msec.why{background:color-mix(in srgb,var(--watched) 7%,transparent);border:1px dashed color-mix(in srgb,var(--watched) 35%,transparent)}
+  .msec.why .sh{color:var(--ink-2);font-size:17px} .msec.why .sh .ic{color:var(--watched)}
+  .msec.plain{background:none;border:none;padding:0}
+  .newseason{display:flex;align-items:center;gap:12px;width:100%;padding:12px 16px;border-radius:16px;border:1.5px solid var(--queue);background:color-mix(in srgb,var(--queue) 10%,transparent);color:var(--queue);font-size:14px;font-weight:600;text-align:start}
+  .newseason span{flex:1} .newseason small{font-weight:400;opacity:.8;font-size:13px}
+  .prog{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .stepper{display:flex;align-items:center;gap:2px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:16px;padding:4px}
+  .stepbtn{width:40px;height:40px;border-radius:12px;border:none;background:transparent;color:var(--muted);font-size:20px}
+  .stepbtn:hover{background:var(--hover);color:var(--ink)}
+  .stepval{text-align:center;min-width:62px;line-height:1.1}
+  .stepval small{display:block;font-size:11px;color:var(--muted)}
+  .pnum{font-family:var(--display);font-weight:800;font-size:22px;color:var(--watching)}
+  .btn-ep{height:50px;padding:0 22px;border-radius:16px;background:var(--watching);border-color:var(--watching);color:var(--watching-ink);font-weight:600;box-shadow:inset 0 -3px 0 rgba(0,0,0,.12)}
+  .btn-ep:hover{background:var(--watching);border-color:var(--watching);filter:brightness(1.06)}
+  .epdots{display:flex;gap:5px;margin-top:16px}
+  .epdots i{flex:1;height:10px;border-radius:999px;background:var(--raised)}
+  .epdots i.on{background:var(--watching)}
+  .epdots i.cur{background:var(--watching);box-shadow:0 0 0 3px color-mix(in srgb,var(--watching) 25%,transparent)}
+  .remain{font-size:13px;color:var(--muted);margin-top:10px}
+  .pills{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px}
+  .pill{height:44px;border-radius:12px;border:1.5px solid var(--line-2);border-bottom:3px solid var(--rc);background:var(--surface-2);color:var(--muted);font-family:var(--display);font-weight:700;font-size:17px;transition:transform .15s}
+  .pill:hover{transform:translateY(-2px);color:var(--ink)}
+  .pill.on{background:var(--rc);border-color:var(--rc);color:#1A1222;box-shadow:0 6px 16px -6px var(--rc)}
+  .pill:nth-child(1),.pill:nth-child(2){--rc:#FF7A9A} .pill:nth-child(3){--rc:#FF8A80} .pill:nth-child(4){--rc:#FF9466} .pill:nth-child(5){--rc:#FFAA6A}
+  .pill:nth-child(6){--rc:#FFC56E} .pill:nth-child(7){--rc:#FFD36E} .pill:nth-child(8){--rc:#C9E08A} .pill:nth-child(9){--rc:#9BE4A8} .pill:nth-child(10){--rc:#6EE7C8}
+  .noterow{display:flex;gap:8px;margin-top:12px}
   .noterow input{flex:1}
-  .mact{display:flex;gap:7px;flex-wrap:wrap}
-  .mnote-view{font-size:.83rem;color:var(--muted);border-inline-start:2px solid var(--amber-deep);padding-inline-start:9px;margin-top:4px}
+  .mnote-view{font-size:14px;color:var(--ink-2);border-inline-start:3px solid var(--watched);padding-inline-start:12px}
+  .mact{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .mact .btn{height:50px}
+  .mact .btn-amber{padding:0 26px;font-size:16px}
+  .mact.more{gap:2px;padding-top:14px;border-top:1px dashed var(--line-2)}
+  .mact.more .btn{height:40px;border-color:transparent;color:var(--muted);border-radius:12px;padding:0 12px}
+  .mact.more .btn:hover{color:var(--ink)}
+  .mact.more .btn-watch{color:var(--accent-hi)}
+  .mact.more .btn-danger{color:var(--dropped);margin-inline-start:auto}
+  .rw{font-size:14px;color:var(--ink-2);line-height:1.75}
+  .rw-l{color:var(--muted);font-size:12px;margin:10px 0 6px}
+  .rw-chips{display:flex;flex-wrap:wrap;gap:8px}
+  .rw-chip{display:inline-flex;align-items:center;gap:8px;height:40px;padding-inline:4px 12px;border-radius:12px;background:var(--field);border:1px solid var(--line);font-size:13px;color:var(--ink)}
+  .rw-chip img{width:22px;height:32px;object-fit:cover;border-radius:5px}
+  .rw-chip b{color:var(--queue);font-weight:600}
 
-  /* ================= مواقع المشاهدة ================= */
-  .site-row{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 12px}
-  .site-row .site-name{font-weight:700;font-size:.85rem;white-space:nowrap}
-  .site-row .site-url{flex:1;font-size:.72rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-
-  /* ================= الاستيراد ================= */
-  #impText{
-    width:100%;min-height:130px;background:var(--bg);border:1px solid var(--line);border-radius:9px;
-    color:var(--ink);font-family:'Cairo',sans-serif;font-size:.85rem;padding:10px 12px;resize:vertical;
-  }
-  .impRow{
-    display:flex;align-items:center;gap:9px;padding:7px 10px;border:1px solid var(--line);
-    border-radius:8px;margin-top:6px;font-size:.85rem;cursor:pointer;
-  }
-  .impRow:hover{border-color:var(--amber-deep)}
-  .impRow input{accent-color:var(--amber)}
-  .impRow .iy{color:var(--muted);font-size:.75rem}
-  .impRow .iwhy{display:block;color:var(--muted);font-size:.74rem;margin-top:2px}
-  .impP{flex:none;width:40px;height:60px;border-radius:5px;background:var(--line);overflow:hidden;
-    display:flex;align-items:center;justify-content:center;font-size:.9rem}
-  .impP img{width:100%;height:100%;object-fit:cover;display:block}
-  .impRow>span[dir]{flex:1;min-width:0}
-  .impRow .impSeen{width:auto;flex:none;padding:5px 8px;font-size:.75rem;border-radius:7px}
-  .impRow.seen{border-color:var(--amber-deep)}
-  .impNoteRow{margin:-1px 0 4px;padding:7px 10px;border:1px solid var(--amber-deep);border-top:none;border-radius:0 0 8px 8px}
-  .impNoteRow input{font-size:.82rem;padding:7px 10px}
-  .impWhyBtn{flex:none;background:none;border:1px solid var(--line);border-radius:7px;padding:3px 7px;cursor:pointer;font-size:.85rem}
-  .impWhyBtn:hover{border-color:var(--amber-deep)}
-  .impWhyBox{margin:-1px 0 4px;padding:9px 12px;border:1px dashed var(--amber-deep);border-top:none;border-radius:0 0 8px 8px;font-size:.8rem;color:var(--ink)}
-  .rw{font-size:.85rem;color:var(--ink)}
-  .rw-l{color:var(--muted);font-size:.72rem;margin:8px 0 5px}
-  .rw-chips{display:flex;flex-wrap:wrap;gap:6px}
-  .rw-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:7px;padding:3px 8px;font-size:.78rem}
-  .rw-chip img{width:22px;height:33px;object-fit:cover;border-radius:3px}
-  .rw-chip b{color:var(--amber);font-weight:600}
-  .impRow.seen .impSeen{color:var(--amber)}
-
-  /* ================= متابعة الحلقات ================= */
-  .prog{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .prog .plab{font-size:.78rem;color:var(--muted);font-weight:700}
-  .stepbtn{
-    width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--bg);
-    color:var(--ink);font-weight:800;cursor:pointer;font-size:.95rem;
-  }
-  .stepbtn:hover{border-color:var(--amber-deep)}
-  .pnum{font-family:'Changa',sans-serif;font-weight:800;font-size:1.05rem;min-width:26px;text-align:center;color:var(--amber)}
-  .remain{font-size:.78rem;color:var(--muted);margin-top:9px}
-
-  /* ================= البلاير ================= */
-  .playerbox{
-    position:relative;background:#000;width:100%;
-    height:min(78vh, calc(min(1400px, 97vw) * 9 / 16));
-  }
+  /* البلاير */
+  .modal.wide{max-width:min(1400px,97vw);background:color-mix(in srgb,var(--solid) 70%,transparent)}
+  .overlay.theater{padding:2vh 10px 10px;align-items:center}
+  .pbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px}
+  .pbar .pt{flex:1;min-width:160px;display:flex;align-items:baseline;gap:10px;min-width:0;white-space:nowrap;overflow:hidden}
+  .pbar .pt b{font-family:var(--display);font-weight:700;font-size:20px;overflow:hidden;text-overflow:ellipsis}
+  .pbar .pt .ep{flex-shrink:0;font-size:13px;font-weight:600;color:var(--watching-ink);background:var(--watching);padding:1px 10px;border-radius:999px;direction:ltr}
+  .srv{height:38px;padding:0 14px;border-radius:999px;border:1px solid var(--line-2);background:transparent;color:var(--muted);font-size:13px;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+  .srv:hover{background:var(--hover);color:var(--ink)}
+  .srv.on{border:1.5px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent-hi);font-weight:600}
+  .srv.live{border:1px solid color-mix(in srgb,var(--watching) 45%,transparent);background:color-mix(in srgb,var(--watching) 14%,transparent);color:var(--watching);font-weight:600}
+  .srv.live::before,.livedot{content:'';width:8px;height:8px;border-radius:50%;background:var(--watching);animation:live 1.8s ease-in-out infinite;flex-shrink:0}
+  @keyframes live{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--watching) 50%,transparent)}50%{box-shadow:0 0 0 6px transparent}}
+  .pbar .btn-ep{height:40px;padding:0 18px;border-radius:999px;font-size:14px}
+  .playerbox{position:relative;background:#000;width:auto;margin:0 16px 16px;border-radius:18px;overflow:hidden;
+    height:min(76vh,calc(min(1400px,97vw)*9/16));box-shadow:0 0 90px -10px color-mix(in srgb,var(--amb-a,var(--watching)) 30%,transparent),0 0 160px 0 color-mix(in srgb,var(--amb-b,var(--accent)) 12%,transparent)}
   .playerbox iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-  .playerbox:fullscreen{width:100vw;height:100vh}
-  .playerbox:-webkit-full-screen{width:100vw;height:100vh}
-  .playerbox:fullscreen iframe{width:100%;height:100%}
-  .playerbox .pload{
-    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    color:var(--muted);font-size:.9rem;font-weight:700;
-  }
-  .modal.wide{max-width:min(1400px,97vw)}
-  .overlay.theater{padding:2vh 8px 8px;align-items:center}
-  .pbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px dashed var(--line)}
-  .pbar .pt{font-family:'Changa',sans-serif;font-weight:700;flex:1;min-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .pbar .pt .ep{color:var(--amber)}
-  .srv{
-    font-family:'Cairo',sans-serif;font-weight:700;font-size:.72rem;
-    background:var(--bg);border:1px solid var(--line);color:var(--muted);
-    border-radius:20px;padding:5px 12px;cursor:pointer;transition:.15s;
-  }
-  .srv:hover{border-color:var(--amber-deep)}
-  .srv.on{background:var(--amber);border-color:var(--amber);color:var(--accent-ink)}
-
-  /* ================= مودال الإعدادات والثيمات ================= */
-  .modal.settings{max-width:640px;max-height:90vh;overflow-y:auto}
-  .themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
-  .theme-card{
-    border:2px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;
-    background:none;padding:0;text-align:center;transition:border-color .15s,transform .15s;
-  }
-  .theme-card:hover{transform:translateY(-2px)}
-  .theme-card.on{border-color:var(--amber)}
-  .theme-card .tprev{height:56px;display:flex;align-items:flex-end;justify-content:center;gap:5px;padding-bottom:9px}
-  .theme-card .tprev i{width:22px;height:30px;border-radius:4px;display:block}
-  .theme-card .tname{
-    display:block;font-family:'Cairo',sans-serif;font-weight:700;font-size:.76rem;
-    color:var(--ink);padding:7px 4px;background:var(--surface);
-  }
-
-  .toast{
-    position:fixed;bottom:24px;inset-inline-start:50%;transform:translateX(50%);
-    background:var(--amber);color:var(--accent-ink);font-weight:700;font-size:.85rem;
-    padding:11px 20px;border-radius:10px;opacity:0;pointer-events:none;transition:.25s;z-index:99;
-  }
-  .toast.show{opacity:1}
-
-  /* ============================================================
-     ثيمات بريميوم — عمق، توهج، حركة ناعمة (٣ أمزجة متميزة)
-     كل واحد بيغيّر المتغيرات + لمسات عمق على العناصر الأساسية
-     ============================================================ */
-
-  /* الافتراضي (سينما / كهرماني) هو تعريف :root نفسه */
-
-  /* ============ 🌊 ميدنايت (أزرق سيان بارد) ============ */
-  html[data-theme="midnight"]{
-    --bg:#080b14;--surface:#0f1522;--surface2:#161e30;--line:#243247;
-    --ink:#eaf2ff;--muted:#7d8ba6;
-    --amber:#2dd4bf;--amber-deep:#0f766e;--accent-ink:#04140f;
-    --green:#4ade80;--red:#f87171;
-    --glow:0 8px 30px color-mix(in srgb, var(--amber) 32%, transparent),0 2px 10px rgba(0,0,0,.65);
-  }
-  html[data-theme="midnight"] body{
-    background-image:
-      radial-gradient(ellipse 60% 40% at 15% -8%, rgba(45,212,191,.14), transparent 60%),
-      radial-gradient(ellipse 55% 45% at 92% 4%, rgba(59,130,246,.12), transparent 62%);
-  }
-
-  /* ============ 🔥 إمبر (أحمر برتقالي دافئ سينمائي) ============ */
-  html[data-theme="ember"]{
-    --bg:#120a08;--surface:#1c1210;--surface2:#271815;--line:#3d2620;
-    --ink:#fff3ec;--muted:#a88a7e;
-    --amber:#ff5c38;--amber-deep:#c0341a;--accent-ink:#1a0603;
-    --green:#7bc86c;--red:#ff5c38;
-    --glow:0 8px 30px color-mix(in srgb, var(--amber) 34%, transparent),0 2px 10px rgba(0,0,0,.7);
-  }
-  html[data-theme="ember"] body{
-    background-image:
-      radial-gradient(ellipse 70% 42% at 50% -10%, rgba(255,92,56,.16), transparent 60%),
-      radial-gradient(ellipse 40% 30% at 88% 8%, rgba(192,52,26,.13), transparent 64%);
-  }
-
-  /* ============ 💜 نوفا (بنفسجي نيون) ============ */
-  html[data-theme="nova"]{
-    --bg:#0c0a16;--surface:#141022;--surface2:#1d1732;--line:#2f2547;
-    --ink:#f3eeff;--muted:#8f84ac;
-    --amber:#a855f7;--amber-deep:#7c3aed;--accent-ink:#12061f;
-    --green:#4ade80;--red:#f472b6;
-    --glow:0 8px 32px color-mix(in srgb, var(--amber) 38%, transparent),0 2px 10px rgba(0,0,0,.68);
-  }
-  html[data-theme="nova"] body{
-    background-image:
-      radial-gradient(ellipse 62% 42% at 10% -8%, rgba(168,85,247,.16), transparent 60%),
-      radial-gradient(ellipse 58% 44% at 95% 2%, rgba(236,72,153,.13), transparent 62%);
-  }
-
-  /* ============ لمسات العمق المشتركة على كل الثيمات ============ */
-  html[data-theme] .pcard{
-    transition:transform .28s cubic-bezier(.34,1.3,.5,1), box-shadow .28s ease, border-color .28s ease;
-  }
-  html[data-theme] .pcard:hover{
-    transform:translateY(-8px) scale(1.035);
-    border-color:var(--amber);
-    box-shadow:var(--glow);
-  }
-  /* لمعة قطرية بتمر على البوستر عند الـ hover */
-  html[data-theme] .pcard::after{
-    content:'';position:absolute;inset:0;pointer-events:none;opacity:0;
-    background:linear-gradient(115deg, transparent 30%, color-mix(in srgb, var(--amber) 22%, transparent) 50%, transparent 70%);
-    transform:translateX(-100%);transition:opacity .1s;
-  }
-  html[data-theme] .pcard:hover::after{opacity:1;animation:sheen .7s ease}
-  @keyframes sheen{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
-
-  /* الأزرار الأساسية بتوهج ناعم */
-  html[data-theme] .btn-amber{
-    box-shadow:0 3px 16px color-mix(in srgb, var(--amber) 40%, transparent);
-    transition:box-shadow .2s, filter .2s, transform .1s;
-  }
-  html[data-theme] .btn-amber:hover{
-    box-shadow:0 5px 22px color-mix(in srgb, var(--amber) 58%, transparent);
-    filter:brightness(1.08);
-  }
-  html[data-theme] .btn-amber:active{transform:translateY(1px)}
-
-  /* التبويب النشط بخط سفلي متوهج */
-  html[data-theme] .tab.on{
-    background:color-mix(in srgb, var(--surface2) 70%, transparent);
-    box-shadow:inset 0 -2px 0 var(--amber), 0 0 18px color-mix(in srgb, var(--amber) 22%, transparent);
-  }
-
-  /* البانلات والمودالات بتدرّج خفيف بدل السطح المسطح */
-  html[data-theme] .panel,
-  html[data-theme] .modal,
-  html[data-theme] .statsbar{
-    background-image:linear-gradient(180deg, color-mix(in srgb, var(--amber) 4%, transparent), transparent 40%);
-  }
-
-  /* العنوان بتوهج أقوى شوية */
-  html[data-theme] h1 .glow{text-shadow:0 0 26px color-mix(in srgb, var(--amber) 55%, transparent)}
-
-  /* الشرائح النشطة والحبوب بتوهج */
-  html[data-theme] .fchip.on,
-  html[data-theme] .pill.on{box-shadow:0 0 16px color-mix(in srgb, var(--amber) 45%, transparent)}
-
-  /* المودال يظهر بحركة أنعم */
-  html[data-theme] .modal{animation:mInPremium .3s cubic-bezier(.34,1.2,.5,1)}
-  @keyframes mInPremium{from{transform:translateY(20px) scale(.98);opacity:0}to{transform:none;opacity:1}}
-
-  /* ================= صندوق الفيلم الغامض ================= */
-  .mystery-box{
-    position:relative;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
-    margin-bottom:18px;padding:18px 20px;border-radius:16px;overflow:hidden;
-    background:linear-gradient(135deg, color-mix(in srgb,var(--amber) 14%,var(--surface)), var(--surface2));
-    border:1px solid var(--amber-deep);
-    box-shadow:0 6px 26px color-mix(in srgb,var(--amber) 18%,transparent);
-  }
-  .mystery-box .mb-glow{
-    position:absolute;inset:-40% -10%;pointer-events:none;
-    background:radial-gradient(ellipse 40% 60% at 20% 40%, color-mix(in srgb,var(--amber) 30%,transparent), transparent 60%);
-    animation:mbFloat 6s ease-in-out infinite;
-  }
-  @keyframes mbFloat{0%,100%{transform:translateX(0)}50%{transform:translateX(30%)}}
-  .mystery-box .mb-gift{
-    font-size:2.6rem;position:relative;z-index:1;
-    animation:mbWobble 3s ease-in-out infinite;filter:drop-shadow(0 4px 10px rgba(0,0,0,.4));
-  }
-  @keyframes mbWobble{0%,100%{transform:rotate(-6deg) scale(1)}50%{transform:rotate(6deg) scale(1.08)}}
-  .mystery-box .mb-text{flex:1;min-width:180px;position:relative;z-index:1}
-  .mystery-box .mb-title{font-family:'Changa',sans-serif;font-weight:800;font-size:1.15rem;color:var(--ink)}
-  .mystery-box .mb-sub{font-size:.8rem;color:var(--muted);margin-top:3px;line-height:1.5;max-width:440px}
-  .mystery-box .mb-btn{position:relative;z-index:1;white-space:nowrap;font-size:.92rem;padding:11px 22px}
-  @media(max-width:520px){.mystery-box{padding:16px}.mystery-box .mb-btn{width:100%}}
-
-  /* ================= لوحة الإحصائيات والرؤى ================= */
-  .stat-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:22px}
-  .stat-card{
-    background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;
-    position:relative;overflow:hidden;
-  }
-  .stat-card .sc-num{font-family:'Changa',sans-serif;font-weight:800;font-size:1.7rem;color:var(--amber);line-height:1}
-  .stat-card .sc-lab{font-size:.72rem;color:var(--muted);margin-top:5px}
-  .stat-sec{margin-bottom:24px}
-  .stat-sec h3{font-family:'Changa',sans-serif;font-weight:700;font-size:.98rem;color:var(--ink);margin-bottom:12px;display:flex;align-items:center;gap:7px}
-
-  /* توزيع التقييمات — أعمدة */
-  .rating-bars{display:flex;align-items:flex-end;gap:5px;height:120px;padding-top:10px}
-  .rating-bars .rb{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end}
-  .rating-bars .rb-fill{width:100%;background:linear-gradient(180deg,var(--amber),var(--amber-deep));border-radius:5px 5px 0 0;min-height:3px;transition:height .5s cubic-bezier(.34,1.2,.5,1);position:relative}
-  .rating-bars .rb-fill .rb-c{position:absolute;top:-16px;inset-inline:0;text-align:center;font-size:.64rem;font-weight:700;color:var(--muted)}
-  .rating-bars .rb-x{font-size:.66rem;color:var(--muted);font-weight:700}
-
-  /* شرائط التصنيفات */
-  .gbar{margin-bottom:9px}
-  .gbar-top{display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:3px}
-  .gbar-top .gname{font-weight:700;color:var(--ink)}
-  .gbar-top .gcount{color:var(--muted)}
-  .gbar-track{height:9px;background:var(--bg);border:1px solid var(--line);border-radius:20px;overflow:hidden}
-  .gbar-fill{height:100%;background:linear-gradient(90deg,var(--amber-deep),var(--amber));border-radius:20px;transition:width .5s ease}
-
-  /* نشاط شهري */
-  .month-grid{display:flex;align-items:flex-end;gap:4px;height:80px}
-  .month-grid .mo{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
-  .month-grid .mo-fill{width:100%;background:var(--amber);border-radius:4px 4px 0 0;min-height:2px;opacity:.85;transition:height .5s ease}
-  .month-grid .mo-x{font-size:.58rem;color:var(--muted)}
-
-  /* أزرار الترجمة الافتراضية */
-  .sublangs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-  .sublangs .sl{
-    font-family:'Cairo',sans-serif;font-weight:700;font-size:.78rem;
-    background:var(--bg);border:1px solid var(--line);color:var(--muted);
-    border-radius:9px;padding:7px 13px;cursor:pointer;transition:.15s;
-  }
-  .sublangs .sl:hover{border-color:var(--amber-deep)}
-  .sublangs .sl.on{background:var(--amber);border-color:var(--amber);color:var(--accent-ink)}
-
-  /* غطاء الفيلم الغامض فوق البلاير (من طرف التطبيق) */
-  .wl-veil{
-    position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:15px;text-align:center;padding:28px;
-    background:linear-gradient(160deg,#0b0b10,#161018);
-    transition:opacity .4s ease;
-  }
-  .wl-veil-gift{font-size:4rem;animation:mbWobble 2.4s ease-in-out infinite;filter:drop-shadow(0 6px 16px rgba(0,0,0,.5))}
-  .wl-veil-t{font-family:'Changa',sans-serif;font-weight:800;font-size:1.35rem;color:var(--amber)}
-  .wl-veil-s{font-size:.86rem;color:var(--muted);max-width:400px;line-height:1.65}
-  .wl-veil .btn{margin-top:6px;font-size:.95rem;padding:12px 26px}
-
-  /* بلور البلاير أثناء الضغط على Play (وضع الميستري) */
+  .playerbox:fullscreen,.playerbox:-webkit-full-screen{width:100vw;height:100vh;margin:0;border-radius:0}
+  .mystery-reveal,.wl-veil{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:28px;color:#F6EEE3}
+  .mystery-reveal{background:var(--bg);z-index:2;color:var(--ink)}
+  .wl-veil{z-index:5;background:radial-gradient(ellipse at 50% 40%,#2A1F33,#0F0C15);transition:opacity .4s}
+  .giftbig{width:96px;height:96px;border-radius:30px;background:rgba(255,211,110,.14);color:#FFD36E;display:flex;align-items:center;justify-content:center;animation:wob 2.6s ease-in-out infinite}
+  .giftbig .ic{width:48px;height:48px;stroke-width:1.6}
+  .mr-t,.wl-veil-t{font-family:var(--display);font-weight:800;font-size:24px}
+  .wl-veil-t{color:#FFD36E}
+  .mr-s,.wl-veil-s{font-size:14px;color:#A99CB8;max-width:420px;line-height:1.7}
+  .mystery-reveal .mr-s{color:var(--muted)}
+  .wl-veil .btn{margin-top:6px;height:50px;padding:0 26px;font-size:15px}
   .playerbox.wl-blurred iframe{filter:blur(70px) brightness(.45) saturate(.5);transform:scale(1.25)}
-  .playerbox.wl-blurred{position:relative}
-  .playerbox.wl-blurred::before{
-    content:'';position:absolute;inset:0;z-index:5;pointer-events:none;
-    background:rgba(11,11,16,.55);backdrop-filter:blur(24px);
-  }
+  .playerbox.wl-blurred::before{content:'';position:absolute;inset:0;z-index:5;pointer-events:none;background:rgba(15,12,21,.55);backdrop-filter:blur(24px)}
   .wl-hint{position:absolute;inset:0;z-index:6;display:flex;align-items:flex-end;justify-content:center;padding-bottom:30px;pointer-events:none}
   .wl-hint .wl-hint-in{display:flex;flex-direction:column;align-items:center;gap:12px;pointer-events:auto}
-  .wl-hint-t{
-    background:rgba(11,11,16,.9);color:var(--amber);font-family:'Changa',sans-serif;font-weight:800;
-    font-size:1.05rem;padding:12px 24px;border-radius:12px;border:1px solid var(--amber-deep);
-    box-shadow:0 6px 20px rgba(0,0,0,.5);animation:mbWobble 2.5s ease-in-out infinite;
-  }
-  .wl-hint .btn{font-size:.9rem;padding:11px 22px;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+  .wl-hint-t{background:rgba(15,12,21,.9);color:#FFD36E;font-family:var(--display);font-weight:800;font-size:18px;padding:12px 24px;border-radius:16px;border:1px solid rgba(255,211,110,.4);animation:wob 2.5s ease-in-out infinite}
 
-  /* شاشة تحميل الصندوق في البلاير */
-  .mystery-reveal{
-    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:14px;background:var(--bg);z-index:2;color:var(--ink);text-align:center;padding:20px;
-  }
-  .mystery-reveal .mr-gift{font-size:4rem;animation:mbWobble 2s ease-in-out infinite}
-  .mystery-reveal .mr-t{font-family:'Changa',sans-serif;font-weight:800;font-size:1.3rem}
-  .mystery-reveal .mr-s{font-size:.85rem;color:var(--muted)}
-
-  /* ================= أقسام الإعدادات المطوية ================= */
-  .setsec{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden}
-  .setsec>summary{
-    list-style:none;cursor:pointer;padding:12px 14px;user-select:none;
-    font-family:'Changa',sans-serif;font-weight:700;font-size:.92rem;color:var(--ink);
-    display:flex;align-items:center;
-  }
+  /* الإعدادات */
+  .modal.settings{max-width:1040px;display:flex;flex-wrap:wrap;overflow:visible}
+  .setnav{flex:0 0 240px;display:flex;flex-direction:column;gap:4px;padding:26px 14px;border-inline-end:1px solid var(--line);background:color-mix(in srgb,var(--bg) 40%,transparent);border-radius:0 30px 30px 0}
+  .setnav h2{font-family:var(--display);font-weight:800;font-size:28px;margin:0 12px 14px}
+  .setnav button{display:flex;align-items:center;gap:12px;height:46px;padding:0 14px;border-radius:14px;border:none;background:transparent;color:var(--muted);font-size:15px;text-align:start}
+  .setnav button:hover{background:var(--hover);color:var(--ink)}
+  .setnav button.on{background:var(--hover);color:var(--ink);font-weight:600}
+  .setnav button i{width:10px;height:10px;border-radius:4px;background:var(--c);flex-shrink:0}
+  .setnav .ver{margin:auto 12px 0;padding-top:20px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--faint)}
+  .setnav .ver .wordmark{font-size:20px}
+  .setbody{flex:999 1 520px;min-width:0;padding:26px 30px 30px;display:flex;flex-direction:column;gap:14px;position:relative}
+  .setbody>.mclose{inset-inline-start:auto;inset-inline-end:22px;top:22px}
+  @media(max-width:820px){.setnav{flex-basis:100%;flex-direction:row;flex-wrap:wrap;border-inline-end:none;border-bottom:1px solid var(--line);border-radius:30px 30px 0 0}.setnav h2{width:100%}.setnav .ver{display:none}}
+  .setsec h3,.sec-h h3{font-family:var(--display);font-weight:700;font-size:21px}
+  .sec-h{padding-inline-end:56px}
+  .sec-h p{color:var(--muted);font-size:14px;margin-top:2px}
+  .themes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+  @media(max-width:820px){.themes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .theme-card{padding:8px;border-radius:20px;border:2px solid var(--line);background:var(--surface-2);display:flex;flex-direction:column;text-align:start;transition:transform .2s,border-color .2s}
+  .theme-card:hover{transform:translateY(-3px)}
+  .theme-card.on{border-color:var(--accent);box-shadow:0 12px 26px -14px color-mix(in srgb,var(--accent) 80%,transparent)}
+  .tprev{height:96px;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden}
+  .tprev .tline{display:flex;gap:5px}
+  .tprev .tline b{height:8px;border-radius:999px;width:26px} .tprev .tline b+b{width:16px;opacity:.6}
+  .tprev .tposters{display:flex;gap:6px;flex:1}
+  .tprev .tposters b{flex:1;border-radius:7px}
+  .tname{display:flex;align-items:center;gap:8px;padding:10px 4px 0;font-weight:600;font-size:15px;color:var(--ink)}
+  .tdesc{font-size:12px;color:var(--muted);padding:0 4px}
+  .theme-card.on .tname::after{content:'';margin-inline-start:auto;width:20px;height:20px;border-radius:50%;background:var(--accent)
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%232A1206' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12.5l4.5 4.5L19 7.5'/></svg>") center no-repeat}
+  .setsec{border:1px solid var(--line);border-radius:22px;background:var(--surface-2);scroll-margin-top:20px}
+  .setsec>summary{list-style:none;cursor:pointer;padding:16px 20px;user-select:none;font-family:var(--display);font-weight:700;font-size:19px;display:flex;align-items:center;gap:12px}
   .setsec>summary::-webkit-details-marker{display:none}
-  .setsec>summary::after{content:'▾';margin-inline-start:auto;color:var(--muted);transition:transform .2s}
-  .setsec[open]>summary::after{transform:rotate(180deg)}
-  .setsec .ssin{padding:2px 14px 14px}
+  .setsec>summary i{width:10px;height:10px;border-radius:4px;background:var(--c)}
+  .setsec>summary::after{content:'';margin-inline-start:auto;width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .2s}
+  .setsec[open]>summary::after{transform:rotate(-135deg)}
+  .setsec .ssin{padding:0 20px 20px;display:flex;flex-direction:column;gap:12px}
+  .setsec .ssin label{margin:0}
+  .fieldrow{display:flex;gap:8px;flex-wrap:wrap}
+  .fieldrow>input{flex:1;min-width:200px}
+  .site-row{display:flex;align-items:center;gap:10px;background:var(--field);border:1px solid var(--line);border-radius:14px;padding:6px 6px 6px 14px;padding-inline:14px 6px}
+  .site-row .site-name{font-weight:600;font-size:14px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+  .site-row .site-name .ic{color:var(--accent)}
+  .site-row .site-url{flex:1;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+  .sublangs{display:flex;gap:8px;flex-wrap:wrap}
+  .sublangs .sl{height:40px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line-2);background:transparent;color:var(--muted);font-size:14px}
+  .sublangs .sl:hover{color:var(--ink)}
+  .sublangs .sl.on{background:var(--watched);border-color:var(--watched);color:var(--watched-ink);font-weight:600}
+  .shieldrow{display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--field);border:1px solid var(--line);border-radius:18px}
+  .shieldrow .sq{width:40px;height:40px;border-radius:12px;background:color-mix(in srgb,var(--watching) 14%,transparent);color:var(--watching);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .shieldrow .grow{flex:1}
+  .switch{width:56px;height:32px;border-radius:999px;border:none;padding:3px;display:flex;justify-content:flex-end;background:var(--line-2);transition:background .2s;flex-shrink:0}
+  .switch::before{content:'';width:26px;height:26px;border-radius:50%;background:var(--muted);transition:background .2s}
+  .switch[aria-checked="true"]{background:var(--watching);justify-content:flex-start}
+  .switch[aria-checked="true"]::before{background:var(--watching-ink)}
+  .providers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  @media(max-width:700px){.providers{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .prov{min-height:64px;padding:10px 14px;border-radius:16px;border:1.5px solid var(--line);background:var(--surface-2);display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;text-align:start;transition:border-color .2s}
+  .prov:hover{border-color:color-mix(in srgb,var(--ink) 22%,transparent)}
+  .prov.on{border-color:var(--watched);background:color-mix(in srgb,var(--watched) 14%,transparent)}
+  .prov b{font-weight:600;font-size:14px;direction:ltr}
+  .prov small{font-size:11px;color:var(--faint)} .prov small.local{color:var(--watching)}
+  .ainote{font-size:13px;padding:10px 14px;border-radius:14px;background:var(--field);border:1px solid var(--line);color:var(--ink-2)}
+  .ainote:empty{display:none}
 
-  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+  /* الإحصائيات */
+  .modal.stats{max-width:980px;padding:30px 32px}
+  .stat-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}
+  @media(max-width:700px){.stat-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .stat-card{border-radius:22px;padding:18px 20px;background:var(--c);color:var(--ci);display:flex;flex-direction:column}
+  .stat-card .ic{width:22px;height:22px}
+  .stat-card .sc-num{font-family:var(--display);font-weight:800;font-size:42px;line-height:1.1;margin-top:8px}
+  .stat-card .sc-lab{font-size:14px;font-weight:500;opacity:.85}
+  .stat-card:nth-child(1){--c:var(--watched);--ci:var(--watched-ink)} .stat-card:nth-child(2){--c:var(--queue);--ci:var(--queue-ink)}
+  .stat-card:nth-child(3){--c:var(--watching);--ci:var(--watching-ink)} .stat-card:nth-child(4){--c:var(--accent);--ci:var(--accent-ink)}
+  .stat-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
+  @media(max-width:760px){.stat-grid{grid-template-columns:1fr}.stat-grid>*{grid-column:auto!important}}
+  .stat-sec{background:var(--surface-2);border:1px solid var(--line);border-radius:22px;padding:20px 22px;display:flex;flex-direction:column;gap:14px}
+  .stat-sec.w3{grid-column:span 3} .stat-sec.w2{grid-column:span 2}
+  .stat-sec h3{font-family:var(--display);font-weight:700;font-size:19px}
+  .rating-bars{display:flex;align-items:flex-end;gap:8px;height:180px}
+  .rating-bars .rb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px}
+  .rating-bars .rb-fill{width:100%;border-radius:10px 10px 4px 4px;min-height:4px;background:var(--raised);transition:height .6s cubic-bezier(.34,1.2,.5,1)}
+  .rating-bars .rb-c{font-size:12px;color:var(--muted);min-height:1em}
+  .rating-bars .rb-x{font-size:13px;font-weight:600;color:var(--ink-2)}
+  .donut-row{display:flex;align-items:center;gap:22px;flex:1;flex-wrap:wrap}
+  .donut{width:150px;height:150px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .donut>div{width:104px;height:104px;border-radius:50%;background:var(--solid);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+  .donut b{font-family:var(--display);font-weight:800;font-size:28px} .donut small{font-size:12px;color:var(--muted)}
+  .legend{display:flex;flex-direction:column;gap:14px}
+  .legend>div{display:flex;align-items:center;gap:10px}
+  .legend i{width:14px;height:14px;border-radius:5px}
+  .legend small{display:block;font-size:13px;color:var(--muted)}
+  .gbar{display:flex;align-items:center;gap:12px}
+  .gbar .gname{width:96px;font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gbar-track{flex:1;height:12px;background:var(--field);border-radius:999px;overflow:hidden}
+  .gbar-fill{height:100%;border-radius:999px;transition:width .6s ease}
+  .gbar .gcount{width:28px;font-size:13px;color:var(--muted);text-align:end}
+  .month-grid{display:flex;align-items:flex-end;gap:10px;height:170px}
+  .month-grid .mo{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px}
+  .month-grid .mo-fill{width:100%;border-radius:10px 10px 4px 4px;min-height:3px;background:var(--line-2);transition:height .6s ease}
+  .month-grid .mo:last-child .mo-fill{background:var(--watched)}
+  .month-grid .mo-c{font-size:12px;color:var(--muted)} .month-grid .mo-x{font-size:12px;color:var(--ink-2)}
+
+  /* Watch Party */
+  .modal.party{max-width:440px;padding:26px}
+  .partybody{display:flex;flex-direction:column;gap:14px}
+  .or{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px}
+  .or::before,.or::after{content:'';flex:1;height:1px;background:var(--line)}
+  .codein{height:50px;border-style:dashed!important;font-family:ui-monospace,monospace;font-size:17px;letter-spacing:3px;text-align:center;text-transform:uppercase}
+  .perr{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--dropped) 12%,transparent);color:var(--dropped);font-size:13px}
+  .spin{width:72px;height:72px;border-radius:50%;border:4px solid var(--line);border-top-color:var(--accent);animation:spin 1.1s linear infinite;margin:10px auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .ticket{position:relative;padding:18px 16px 14px;border-radius:18px;background:var(--queue);color:var(--queue-ink);text-align:center}
+  .ticket::before,.ticket::after{content:'';position:absolute;width:20px;height:20px;border-radius:50%;background:var(--solid);top:50%;margin-top:-10px}
+  .ticket::before{right:-10px} .ticket::after{left:-10px}
+  .ticket small{display:block;font-size:12px;font-weight:600;opacity:.75}
+  .ticket .code{font-family:ui-monospace,'Cascadia Mono',monospace;font-weight:700;font-size:30px;letter-spacing:5px;margin:2px 0 8px;direction:ltr}
+  .ticket .btn{background:var(--queue-ink);border-color:var(--queue-ink);color:var(--queue);height:36px}
+  .peers{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}
+  .peers .who{display:flex}
+  .peers .who b{width:28px;height:28px;border-radius:50%;box-shadow:0 0 0 3px var(--solid)}
+  .peers .who b+b{margin-inline-start:-8px}
+  .nowon{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;background:var(--field);font-size:14px}
+  .nowon small{display:block;font-size:12px;color:var(--faint)}
+
+  /* الترشيحات */
+  .modal.recs{max-width:880px;padding:30px 32px}
+  .airow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px;border-radius:22px;background:var(--surface-2);border:1px solid var(--line);margin-bottom:16px}
+  .btn-ai{background:var(--watched);border-color:var(--watched);color:var(--watched-ink);font-weight:600;height:52px;padding:0 24px;font-size:15px;box-shadow:0 12px 26px -12px color-mix(in srgb,var(--watched) 90%,transparent),inset 0 -3px 0 rgba(0,0,0,.12)}
+  .btn-ai:hover{background:var(--watched);border-color:var(--watched);filter:brightness(1.06)}
+  .pastebox{border:1px dashed var(--line-2);border-radius:18px;padding:0 16px}
+  .pastebox>summary{cursor:pointer;padding:14px 0;font-size:14px;color:var(--muted);list-style:none;display:flex;align-items:center;gap:8px}
+  .pastebox>summary::-webkit-details-marker{display:none}
+  .pastebox[open]{padding-bottom:16px}
+  #impText{min-height:120px;resize:vertical}
+  #impList{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+  #impList:empty{display:none}
+  .impRow{display:flex;align-items:center;gap:14px;padding:12px 14px;margin:0;border-radius:20px;background:var(--surface-2);border:1px solid var(--line);cursor:pointer;font-size:15px;color:var(--ink);transition:border-color .2s,background .2s}
+  .impRow:hover{border-color:color-mix(in srgb,var(--ink) 18%,transparent)}
+  .impRow.seen{border-color:color-mix(in srgb,var(--watched) 45%,transparent);background:color-mix(in srgb,var(--watched) 8%,transparent)}
+  .impRow input[type=checkbox]{appearance:none;width:24px;height:24px;border-radius:8px;border:2px solid var(--line-2);flex-shrink:0;display:grid;place-content:center;cursor:pointer;margin:0}
+  .impRow input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+  .impRow input[type=checkbox]:checked::after{content:'';width:12px;height:12px;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232A1206' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12.5l4.5 4.5L19 7.5'/></svg>") center/contain no-repeat}
+  .impP{flex:none;width:46px;height:69px;border-radius:10px;background:var(--raised);overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--faint)}
+  .impP img{width:100%;height:100%;object-fit:cover;display:block}
+  .impRow>span[dir]{flex:1;min-width:0;font-weight:600}
+  .impRow .iwhy{display:block;color:var(--muted);font-size:13px;font-weight:400;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .impRow .iy{color:var(--faint);font-size:12px;white-space:nowrap}
+  .impWhyBtn{flex:none;width:44px;height:44px;border-radius:14px;border:none;background:color-mix(in srgb,var(--queue) 12%,transparent);color:var(--queue);display:flex;align-items:center;justify-content:center}
+  .impWhyBtn[aria-expanded="true"]{background:var(--queue);color:var(--queue-ink)}
+  .impRow .impSeen{width:auto;flex:none;height:44px;padding-inline:14px 34px;border-radius:14px;font-size:13px;font-weight:600;color:var(--queue);border-color:color-mix(in srgb,var(--queue) 45%,transparent);background-color:transparent}
+  .impRow.seen .impSeen{background-color:var(--watched);border-color:var(--watched);color:var(--watched-ink)}
+  .impWhyBox{margin:-4px 14px 4px;padding:14px 16px;border-radius:16px;background:color-mix(in srgb,var(--queue) 7%,transparent);border:1px dashed color-mix(in srgb,var(--queue) 35%,transparent);font-size:14px;color:var(--ink-2)}
+  .impNoteRow{margin:-4px 14px 4px}
+  .impNoteRow input{height:44px;font-size:13px;border-color:color-mix(in srgb,var(--watched) 35%,transparent)}
+  #impStatus{font-size:13px;color:var(--ink-2);margin-top:12px;min-height:1em}
+  #impStatus:empty{display:none}
+  .recfoot{display:flex;align-items:center;gap:14px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+
+  .toast{
+    position:fixed;bottom:28px;left:50%;transform:translate(-50%,12px);z-index:99;
+    display:flex;align-items:center;gap:8px;max-width:min(560px,92vw);
+    background:var(--ink);color:var(--bg);font-weight:600;font-size:14px;
+    padding:12px 22px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
+    box-shadow:0 18px 40px -12px rgba(0,0,0,.5);
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
+<div id="ambient" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
+
+<div class="titlebar" dir="ltr">
+  <span class="tb-mark" aria-hidden="true"><i data-ic="playring"></i></span>
+  <span class="wordmark" style="font-size:16px" aria-label="rilio">r<span class="i1">i</span>l<span class="i2">i</span><span class="o"></span></span>
+</div>
+
 <div class="wrap">
 
-  <header>
-    <div>
-      <h1>قائمة <span class="glow">المشاهدة</span></h1>
-      <div class="sub">حائط الأفلام والمسلسلات بتاعك — اضغط على أي بوستر للتفاصيل</div>
+  <header class="top">
+    <div class="greet">
+      <div class="hello"><i data-ic="moon"></i><span id="hello">مساء الخير</span></div>
+      <h1 class="tonight">نتفرج على إيه الليلة؟</h1>
     </div>
-    <button class="btn btn-amber" id="tasteBtn">🤖 الذوق والترشيحات</button>
+    <label class="searchbox">
+      <i data-ic="search"></i>
+      <span hidden>بحث</span>
+      <input type="text" id="search" dir="auto" placeholder="دوّر في قايمتك بالاسم أو التصنيف…" aria-label="بحث">
+      <kbd>/</kbd>
+      <button type="button" class="btn btn-accent btn-sm" data-act="addOpen"><i data-ic="plus"></i>ضيف</button>
+    </label>
+    <div class="tools">
+      <button class="iconbtn" id="tasteBtn" title="ترشيحات على ذوقك" aria-label="ترشيحات على ذوقك"><i data-ic="spark"></i></button>
+      <button class="iconbtn" id="statsToggle" title="ذوقك في أرقام" aria-label="ذوقك في أرقام"><i data-ic="chart"></i></button>
+      <button class="iconbtn" id="partyBtn" data-act="partyOpen" title="Watch Party — اتفرج مع صحابك" aria-label="Watch Party" style="display:none"><i data-ic="users"></i></button>
+      <button class="iconbtn" id="gearBtn" title="الإعدادات" aria-label="الإعدادات"><i data-ic="sliders"></i></button>
+    </div>
   </header>
 
-  <details class="panel" id="addBox">
-    <summary id="formTitle">＋ إضافة جديد</summary>
+  <details class="panel addbox" id="addBox">
+    <summary><span class="sq"><i data-ic="plus"></i></span><span id="formTitle">ضيف حاجة جديدة</span></summary>
     <div class="inner">
       <div class="grid">
         <div>
           <label for="fTitle">الاسم</label>
-          <div style="display:flex;gap:6px">
-            <input type="text" id="fTitle" dir="auto" placeholder="مثال: Silo" style="flex:1">
-            <button class="btn" id="lookupBtn" title="يجيب البوستر والوصف وتقييم IMDb تلقائي">🔍 IMDb</button>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="fTitle" dir="auto" placeholder="اكتب اسم الفيلم أو المسلسل… مثال: Silo" style="flex:1">
+            <button class="btn" id="lookupBtn" title="يجيب البوستر والوصف وتقييم IMDb تلقائي"><i data-ic="search"></i>IMDb</button>
           </div>
-          <div id="metaPreview" style="font-size:.75rem;color:var(--amber);margin-top:5px;min-height:1em"></div>
-          <div id="chooser" style="display:none;margin-top:6px;flex-direction:column;gap:5px"></div>
+          <div id="metaPreview"></div>
+          <div id="chooser" style="display:none;margin-top:6px;flex-direction:column;gap:6px"></div>
         </div>
         <div>
           <label for="fType">النوع</label>
@@ -607,236 +679,272 @@
         </div>
       </div>
       <div class="form-row">
-        <div class="seg" id="statusSeg">
+        <div class="seg" id="statusSeg" role="group" aria-label="هيتحط في">
           <button type="button" data-s="queue" class="on">هشوفه قريب</button>
           <button type="button" data-s="watched">شفته خلاص</button>
         </div>
-        <button class="btn btn-amber" id="saveBtn">حفظ</button>
+        <div class="spacer"></div>
         <button class="btn btn-ghost" id="cancelEdit" style="display:none">إلغاء التعديل</button>
+        <button class="btn btn-amber" id="saveBtn">حفظ</button>
       </div>
     </div>
   </details>
 
-  <div class="toolbar">
-    <div class="tabs">
-      <button class="tab on" data-tab="queue">🎬 هشوفهم <span class="count" id="cQueue"></span></button>
-      <button class="tab" data-tab="watching">▶ بتفرج <span class="count" id="cWatching"></span></button>
-      <button class="tab" data-tab="watched">✔ شفتهم <span class="count" id="cWatched"></span></button>
-      <button class="tab" data-tab="dropped">✖ سبتهم <span class="count" id="cDropped"></span></button>
-    </div>
-    <input type="text" class="search" id="search" dir="auto" placeholder="بحث بالاسم أو التصنيف...">
-    <button class="btn btn-sm" id="randBtn" title="مش عارف تتفرج على إيه؟" style="display:none">🎲 اختارلي</button>
-    <button class="btn btn-sm sortbtn" id="sortBtn" style="display:none"></button>
-    <button class="btn btn-sm" id="statsToggle" title="إحصائيات المشاهدة">📊</button>
-    <button class="btn btn-sm" id="partyBtn" data-act="partyOpen" title="Watch Party — اتفرج مع صاحبك" style="display:none">👥</button>
-    <button class="btn btn-sm" id="gearBtn" title="الإعدادات">⚙</button>
-    <button class="btn btn-sm" id="viewBtn" title="بدّل شكل العرض">☰</button>
+  <section class="hometop" id="homeTop">
+    <div class="hero" id="hero"></div>
+    <aside class="side" id="side">
+      <div class="cw" id="cwBox">
+        <div class="cw-h"><span class="ldot"></span><h2>كمّل اللي بدأته</h2></div>
+        <div id="cwList"></div>
+      </div>
+      <button class="mystery" id="mysteryBox" data-act="mysteryPlay" style="display:none">
+        <span class="gift"><i data-ic="gift"></i></span>
+        <span><b>فيلم غامض</b><small>مفاجأة من قايمتك من غير ما تعرف اسمها</small></span>
+      </button>
+    </aside>
+  </section>
+
+  <div class="bkbanner" id="bkBanner" style="display:none">
+    <i data-ic="clock"></i>
+    <span>بقالك أكتر من أسبوعين من غير نسخة احتياطية — دقيقة وتبقى مطمّن</span>
+    <button class="btn btn-sm btn-amber" data-act="backup">نزّل نسخة</button>
+    <button class="btn btn-sm btn-ghost" data-act="bkSnooze">فكّرني بعدين</button>
   </div>
 
-  <div class="statsbar" id="statsBar" style="display:none"></div>
-  <div class="mystery-box" id="mysteryBox" style="display:none">
-    <div class="mb-glow"></div>
-    <div class="mb-gift">🎁</div>
-    <div class="mb-text">
-      <div class="mb-title">فيلم غامض</div>
-      <div class="mb-sub">سيبني أختارلك فيلم من قايمتك وأشغّله على طول — من غير ما تعرف اسمه ولا أي تفاصيل. مفاجأة كاملة 🍿</div>
+  <div class="toolbar">
+    <div class="tabs" role="tablist" aria-label="الحالة">
+      <button class="tab on" data-tab="queue" role="tab"><span class="tdot"></span>هشوفهم<span class="count" id="cQueue"></span></button>
+      <button class="tab" data-tab="watching" role="tab"><span class="tdot"></span>بتفرج<span class="count" id="cWatching"></span></button>
+      <button class="tab" data-tab="watched" role="tab"><span class="tdot"></span>شفتهم<span class="count" id="cWatched"></span></button>
+      <button class="tab" data-tab="dropped" role="tab"><span class="tdot"></span>سبتهم<span class="count" id="cDropped"></span></button>
     </div>
-    <button class="btn btn-amber mb-btn" data-act="mysteryPlay">🎬 افتح الصندوق</button>
-  </div>
-  <div class="chips" id="chips"></div>
-  <div class="bkbanner" id="bkBanner" style="display:none">
-    <span>⏰ بقالك أكتر من أسبوعين من غير نسخة احتياطية — دقيقة واحدة وتبقى مطمّن</span>
-    <button class="btn btn-sm btn-amber" data-act="backup">⬇ نزّل دلوقتي</button>
-    <button class="btn btn-sm btn-ghost" data-act="bkSnooze">فكّرني بعدين</button>
+    <div class="spacer"></div>
+    <div class="chips" id="chips"></div>
+    <button class="pillbtn" id="sortBtn" style="display:none"></button>
+    <button class="iconbtn" id="viewBtn" title="بدّل شكل العرض"></button>
   </div>
 
   <div id="list"></div>
 
+  <footer class="foot">
+    <span class="wordmark" aria-label="rilio">r<span class="i1">i</span>l<span class="i2">i</span><span class="o"></span></span>
+    <span class="dotsep"></span>
+    <span id="footCount"></span>
+  </footer>
 </div>
 
 <div class="overlay" id="overlay">
-  <div class="modal" id="modal"></div>
+  <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
 </div>
 
 <div class="overlay" id="statsOverlay">
-  <div class="modal settings">
-    <button class="mclose" style="position:sticky;top:12px;float:left;margin:12px" data-act="statsClose" title="إغلاق">✕</button>
-    <div class="mbody" style="padding-top:18px">
-      <h2 style="font-family:'Changa',sans-serif;color:var(--amber);font-size:1.2rem;margin-bottom:4px">📊 ذوقك في أرقام</h2>
-      <div class="sub" id="statsIntro" style="margin-bottom:18px"></div>
-      <div id="statsContent"></div>
+  <div class="modal stats" role="dialog" aria-label="ذوقك في أرقام">
+    <div class="mhead-plain">
+      <div class="grow">
+        <h2 style="--c:var(--watched)">ذوقك في <em>أرقام</em></h2>
+        <div class="sub" id="statsIntro" style="font-size:14px;margin-top:4px"></div>
+      </div>
+      <button class="mclose plain" data-act="statsClose" title="إغلاق" aria-label="إغلاق"><i data-ic="x"></i></button>
     </div>
+    <div id="statsContent"></div>
   </div>
 </div>
 
 <div class="overlay" id="partyOverlay">
-  <div class="modal settings" style="max-width:460px">
-    <button class="mclose" style="position:sticky;top:12px;float:left;margin:12px" data-act="partyClose" title="إغلاق">✕</button>
-    <div class="mbody" style="padding-top:18px">
-      <h2 style="font-family:'Changa',sans-serif;color:var(--amber);font-size:1.2rem;margin-bottom:4px">👥 Watch Party</h2>
-      <div class="sub" style="margin-bottom:16px">اتفرجوا سوا: أي حد يوقّف أو يشغّل أو يقدّم، الفيديو بيتحرك عند الكل</div>
-      <div id="partyBody"></div>
+  <div class="modal party" role="dialog" aria-label="Watch Party">
+    <div class="mhead-plain" style="margin-bottom:16px">
+      <span class="sq" style="background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)"><i data-ic="users"></i></span>
+      <div class="grow">
+        <h2 style="font-size:22px">اتفرجوا سوا</h2>
+        <div class="sub">أي حد يوقّف أو يشغّل أو يقدّم، الفيديو بيتحرك عند الكل</div>
+      </div>
+      <button class="mclose plain" data-act="partyClose" title="إغلاق" aria-label="إغلاق"><i data-ic="x"></i></button>
     </div>
+    <div id="partyBody" class="partybody"></div>
   </div>
 </div>
 
 <div class="overlay" id="settingsOverlay">
-  <div class="modal settings">
-    <button class="mclose" style="position:sticky;top:12px;float:left;margin:12px" data-act="settingsClose" title="إغلاق">✕</button>
-    <div class="mbody" style="padding-top:18px">
-      <h2 style="font-family:'Changa',sans-serif;color:var(--amber);font-size:1.2rem;margin-bottom:14px">⚙ الإعدادات</h2>
+  <div class="modal settings" role="dialog" aria-label="الإعدادات">
+    <nav class="setnav" aria-label="أقسام الإعدادات">
+      <h2>الإعدادات</h2>
+      <button data-act="setNav" data-v="secTheme" class="on" style="--c:var(--accent)"><i></i>المزاج</button>
+      <button data-act="setNav" data-v="secKeys" style="--c:var(--queue)"><i></i>مفاتيح الـ API</button>
+      <button data-act="setNav" data-v="aiSec" id="navAi" style="--c:var(--watched);display:none"><i></i>الذكاء الاصطناعي</button>
+      <button data-act="setNav" data-v="secPlayer" style="--c:var(--watching)"><i></i>البلاير والتحميل</button>
+      <button data-act="setNav" data-v="secSites" style="--c:#9BE4A8"><i></i>مواقع المشاهدة</button>
+      <button data-act="setNav" data-v="secBackup" style="--c:var(--dropped)"><i></i>النسخ الاحتياطي</button>
+      <div class="ver"><span class="wordmark" aria-label="rilio">r<span class="i1">i</span>l<span class="i2">i</span><span class="o"></span></span><span id="verTxt" dir="ltr"></span></div>
+    </nav>
+    <div class="setbody">
+      <button class="mclose plain" data-act="settingsClose" title="إغلاق" aria-label="إغلاق"><i data-ic="x"></i></button>
 
-      <h2 class="sh2">🎨 الثيم</h2>
-      <div class="themes" id="themesBox">
-        <button class="theme-card" data-act="theme" data-v="cinema">
-          <span class="tprev" style="background:#0b0b10"><i style="background:#e8a33d"></i><i style="background:#16161e"></i><i style="background:#1e1e28"></i></span>
-          <span class="tname">🎬 سينما</span>
-        </button>
-        <button class="theme-card" data-act="theme" data-v="midnight">
-          <span class="tprev" style="background:#080b14"><i style="background:#2dd4bf"></i><i style="background:#0f1522"></i><i style="background:#161e30"></i></span>
-          <span class="tname">🌊 ميدنايت</span>
-        </button>
-        <button class="theme-card" data-act="theme" data-v="ember">
-          <span class="tprev" style="background:#120a08"><i style="background:#ff5c38"></i><i style="background:#1c1210"></i><i style="background:#271815"></i></span>
-          <span class="tname">🔥 إمبر</span>
-        </button>
-        <button class="theme-card" data-act="theme" data-v="nova">
-          <span class="tprev" style="background:#0c0a16"><i style="background:#a855f7"></i><i style="background:#141022"></i><i style="background:#1d1732"></i></span>
-          <span class="tname">💜 نوفا</span>
-        </button>
-      </div>
+      <section id="secTheme" class="sec-h" style="scroll-margin-top:20px">
+        <h3>المزاج</h3>
+        <p>اختار الجو اللي يريّح عينك — بيتغيّر على طول</p>
+        <div class="themes" id="themesBox">
+          <button class="theme-card" data-act="theme" data-v="sahra">
+            <span class="tprev" style="background:#15111C"><span class="tline"><b style="background:#FF9466"></b><b style="background:#3A3149"></b></span><span class="tposters"><b style="background:#3A2350"></b><b style="background:#153A47"></b><b style="background:#4A2B26"></b></span></span>
+            <span class="tname">سهرة</span><span class="tdesc">بنفسجي دافي وخوخي</span>
+          </button>
+          <button class="theme-card" data-act="theme" data-v="mint">
+            <span class="tprev" style="background:#0D1918"><span class="tline"><b style="background:#6EE7C8"></b><b style="background:#24403B"></b></span><span class="tposters"><b style="background:#123A3F"></b><b style="background:#1C2F55"></b><b style="background:#1E3D33"></b></span></span>
+            <span class="tname">نعناع</span><span class="tdesc">أخضر بحري هادي</span>
+          </button>
+          <button class="theme-card" data-act="theme" data-v="coffee">
+            <span class="tprev" style="background:#19120F"><span class="tline"><b style="background:#FFC56E"></b><b style="background:#3D2E26"></b></span><span class="tposters"><b style="background:#4A2E1E"></b><b style="background:#3F2A1C"></b><b style="background:#40203A"></b></span></span>
+            <span class="tname">قهوة</span><span class="tdesc">بني دافي وزبدة</span>
+          </button>
+          <button class="theme-card" data-act="theme" data-v="sunrise">
+            <span class="tprev" style="background:#FBF3E8"><span class="tline"><b style="background:#F2774A"></b><b style="background:#EADCC8"></b></span><span class="tposters"><b style="background:#F6C9A8"></b><b style="background:#BFE6DA"></b><b style="background:#D9CCF5"></b></span></span>
+            <span class="tname">شروق</span><span class="tdesc">فاتح للنهار</span>
+          </button>
+        </div>
+      </section>
 
-      <div style="border-top:1px dashed var(--line);margin:16px 0"></div>
-    <details class="setsec"><summary>🔑 مفاتيح الـ API</summary><div class="ssin">
-    <label for="apiKey">مفتاح OMDb API — متسجّل بالفعل، غيّره بس لو عايز تستخدم مفتاح تاني</label>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <input type="text" id="apiKey" dir="ltr" placeholder="مثال: a1b2c3d4" style="flex:1;min-width:180px">
-      <button class="btn btn-amber" data-act="saveKey">حفظ المفتاح</button>
-    </div>
+      <details class="setsec" id="secKeys"><summary><i style="--c:var(--queue)"></i>مفاتيح الـ API</summary><div class="ssin">
+        <label for="apiKey">مفتاح OMDb — متسجّل بالفعل، غيّره بس لو عايز تستخدم مفتاح تاني</label>
+        <div class="fieldrow">
+          <input type="text" id="apiKey" dir="ltr" placeholder="مثال: a1b2c3d4">
+          <button class="btn btn-amber" data-act="saveKey">حفظ</button>
+        </div>
+        <label for="tmdbKey">مفتاح TMDB — للخلفيات وتنبيهات المواسم والبلاير ولينكات {tmdbID} (من themoviedb.org/settings/api)</label>
+        <div class="fieldrow">
+          <input type="text" id="tmdbKey" dir="ltr" placeholder="API Key أو eyJhbGci...">
+          <button class="btn btn-amber" data-act="saveTmdb">حفظ</button>
+        </div>
+      </div></details>
 
-    <label for="tmdbKey" style="margin-top:12px">مفتاح TMDB API — لازم عشان لينكات {tmdbID} وخلفيات التفاصيل وتنبيهات المواسم (من themoviedb.org/settings/api)</label>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <input type="text" id="tmdbKey" dir="ltr" placeholder="API Key أو eyJhbGci..." style="flex:1;min-width:180px">
-      <button class="btn btn-amber" data-act="saveTmdb">حفظ المفتاح</button>
-    </div>
-    </div></details>
+      <details class="setsec" id="aiSec" style="display:none"><summary><i style="--c:var(--watched)"></i>الذكاء الاصطناعي</summary><div class="ssin">
+        <div class="sub">وصّل أي AI وزرار "رشّحلي" هيشتغل لوحده — سيرفر على جهازك مجاني (Ollama أو LM Studio)، أو خدمة بمفتاحك. المفتاح بيتحفظ متشفّر ومبيدخلش في النسخة الاحتياطية</div>
+        <label>اختار الخدمة</label>
+        <div class="providers" id="aiProviders" role="group" aria-label="الخدمة">
+          <button type="button" class="prov" data-act="aiPreset" data-v="ollama"><b>Ollama</b><small class="local">على جهازك · مجاني</small></button>
+          <button type="button" class="prov" data-act="aiPreset" data-v="lmstudio"><b>LM Studio</b><small class="local">على جهازك · مجاني</small></button>
+          <button type="button" class="prov" data-act="aiPreset" data-v="openai"><b>OpenAI</b><small>بمفتاح</small></button>
+          <button type="button" class="prov" data-act="aiPreset" data-v="gemini"><b>Gemini</b><small>بمفتاح</small></button>
+          <button type="button" class="prov" data-act="aiPreset" data-v="openrouter"><b>OpenRouter</b><small>بمفتاح</small></button>
+          <button type="button" class="prov" data-act="aiPreset" data-v="groq"><b>Groq</b><small>بمفتاح · سريع</small></button>
+          <button type="button" class="prov" data-act="aiPreset" data-v="anthropic"><b>Claude</b><small>بمفتاح</small></button>
+        </div>
+        <label for="aiUrl">الرابط — https، أو http للجهاز والشبكة المحلية بس</label>
+        <input type="text" id="aiUrl" dir="ltr" class="mono" placeholder="http://localhost:11434/v1">
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div>
+            <label for="aiKey">المفتاح — سيبه فاضي للسيرفرات المحلية</label>
+            <input type="password" id="aiKey" dir="ltr" autocomplete="off" placeholder="sk-...">
+          </div>
+          <div>
+            <label for="aiKind">نوع الـ API</label>
+            <select id="aiKind" dir="ltr">
+              <option value="openai">OpenAI-compatible</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </div>
+        </div>
+        <label for="aiModel">الموديل — بيتجاب لوحده من السيرفر</label>
+        <input type="search" id="aiModelQ" dir="ltr" placeholder="دوّر على موديل… (مثلاً: flash أو gpt mini)">
+        <div style="display:flex;gap:8px">
+          <select id="aiModel" dir="ltr" style="flex:1;min-width:0"></select>
+          <button class="iconbtn" data-act="aiModels" title="هات الموديلات تاني" aria-label="هات الموديلات تاني"><i data-ic="refresh"></i></button>
+        </div>
+        <div class="ainote" id="aiNote"></div>
+        <div class="form-row" style="margin-top:0">
+          <button class="btn btn-amber" data-act="aiSave">حفظ</button>
+          <button class="btn" data-act="aiTest"><i data-ic="flask"></i>اختبر الاتصال</button>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost btn-danger" data-act="aiClear">امسح إعدادات الـ AI</button>
+        </div>
+      </div></details>
 
-    <details class="setsec" id="aiSec" style="display:none"><summary>🤖 الذكاء الاصطناعي (للترشيحات)</summary><div class="ssin">
-    <div class="sub" style="margin-bottom:10px">ضيف أي AI — سيرفر محلي زي Ollama أو LM Studio (مجاني ومن غير مفتاح) أو خدمة زي OpenAI/Gemini/OpenRouter/Claude بمفتاحك. بعدها زرار "✨ رشّحلي" في نافذة الذوق بيشتغل لوحده. المفتاح بيتحفظ متشفّر ومبيدخلش في النسخة الاحتياطية</div>
-    <label for="aiPreset">اختيار سريع</label>
-    <select id="aiPreset">
-      <option value="">— اختار عشان يملالك الرابط —</option>
-      <option value="ollama">Ollama (محلي)</option>
-      <option value="lmstudio">LM Studio (محلي)</option>
-      <option value="openai">OpenAI</option>
-      <option value="gemini">Google Gemini</option>
-      <option value="openrouter">OpenRouter</option>
-      <option value="groq">Groq</option>
-      <option value="anthropic">Anthropic (Claude)</option>
-    </select>
-    <label for="aiKind" style="margin-top:10px">نوع الـ API</label>
-    <select id="aiKind">
-      <option value="openai">OpenAI-compatible (/chat/completions)</option>
-      <option value="anthropic">Anthropic (/messages)</option>
-    </select>
-    <label for="aiUrl" style="margin-top:10px">الرابط (Base URL) — https، أو http للجهاز/الشبكة المحلية بس</label>
-    <input type="text" id="aiUrl" dir="ltr" placeholder="http://localhost:11434/v1">
-    <label for="aiKey" style="margin-top:10px">المفتاح (API Key) — سيبه فاضي للسيرفرات المحلية</label>
-    <input type="password" id="aiKey" dir="ltr" autocomplete="off" placeholder="sk-...">
-    <label for="aiModel" style="margin-top:10px">الموديل — بيتجاب لوحده من السيرفر</label>
-    <input type="search" id="aiModelQ" dir="ltr" placeholder="🔍 دوّر على موديل… (مثلاً: flash أو gpt mini)" style="margin-bottom:6px">
-    <div style="display:flex;gap:8px">
-      <select id="aiModel" dir="ltr" style="flex:1;min-width:0"></select>
-      <button class="btn" data-act="aiModels" title="هات الموديلات تاني">🔄</button>
-    </div>
-    <div class="form-row">
-      <button class="btn" data-act="aiTest">🧪 اختبر الاتصال</button>
-      <button class="btn btn-amber" data-act="aiSave">حفظ</button>
-      <button class="btn" data-act="aiClear">امسح إعدادات الـ AI</button>
-    </div>
-    <div class="sub" id="aiNote" style="margin-top:6px"></div>
-    </div></details>
+      <details class="setsec" id="secPlayer"><summary><i style="--c:var(--watching)"></i>البلاير والتحميل</summary><div class="ssin">
+        <label>الترجمة الافتراضية</label>
+        <div class="sublangs" id="subLangs">
+          <button class="sl" data-act="subLang" data-v="ar">عربي</button>
+          <button class="sl" data-act="subLang" data-v="en">إنجليزي</button>
+          <button class="sl" data-act="subLang" data-v="fr">فرنسي</button>
+          <button class="sl" data-act="subLang" data-v="es">إسباني</button>
+          <button class="sl" data-act="subLang" data-v="off">بدون</button>
+        </div>
+        <div class="sub">بتتفعّل لوحدها وقت التشغيل لو السيرفر عنده ترجمة باللغة دي</div>
+        <div class="shieldrow">
+          <span class="sq"><i data-ic="shield"></i></span>
+          <span class="grow"><b style="font-weight:600;display:block">مانع الإعلانات الصارم</b><span class="sub">العادي بيمنع الـ popups لوحده — فعّل الصارم بس مع دومين مخصص</span></span>
+          <button class="switch" role="switch" aria-checked="false" data-act="playerShield" id="shieldBtn" aria-label="مانع الإعلانات الصارم"></button>
+        </div>
+        <label for="playerTpl">قالب البلاير — لو الدومين وقع: <span dir="ltr">vidsrc-embed.su · vidsrcme.su · vsrc.su</span></label>
+        <div class="fieldrow">
+          <input type="text" id="playerTpl" dir="ltr" class="mono">
+          <button class="btn btn-amber" data-act="savePlayer">حفظ</button>
+        </div>
+        <label for="dlTpl">لينك التحميل — نفس الـ placeholders: <b dir="ltr">{type}</b> <b dir="ltr">{tmdbID}</b> <b dir="ltr">{imdbID}</b></label>
+        <div class="fieldrow">
+          <input type="text" id="dlTpl" dir="ltr" class="mono">
+          <button class="btn btn-amber" data-act="saveDl">حفظ</button>
+        </div>
+      </div></details>
 
-    <details class="setsec"><summary>📺 البلاير والتحميل</summary><div class="ssin">
-    <div class="sub" style="margin-bottom:10px">زرار "▶ شغّل هنا" في بانل التفاصيل بيشغّل من القالب ده جوه التطبيق. لو الدومين وقع، بدّله بواحد من: vidsrc-embed.ru • vidsrc-embed.su • vidsrcme.su • vsrc.su</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <input type="text" id="playerTpl" dir="ltr" style="flex:1;min-width:260px">
-      <button class="btn btn-amber" data-act="savePlayer">حفظ القالب</button>
-    </div>
+      <details class="setsec" id="secSites"><summary><i style="--c:#9BE4A8"></i>مواقع المشاهدة</summary><div class="ssin">
+        <div class="sub">الـ placeholders: <b dir="ltr">{q}</b> اسم العمل، <b dir="ltr">{tmdbID}</b> رقم TMDB، <b dir="ltr">{type}</b> movie أو tv، <b dir="ltr">{season}</b> و<b dir="ltr">{episode}</b> الحلقة الجاية (وبيتشالوا لوحدهم مع الأفلام). مثال: <span dir="ltr" style="color:var(--ink)">lordflix.org/watch/{type}/{tmdbID}</span></div>
+        <div id="sitesList" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div class="fieldrow">
+          <input type="text" id="siteName" dir="auto" placeholder="اسم الموقع" style="flex:1;min-width:120px">
+          <input type="text" id="siteUrl" dir="ltr" placeholder="https://example.com/?s={q}" style="flex:2;min-width:200px">
+          <button class="btn btn-amber" data-act="addSite"><i data-ic="plus"></i>إضافة</button>
+        </div>
+      </div></details>
 
-    <label for="dlTpl" style="margin-top:12px">⬇ لينك التحميل — زرار "تحميل" في التفاصيل بيفتح من القالب ده. نفس الـ placeholders: <b dir="ltr">{type}</b> <b dir="ltr">{tmdbID}</b> <b dir="ltr">{imdbID}</b></label>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <input type="text" id="dlTpl" dir="ltr" style="flex:1;min-width:260px">
-      <button class="btn btn-amber" data-act="saveDl">حفظ لينك التحميل</button>
-    </div>
-    <label style="margin-top:14px">💬 الترجمة الافتراضية — بتتفعّل تلقائياً وقت التشغيل من غير ما تفتح قايمة الترجمات</label>
-    <div class="sublangs" id="subLangs">
-      <button class="sl" data-act="subLang" data-v="ar">🇪🇬 عربي</button>
-      <button class="sl" data-act="subLang" data-v="en">🇬🇧 إنجليزي</button>
-      <button class="sl" data-act="subLang" data-v="fr">🇫🇷 فرنسي</button>
-      <button class="sl" data-act="subLang" data-v="es">🇪🇸 إسباني</button>
-      <button class="sl" data-act="subLang" data-v="off">✖ بدون</button>
-    </div>
-    <div class="sub" style="margin-top:5px">ملحوظة: بيعتمد على وجود ترجمة باللغة دي في السيرفر — لو مش موجودة البلاير بيبدأ من غير ترجمة</div>
-    <div style="margin-top:12px"><button class="btn" data-act="playerShield" id="shieldBtn">🛡 مانع الإعلانات الصارم: مقفول</button>
-    <div class="sub" style="margin-top:4px">الوضع العادي بيمنع الـ popups تلقائياً على السيرفرات المدمجة — فعّل الصارم بس لو بتستخدم دومين مخصص</div></div>
-    </div></details>
-
-    <details class="setsec"><summary>▶ مواقع المشاهدة</summary><div class="ssin">
-    <div class="sub" style="margin-bottom:10px">الـ placeholders المتاحة: <b dir="ltr">{q}</b> = اسم الفيلم في لينك بحث، <b dir="ltr">{tmdbID}</b> = رقم TMDB، <b dir="ltr">{type}</b> = movie أو tv، <b dir="ltr">{season}</b> و<b dir="ltr">{episode}</b> = موقفك في المسلسل (الحلقة الجاية تلقائياً — وبيتشالوا لوحدهم مع الأفلام). أمثلة: <span dir="ltr" style="color:var(--ink)">lordflix.org/watch/{type}/{tmdbID}</span> • <span dir="ltr" style="color:var(--ink)">shuttletv.pk/watch/{tmdbID}</span></div>
-    <div id="sitesList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <input type="text" id="siteName" dir="auto" placeholder="اسم الموقع" style="flex:1;min-width:120px">
-      <input type="text" id="siteUrl" dir="ltr" placeholder="https://example.com/?s={q}" style="flex:2;min-width:200px">
-      <button class="btn btn-amber" data-act="addSite">إضافة</button>
-    </div>
-    </div></details>
-
-    <details class="setsec"><summary>💾 النسخ الاحتياطي ونقل الإعدادات</summary><div class="ssin">
-    <div class="sub" style="margin-bottom:10px">القايمة والتقييمات والمفاتيح والمواقع كلها في ملف واحد — خد نسخة قبل أي تجربة، والاسترجاع بيرجّع كل حاجة حتى على تثبيت جديد</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-amber" data-act="backup">⬇ تنزيل نسخة احتياطية</button>
-      <button class="btn" data-act="restore">⬆ استرجاع من ملف</button>
-      <input type="file" id="restoreFile" accept=".json,application/json" style="display:none">
-    </div>
-    <div style="border-top:1px dashed var(--line);margin:14px 0"></div>
-    <h2 style="font-size:.95rem">🔧 نقل الإعدادات بين المتصفحات</h2>
-    <div class="sub" style="margin-bottom:10px">بيصدّر الإعدادات بس (المفاتيح، مواقع المشاهدة، قالب البلاير، التفضيلات) من غير القايمة — عشان تفتح من متصفح تاني وتلاقي كل حاجة متظبطة زي ما هي. ده منفصل تماماً عن ملف الذوق وعن النسخة الاحتياطية الكاملة</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-amber" data-act="setExport">⬇ صدّر الإعدادات</button>
-      <button class="btn" data-act="setImport">⬆ استورد إعدادات</button>
-      <input type="file" id="setFile" accept=".json,application/json" style="display:none">
-    </div>
-    </div></details>
+      <details class="setsec" id="secBackup"><summary><i style="--c:var(--dropped)"></i>النسخ الاحتياطي ونقل الإعدادات</summary><div class="ssin">
+        <div class="sub">القايمة والتقييمات والمفاتيح والمواقع كلها في ملف واحد — خد نسخة قبل أي تجربة، والاسترجاع بيرجّع كل حاجة حتى على تثبيت جديد</div>
+        <div class="fieldrow">
+          <button class="btn btn-amber" data-act="backup"><i data-ic="download"></i>نزّل نسخة احتياطية</button>
+          <button class="btn" data-act="restore"><i data-ic="upload"></i>استرجاع من ملف</button>
+          <input type="file" id="restoreFile" accept=".json,application/json" style="display:none">
+        </div>
+        <label style="margin-top:6px">نقل الإعدادات بين المتصفحات</label>
+        <div class="sub">بيصدّر الإعدادات بس (المفاتيح، المواقع، قالب البلاير، التفضيلات) من غير القايمة</div>
+        <div class="fieldrow">
+          <button class="btn" data-act="setExport"><i data-ic="download"></i>صدّر الإعدادات</button>
+          <button class="btn" data-act="setImport"><i data-ic="upload"></i>استورد إعدادات</button>
+          <input type="file" id="setFile" accept=".json,application/json" style="display:none">
+        </div>
+      </div></details>
     </div>
   </div>
 </div>
 
 <div class="overlay" id="importOverlay">
-  <div class="modal" style="max-width:820px">
-    <button class="mclose" data-act="importClose" title="إغلاق">✕</button>
-    <div class="mbody" style="padding-top:20px">
-      <h2 style="font-family:'Changa',sans-serif;color:var(--amber);font-size:1.15rem;margin-bottom:6px">🤖 الذوق والترشيحات</h2>
-      <div class="sub" style="margin-bottom:10px">الدورة كاملة من هنا: انسخ ذوقك وادّيه لأي AI، وبعدين الصق رده تحت وهنضيف الترشيحات لقايمتك</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-        <button class="btn btn-amber" data-act="aiRun" id="aiRunBtn" style="display:none">✨ رشّحلي دلوقتي بالـ AI</button>
-        <button class="btn btn-amber" id="exportBtn">📋 ١) انسخ ملف الذوق للـ AI</button>
+  <div class="modal recs" role="dialog" aria-label="ترشيحات على ذوقك">
+    <div class="mhead-plain">
+      <span class="sq" style="background:color-mix(in srgb,var(--watched) 16%,transparent);color:var(--watched)"><i data-ic="spark" class="lg"></i></span>
+      <div class="grow">
+        <h2 style="--c:var(--watched)">ترشيحات على <em>ذوقك</em></h2>
+        <div class="sub" style="font-size:14px">الـ AI بيقرا اللي شفته وقيّمته ويقترح حاجات شبهه — وانت تختار اللي يدخل قايمتك</div>
       </div>
-      <div style="border-top:1px dashed var(--line);margin-bottom:12px"></div>
-      <div class="sub" style="margin-bottom:8px"><b style="color:var(--ink)">٢) الصق رد الـ AI هنا</b> (قايمة مرقمة أو bullets) — هنستخرج العناوين وانت تختار اللي يدخل "هشوفهم"</div>
+      <button class="mclose plain" data-act="importClose" title="إغلاق" aria-label="إغلاق"><i data-ic="x"></i></button>
+    </div>
+    <div class="airow">
+      <button class="btn btn-ai" data-act="aiRun" id="aiRunBtn" style="display:none"><i data-ic="spark"></i>رشّحلي دلوقتي</button>
+      <span class="sub" id="aiRunNote"></span>
+      <div class="spacer"></div>
+      <button class="btn" id="exportBtn"><i data-ic="copy"></i>انسخ ملف الذوق لأي AI</button>
+    </div>
+    <details class="pastebox" id="pasteBox">
+      <summary><i data-ic="clipboard"></i>الصق رد أي AI بنفسك (قايمة مرقمة أو bullets)</summary>
       <textarea id="impText" dir="auto" placeholder="1. Dark (TV, 2017) — mind-bending German sci-fi...&#10;2. Sicario (2015) — ..."></textarea>
-      <div class="form-row">
+      <div class="form-row" style="margin-top:10px">
         <button class="btn btn-amber" data-act="importParse">استخرج العناوين</button>
       </div>
-      <div id="impList"></div>
-      <div id="impStatus" style="font-size:.8rem;color:var(--amber);margin-top:10px;min-height:1em"></div>
-      <div class="form-row">
-        <button class="btn btn-amber" data-act="importAdd" id="impAddBtn" style="display:none">＋ ضيف المختار لـ"هشوفهم"</button>
-      </div>
+    </details>
+    <div id="impList"></div>
+    <div id="impStatus"></div>
+    <div class="recfoot" id="impFoot">
+      <span class="sub" style="flex:1">شيل علامة اللي مش عايزه — والمصباح بيقولك اترشح ليه</span>
+      <button class="btn btn-amber" data-act="importAdd" id="impAddBtn" style="display:none;height:52px;padding:0 26px"><i data-ic="plus"></i>ضيف المختار</button>
     </div>
   </div>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="app.js"></script>
 </body>
