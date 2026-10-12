@@ -4,11 +4,56 @@ import { DurableObject } from 'cloudflare:workers';
 import {
   isRoomCode, parseClientMessage, applyMessage, snapshot, rateLimit, emptyRoom,
   MAX_PEERS, ROOM_IDLE_TTL_MS,
-} from './protocol.mjs';
+} from '../public/protocol.mjs';
+
+import { SERVER_ORIGINS } from '../public/guest-logic.mjs';
+
+// ملفات صفحة الضيف — قايمة ثابتة، أي مسار تاني 404
+const GUEST_FILES = {
+  '/guest.js': 'text/javascript; charset=utf-8',
+  '/guest-logic.mjs': 'text/javascript; charset=utf-8',
+  '/protocol.mjs': 'text/javascript; charset=utf-8',
+  '/guest.css': 'text/css; charset=utf-8',
+};
+
+// CSP صارمة: سكريبتات من السيرفر ده بس، الاتصال بالأوضة بس، والبلاير من سيرفرات الليستة الثابتة بس
+function securityHeaders(host, type) {
+  const ws = `wss://${host}` + (/^(127\.0\.0\.1|localhost)(:|$)/.test(host) ? ` ws://${host}` : '');
+  return {
+    'Content-Type': type,
+    'Content-Security-Policy': `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' ${ws}; frame-src ${SERVER_ORIGINS.join(' ')}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+    'X-Robots-Tag': 'noindex',
+    'Cache-Control': 'no-cache',
+  };
+}
+
+async function serveAsset(env, req, path, type) {
+  const url = new URL(req.url);
+  const res = await env.ASSETS.fetch(new Request(new URL(path, url.origin), { method: 'GET' }));
+  if (!res.ok) return new Response('Not found', { status: 404 });
+  return new Response(res.body, { status: 200, headers: securityHeaders(url.host, type) });
+}
 
 export default {
   async fetch(req, env) {
-    const m = new URL(req.url).pathname.match(/^\/room\/([^/]+)$/);
+    const { pathname } = new URL(req.url);
+
+    // صفحة الضيف: /join/ABCD-EFGH (الشرطة اختيارية)
+    const j = pathname.match(/^\/join\/([A-Za-z0-9-]{8,9})$/);
+    if (j) {
+      if (req.method !== 'GET') return new Response('Method not allowed', { status: 405 });
+      if (!isRoomCode(j[1].toUpperCase().replace(/-/g, ''))) return new Response('Not found', { status: 404 });
+      return serveAsset(env, req, '/guest.html', 'text/html; charset=utf-8');
+    }
+    if (Object.hasOwn(GUEST_FILES, pathname)) {
+      if (req.method !== 'GET') return new Response('Method not allowed', { status: 405 });
+      return serveAsset(env, req, pathname, GUEST_FILES[pathname]);
+    }
+
+    const m = pathname.match(/^\/room\/([^/]+)$/);
     if (!m || !isRoomCode(m[1])) return new Response('Not found', { status: 404 });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('Expected WebSocket', { status: 426 });
     // 60 اتصال جديد في الدقيقة لكل IP — كفاية جداً لأي watch party، وبيمنع السيل

@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
-import { newRoomCode } from '../src/protocol.mjs';
+import { newRoomCode } from '../public/protocol.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8799;
@@ -60,6 +60,28 @@ test('routing: bad room code 404, plain HTTP 426', async () => {
   assert.equal((await fetch(`http://${BASE}/room/bad`)).status, 404);
   assert.equal((await fetch(`http://${BASE}/room/AAAAAAAA/x`)).status, 404);
   assert.equal((await fetch(`http://${BASE}/room/AAAAAAAA`)).status, 426);
+});
+
+test('guest page: /join/CODE served with strict security headers; only listed files exist', async () => {
+  const code = room();
+  const r = await fetch(`http://${BASE}/join/${code.slice(0, 4)}-${code.slice(4)}`);
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /text\/html/);
+  const csp = r.headers.get('content-security-policy');
+  for (const part of ["default-src 'none'", "script-src 'self'", "frame-ancestors 'none'", 'frame-src https://vsembed.ru https://vidsrc.cc https://player.embed-api.stream https://vidlink.pro', `ws://${BASE}`]) assert.ok(csp.includes(part), part);
+  assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(await r.text(), /src="\/guest\.js"/);
+  assert.equal((await fetch(`http://${BASE}/join/${code}`)).status, 200, 'dash optional');
+  for (const [p, st] of [['/join/ABCDEFG0', 404], ['/join/bad', 404], ['/guest.html', 404], ['/public/guest.js', 404], ['/wrangler.toml', 404], ['/', 404]]) {
+    assert.equal((await fetch(`http://${BASE}${p}`)).status, st, p);
+  }
+  assert.equal((await fetch(`http://${BASE}/join/${code}`, { method: 'POST' })).status, 405);
+  for (const f of ['/guest.js', '/guest-logic.mjs', '/protocol.mjs']) {
+    const x = await fetch(`http://${BASE}${f}`);
+    assert.equal(x.status, 200, f);
+    assert.match(x.headers.get('content-type'), /javascript/, f);
+  }
+  assert.match((await fetch(`http://${BASE}/guest.css`)).headers.get('content-type'), /text\/css/);
 });
 
 test('relay: media + state reach everyone in order, late joiner gets current state', async () => {

@@ -121,6 +121,10 @@ try {
     assert.ok(r.shown && r.nav, 'section + nav visible on desktop');
     assert.match(r.txt, /المتثبّتة/); assert.equal(r.ver, 'v' + r.cur); assert.equal(r.btnDisabled, true);
   });
+  await check('web guest page uses the exact same server list as the app (same order)', async () => {
+    const { SERVERS } = await import(new URL('../party-server/public/guest-logic.mjs', import.meta.url));
+    assert.deepEqual(JSON.parse(await app.ev(`JSON.stringify(PLAYER_SERVERS.map(s=>s.tpl))`)), SERVERS);
+  });
   await check('app page cannot read local files', async () => {
     const r = await app.ev(`fetch('file:///C:/Windows/win.ini').then(()=>'READ').catch(()=>'blocked')`);
     assert.equal(r, 'blocked');
@@ -285,7 +289,7 @@ try {
   // ضغطة حقيقية (isTrusted) جوه الفريم — الكنترولر بيبعت بس اللي بعد ضغطة من المستخدم
   const gesture = async fr => { for (const type of ['mousePressed', 'mouseReleased']) await fr('Input.dispatchMouseEvent', { type, x: 5, y: 5, button: 'left', clickCount: 1 }); };
 
-  let pa, pb;
+  let pa, pb, edge = null, W = null, webUrl = null;
   try {
     for (let i = 0; i < 60; i++) { await sleep(500); try { if ((await fetch(`http://127.0.0.1:${RELAY_PORT}/room/AAAAAAAA`)).status === 426) break; } catch (e) {} }
     const env = { WL_PARTY_URL: `ws://127.0.0.1:${RELAY_PORT}` };
@@ -364,6 +368,55 @@ try {
       const b = await vstate(FB);
       assert.ok(!b.p && b.t > 100, 'guest unaffected: ' + JSON.stringify(b));
     });
+    // ---- ضيف من المتصفح (صفحة الويب) في نفس الأوضة: Edge headless + بلاير وهمي بنفس شكل أحداث vsembed ----
+    await check('web guest: link from the app opens the room page with the same movie and peer count', async () => {
+      webUrl = await A.ev(`party.webUrl`);
+      assert.ok(webUrl && webUrl.startsWith(`http://127.0.0.1:${RELAY_PORT}/join/`), String(webUrl));
+      const edgePath = ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe'].find(p => fs.existsSync(p));
+      assert.ok(edgePath, 'Edge not found');
+      // من غير site isolation الـ iframe بيبقى في نفس الـ process، فـ Fetch بتاع الصفحة بيمسك طلب البلاير
+      edge = spawn(edgePath, ['--headless=new', '--remote-debugging-port=9343', `--user-data-dir=${fs.mkdtempSync(path.join(os.tmpdir(), 'wl-edge-'))}`,
+        '--disable-features=IsolateOrigins,site-per-process', '--no-first-run', 'about:blank'], { stdio: 'ignore' });
+      W = await until(async () => { try { return await conn('about:blank', 9343); } catch (e) { return null; } }, 15000, 'edge up');
+      W.on('Fetch.requestPaused', ({ requestId }) => W('Fetch.fulfillRequest', {
+        requestId, responseCode: 200, responseHeaders: [{ name: 'Content-Type', value: 'text/html' }],
+        body: Buffer.from(`<script>addEventListener('message',e=>{const d=e.data;if(d&&d.fake)parent.postMessage({type:'PLAYER_EVENT',data:{player_status:d.fake,player_progress:d.pos,player_duration:8348}},'*')})</script>`).toString('base64'),
+      }));
+      await W('Fetch.enable', { patterns: [{ urlPattern: 'https://vsembed.ru/*' }] });
+      await W('Page.navigate', { url: webUrl });
+      await until(() => W.ev(`document.getElementById('title')?.textContent.includes('Fight Club')`), 8000, 'guest title');
+      assert.equal(await W.ev(`document.getElementById('player').src.startsWith('https://vsembed.ru/embed/movie?tmdb=550')`), true);
+      await until(() => W.ev(`document.getElementById('peers').textContent.includes('3')`), 6000, 'peers 3');
+    });
+    const fake = (status, pos) => W.ev(`document.getElementById('player').contentWindow.postMessage({fake:${JSON.stringify(status)},pos:${pos}},'*');1`);
+    const hintText = () => W.ev(`(e=>e.hidden?'':e.textContent)(document.getElementById('hint'))`);
+
+    await check('web guest: room playing → hint to press play; once the guest player is in sync the hint goes away', async () => {
+      await until(async () => /شغالين/.test(await hintText()), 6000, 'play hint');
+      const roomPos = (await vstate(FA)).t;
+      await fake('playing', roomPos + 1);
+      await until(async () => (await hintText()) === '', 6000, 'hint cleared');
+    });
+    await check('web guest pauses (player event) → both app instances pause near that position', async () => {
+      const pos = (await vstate(FA)).t + 1;
+      await fake('paused', pos);
+      const a = await until(async () => { const v = await vstate(FA); return v.p ? v : null; }, 6000, 'app A paused by web guest');
+      const b = await until(async () => { const v = await vstate(FB); return v.p ? v : null; }, 6000, 'app B paused by web guest');
+      assert.ok(Math.abs(a.t - pos) < 2 && Math.abs(b.t - pos) < 2, JSON.stringify({ pos, a, b }));
+    });
+    await check('app plays → web guest (still paused) gets a hint, its own status is not sent back', async () => {
+      await gesture(FA); await FA.ev(`fv.play().then(()=>1)`);
+      await until(async () => /شغالين/.test(await hintText()), 6000, 'guest told to play');
+      await sleep(1500);
+      assert.equal((await vstate(FA)).p, false, 'guest paused status must not override the room');
+    });
+    await check('web guest page: hostile title from the room is rendered as text', async () => {
+      await A.ev(`partyApi.setMedia({tmdbId:551,type:'movie',srv:0,title:'<img src=x id=pwnweb>'}).then(()=>1)`);
+      await until(() => W.ev(`document.getElementById('title').textContent.includes('<img src=x id=pwnweb>')`), 6000, 'new title');
+      assert.equal(await W.ev(`!!document.getElementById('pwnweb')`), false);
+    });
+    W.close(); killTree(edge); edge = null;
+    await until(() => B.ev(`party.peers===2`), 8000, 'web guest left');
     await check('host leaves → guest sees 1 peer', async () => {
       await A.ev(`partyLeave().then(()=>1)`);
       await until(() => B.ev(`party.peers===1`), 6000, 'guest peers=1');
@@ -372,6 +425,7 @@ try {
     [A, B, FA, FB].forEach(c => c.close());
   } finally {
     pa && pa.kill(); pb && pb.kill();
+    edge && killTree(edge);
     killTree(relay);
   }
 }

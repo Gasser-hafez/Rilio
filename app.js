@@ -1897,7 +1897,10 @@ function renderParty(){
     <div class="ticket">
       <small>كود الأوضة — ابعته لصاحبك</small>
       <div class="code">${esc(fmtCode(party.code))}</div>
-      <button class="btn btn-sm" data-act="partyCopy">${ic('copy','sm')}انسخ الكود</button>
+      <div class="fieldrow" style="justify-content:center">
+        <button class="btn btn-sm" data-act="partyCopy">${ic('copy','sm')}انسخ الكود</button>
+        ${party.webUrl?`<button class="btn btn-sm btn-amber" data-act="partyCopyLink" title="لصحابك اللي معندهمش البرنامج — بيفتح من الموبايل أو أي متصفح">${ic('copy','sm')}انسخ لينك للويب</button>`:''}
+      </div>
     </div>
     <div class="nowon">${m?`${ic('film')}<div><small>بتتفرجوا على</small><b dir="auto">${esc(m.title)}</b>${m.type==='tv'?` <span dir="ltr" style="color:var(--watching);font-weight:600">S${pad(Number(m.season)||1)}E${pad(Number(m.episode)||1)}</span>`:''}</div>`
       :'<span class="sub">مستنيين حد يفتح فيلم أو حلقة من البلاير</span>'}</div>
@@ -1922,6 +1925,12 @@ async function partyLeave(){
   if(wasParty)closeModal();else if(modalId&&playerOpen)renderModal();
   party={...party,status:'idle',code:null,peers:0,media:null,error:null};
   renderParty();
+}
+// لينك صفحة الويب جاي من main (نفس سيرفر الأوضة) — مبيتبنيش من حاجة في الواجهة
+async function partyCopyLink(){
+  if(!party.webUrl)return;
+  try{await navigator.clipboard.writeText(party.webUrl);toast('اللينك اتنسخ ✔ صاحبك يفتحه من الموبايل أو أي متصفح');}
+  catch(e){toast('معرفتش أنسخ — اللينك: '+party.webUrl);}
 }
 async function partyCopy(){
   try{await navigator.clipboard.writeText(fmtCode(party.code));toast('الكود اتنسخ ✔ ابعته لصاحبك');}
@@ -2040,6 +2049,7 @@ document.addEventListener('click',(e)=>{
     case 'partyJoin': partyJoin(); break;
     case 'partyLeave': partyLeave(); break;
     case 'partyCopy': partyCopy(); break;
+    case 'partyCopyLink': partyCopyLink(); break;
     case 'updCheck': updCheck(); break;
     case 'updInstall': updInstall(); break;
     case 'partyWatch': partyClose(); partyOpenMedia(party.media); break;

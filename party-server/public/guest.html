@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#15111C">
+<title>rilio — Watch Party</title>
+<link rel="stylesheet" href="/guest.css">
+<script type="module" src="/guest.js"></script>
+</head>
+<body>
+<header class="top">
+  <span class="brand" aria-label="rilio">rilio</span>
+  <span class="peers" id="peers" hidden></span>
+</header>
+<main>
+  <section class="intro" id="intro">
+    <h1 id="title">بتدخل الأوضة...</h1>
+    <p class="sub" id="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <div class="hint" id="hint" role="status" aria-live="polite" hidden></div>
+
+  <div class="player" id="playerBox" hidden>
+    <iframe id="player" title="البلاير" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="origin"></iframe>
+  </div>
+
+  <p class="note" id="note" hidden></p>
+
+  <section class="about">
+    <p>بتتفرج مع صحابك من المتصفح: لما <b>إنت</b> توقّف أو تشغّل أو تقدّم، الفيديو بيتحرك عندهم. لما <b>هما</b> يوقّفوا، هيظهرلك شريط فوق تعمل زيه — المتصفح مش بيسمحلنا نتحكم في البلاير بتاعك.</p>
+    <p class="warn">البلاير من موقع خارجي وفيه إعلانات — لو اتفتحتلك صفحة تانية اقفلها وارجع هنا.</p>
+    <p>عايز مزامنة كاملة ومن غير إعلانات؟ نزّل <a href="https://github.com/Gasser-hafez/Rilio/releases/latest" target="_blank" rel="noopener noreferrer">برنامج rilio للويندوز</a>.</p>
+  </section>
+</main>
+</body>
+</html>

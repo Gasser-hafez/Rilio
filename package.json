@@ -1,7 +1,7 @@
 {
   "name": "watchlist",
   "productName": "Watchlist",
-  "version": "4.5.0",
+  "version": "4.6.0",
   "description": "قائمة المشاهدة — نسخة الديسكتوب",
   "main": "main.js",
   "partyServer": "wss://watchlist-party.gaser-7afez.workers.dev",
@@ -48,7 +48,7 @@
       "mysteryhide.js",
       "icon*.png",
       "party.js",
-      "party-server/src/protocol.mjs"
+      "party-server/public/protocol.mjs"
     ]
   },
   "devDependencies": {

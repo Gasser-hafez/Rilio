@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import {
   isRoomCode, newRoomCode, validMedia, parseClientMessage, applyMessage, snapshot, rateLimit,
   emptyRoom, parseServerMessage, RATE_MAX_MESSAGES, RATE_WINDOW_MS, MAX_MESSAGE_BYTES,
-} from '../src/protocol.mjs';
+} from '../public/protocol.mjs';
 
 const movie = { tmdbId: 550, type: 'movie', srv: 0, title: 'Fight Club' };
 const ep = { tmdbId: 1399, type: 'tv', srv: 1, season: 2, episode: 5, title: 'GoT' };

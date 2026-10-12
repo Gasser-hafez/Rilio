@@ -3,7 +3,7 @@
 const { ipcMain } = require('electron');
 const { randomBytes } = require('crypto');
 // protocol.mjs مكتوب ESM عشان يتشارك مع السيرفر — Node 22+ بيدعم require(esm)
-const { isRoomCode, newRoomCode, validMedia, validState, parseServerMessage } = require('./party-server/src/protocol.mjs');
+const { isRoomCode, newRoomCode, validMedia, validState, parseServerMessage } = require('./party-server/public/protocol.mjs');
 
 const PING_EVERY_MS = 25 * 1000;
 const RECONNECT_MAX_MS = 15 * 1000;
@@ -26,7 +26,10 @@ function initParty({ getWindow, serverUrl, fromApp }) {
 
   const win = () => getWindow();
   const toApp = (ch, payload) => { const w = win(); if (w && !w.isDestroyed()) w.webContents.send(ch, payload); };
-  const pushStatus = (error) => toApp('wl:party:status', { status, code, peers, media, error: error || null });
+  // لينك صفحة الويب لصحابك اللي معندهمش البرنامج — نفس سيرفر الأوضة بـ https
+  const webBase = serverUrl ? serverUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:') : '';
+  const webUrl = () => (code && webBase ? `${webBase}/join/${code.slice(0, 4)}-${code.slice(4)}` : null);
+  const pushStatus = (error) => toApp('wl:party:status', { status, code, peers, media, webUrl: webUrl(), error: error || null });
 
   // الوقت المتوقع دلوقتي للفيديو حسب آخر حالة من الأوضة
   const expectedPos = () => !desired ? 0 : desired.paused ? desired.pos : desired.pos + (Date.now() - desired.at) / 1000;
@@ -168,7 +171,7 @@ function initParty({ getWindow, serverUrl, fromApp }) {
   });
   ipcMain.handle('wl:party:status', e => {
     if (!fromApp(e)) throw new Error('forbidden');
-    return { status, code, peers, media, error: null, enabled: !!serverUrl };
+    return { status, code, peers, media, webUrl: webUrl(), error: null, enabled: !!serverUrl };
   });
 
   /* ---------- IPC من فريمات البلاير ---------- */
