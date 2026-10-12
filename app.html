@@ -560,6 +560,36 @@
   .setsec h3,.sec-h h3{font-family:var(--display);font-weight:700;font-size:21px}
   .sec-h{padding-inline-end:56px}
   .sec-h p{color:var(--muted);font-size:14px;margin-top:2px}
+  /* ---- الإعدادات: كل قسم صفحة ---- */
+  .setbody{max-height:min(86vh,820px);overflow-y:auto}
+  .spage{display:flex;flex-direction:column;gap:12px;padding-inline-end:56px}
+  .spage[hidden]{display:none}
+  .spage>h3{font-family:var(--display);font-weight:700;font-size:21px;margin:0}
+  .spage>h3.mt{margin-top:14px}
+  .spage>.sub{margin-top:-6px}
+  .kcard,.dcard{display:flex;flex-direction:column;gap:10px;padding:18px;border:1px solid var(--line);border-radius:20px;background:var(--surface-2)}
+  .dcard>b{font-family:var(--display);font-size:17px}
+  .khead{display:flex;align-items:center;gap:10px}
+  .khead b{font-family:var(--display);font-size:18px}
+  .kbadge{margin-inline-start:auto;font-size:13px;font-weight:600;padding:3px 10px;border-radius:999px}
+  .kbadge.ok{color:var(--watching);background:color-mix(in srgb,var(--watching) 14%,transparent)}
+  .kbadge.bad{color:#FF7A7A;background:color-mix(in srgb,#FF7A7A 14%,transparent)}
+  .kbadge.warn{color:var(--queue);background:color-mix(in srgb,var(--queue) 14%,transparent)}
+  .kbadge.soft{color:var(--muted);background:var(--hover)}
+  .krow{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .linkbtn{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;background:none;border:none;padding:0;color:var(--accent);font-size:14px;cursor:pointer}
+  .linkbtn:hover{text-decoration:underline}
+  .adv{border:1px solid var(--line);border-radius:18px;margin-top:6px}
+  .adv>summary{cursor:pointer;padding:12px 16px;font-weight:600;color:var(--muted);list-style:none}
+  .adv>summary::-webkit-details-marker{display:none}
+  .adv>summary::before{content:'▸ ';display:inline-block;transition:transform .2s}
+  .adv[open]>summary::before{transform:rotate(90deg)}
+  .advin{display:flex;flex-direction:column;gap:8px;padding:0 16px 16px}
+  .ferr{color:#FF7A7A;font-size:13px;min-height:1em}
+  .tmdbnote{font-size:12.5px}
+  /* الشروط من "عن rilio" للقراية بس */
+  #welcomeOverlay.guide .wagree,#welcomeOverlay.guide [data-step="terms"] .wfoot{display:none}
+  @media(max-width:820px){.spage{padding-inline-end:0}.setbody{max-height:none}}
   .themes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
   @media(max-width:820px){.themes{grid-template-columns:repeat(2,minmax(0,1fr))}}
   .theme-card{padding:8px;border-radius:20px;border:2px solid var(--line);background:var(--surface-2);display:flex;flex-direction:column;text-align:start;transition:transform .2s,border-color .2s}
@@ -932,21 +962,21 @@
   <div class="modal settings" role="dialog" aria-label="الإعدادات">
     <nav class="setnav" aria-label="أقسام الإعدادات">
       <h2>الإعدادات</h2>
-      <button data-act="setNav" data-v="secTheme" class="on" style="--c:var(--accent)"><i></i>المزاج</button>
-      <button data-act="setNav" data-v="secKeys" style="--c:var(--queue)"><i></i>مفاتيح الـ API</button>
+      <button data-act="setNav" data-v="pgGeneral" class="on" style="--c:var(--accent)"><i></i>عام</button>
+      <button data-act="setNav" data-v="pgKeys" style="--c:var(--queue)"><i></i>المفاتيح</button>
       <button data-act="setNav" data-v="aiSec" id="navAi" style="--c:var(--watched);display:none"><i></i>الذكاء الاصطناعي</button>
-      <button data-act="setNav" data-v="secPlayer" style="--c:var(--watching)"><i></i>البلاير والتحميل</button>
-      <button data-act="setNav" data-v="secSites" style="--c:#9BE4A8"><i></i>مواقع المشاهدة</button>
-      <button data-act="setNav" data-v="secBackup" style="--c:var(--dropped)"><i></i>النسخ الاحتياطي</button>
-      <button data-act="setNav" data-v="updSec" id="navUpd" style="--c:var(--accent);display:none"><i></i>التحديثات</button>
+      <button data-act="setNav" data-v="pgWatch" style="--c:var(--watching)"><i></i>المشاهدة</button>
+      <button data-act="setNav" data-v="pgSites" style="--c:#9BE4A8"><i></i>مواقع المشاهدة</button>
+      <button data-act="setNav" data-v="pgData" style="--c:var(--dropped)"><i></i>البيانات</button>
+      <button data-act="setNav" data-v="pgAbout" style="--c:var(--muted)"><i></i>عن rilio</button>
       <div class="ver"><span class="wordmark" aria-label="rilio">r<span class="i1">i</span>l<span class="i2">i</span><span class="o"></span></span><span id="verTxt" dir="ltr"></span></div>
     </nav>
-    <div class="setbody">
+    <div class="setbody" id="setBody">
       <button class="mclose plain" data-act="settingsClose" title="إغلاق" aria-label="إغلاق"><i data-ic="x"></i></button>
 
-      <section id="secTheme" class="sec-h" style="scroll-margin-top:20px">
+      <section class="spage" id="pgGeneral">
         <h3>المزاج</h3>
-        <p>اختار الجو اللي يريّح عينك — بيتغيّر على طول</p>
+        <p class="sub">اختار الجو اللي يريّح عينك — بيتغيّر على طول</p>
         <div class="themes" id="themesBox">
           <button class="theme-card" data-act="theme" data-v="sahra">
             <span class="tprev" style="background:#15111C"><span class="tline"><b style="background:#FF9466"></b><b style="background:#3A3149"></b></span><span class="tposters"><b style="background:#3A2350"></b><b style="background:#153A47"></b><b style="background:#4A2B26"></b></span></span>
@@ -965,22 +995,47 @@
             <span class="tname">شروق</span><span class="tdesc">فاتح للنهار</span>
           </button>
         </div>
+        <h3 class="mt">الترجمة الافتراضية</h3>
+        <p class="sub">بتتفعّل لوحدها وقت التشغيل لو السيرفر عنده ترجمة باللغة دي</p>
+        <div class="sublangs" id="subLangs">
+          <button class="sl" data-act="subLang" data-v="ar">عربي</button>
+          <button class="sl" data-act="subLang" data-v="en">إنجليزي</button>
+          <button class="sl" data-act="subLang" data-v="fr">فرنسي</button>
+          <button class="sl" data-act="subLang" data-v="es">إسباني</button>
+          <button class="sl" data-act="subLang" data-v="off">بدون</button>
+        </div>
       </section>
 
-      <details class="setsec" id="secKeys"><summary><i style="--c:var(--queue)"></i>مفاتيح الـ API</summary><div class="ssin">
-        <label for="apiKey">مفتاح OMDb — متسجّل بالفعل، غيّره بس لو عايز تستخدم مفتاح تاني</label>
-        <div class="fieldrow">
-          <input type="text" id="apiKey" dir="ltr" placeholder="مثال: a1b2c3d4">
-          <button class="btn btn-amber" data-act="saveKey">حفظ</button>
+      <section class="spage" id="pgKeys" hidden>
+        <h3>المفاتيح</h3>
+        <p class="sub">بتتخزن على جهازك بس، وأي مفتاح بيتأكد إنه شغال قبل ما يتحفظ.</p>
+        <div class="kcard">
+          <div class="khead"><b>TMDB</b><span class="wtag">مهم</span><span class="kbadge" id="tmdbBadge"></span></div>
+          <p class="sub">البوسترات والخلفيات والبلاير وتنبيهات المواسم الجديدة</p>
+          <div class="fieldrow">
+            <input type="password" id="tmdbKey" dir="ltr" autocomplete="off" spellcheck="false" placeholder="API Key أو eyJhbGci...">
+            <button class="btn btn-amber" data-act="keySave" data-k="tmdb">احفظ واتأكد</button>
+          </div>
+          <div class="kstat" id="tmdbStat" role="status" aria-live="polite"></div>
+          <button class="linkbtn" data-act="keyGuide" data-k="tmdb"><i data-ic="bulb"></i>إزاي أجيب المفتاح؟</button>
         </div>
-        <label for="tmdbKey">مفتاح TMDB — للخلفيات وتنبيهات المواسم والبلاير ولينكات {tmdbID} (من themoviedb.org/settings/api)</label>
-        <div class="fieldrow">
-          <input type="text" id="tmdbKey" dir="ltr" placeholder="API Key أو eyJhbGci...">
-          <button class="btn btn-amber" data-act="saveTmdb">حفظ</button>
+        <div class="kcard">
+          <div class="khead"><b>OMDb</b><span class="wtag soft">اختياري</span><span class="kbadge" id="omdbBadge"></span></div>
+          <p class="sub">تقييم IMDb وRotten Tomatoes. فيه مفتاح مشترك شغال، بس كل الناس بتستخدمه فممكن يخلص حده — مفتاحك أضمن.</p>
+          <div class="fieldrow">
+            <input type="password" id="apiKey" dir="ltr" autocomplete="off" spellcheck="false" placeholder="سيبه فاضي = المفتاح المشترك">
+            <button class="btn btn-amber" data-act="keySave" data-k="omdb">احفظ واتأكد</button>
+          </div>
+          <div class="kstat" id="omdbStat" role="status" aria-live="polite"></div>
+          <div class="krow">
+            <button class="linkbtn" data-act="keyGuide" data-k="omdb"><i data-ic="bulb"></i>إزاي أجيب المفتاح؟</button>
+            <button class="linkbtn" data-act="keyShared" id="keySharedBtn"><i data-ic="undo"></i>رجّع للمفتاح المشترك</button>
+          </div>
         </div>
-      </div></details>
+      </section>
 
-      <details class="setsec" id="aiSec" style="display:none"><summary><i style="--c:var(--watched)"></i>الذكاء الاصطناعي</summary><div class="ssin">
+      <section class="spage" id="aiSec" hidden>
+        <h3>الذكاء الاصطناعي</h3>
         <div class="sub">وصّل أي AI وزرار "رشّحلي" هيشتغل لوحده — سيرفر على جهازك مجاني (Ollama أو LM Studio)، أو خدمة بمفتاحك. المفتاح بيتحفظ متشفّر ومبيدخلش في النسخة الاحتياطية</div>
         <label>اختار الخدمة</label>
         <div class="providers" id="aiProviders" role="group" aria-label="الخدمة">
@@ -1020,36 +1075,37 @@
           <div class="spacer"></div>
           <button class="btn btn-ghost btn-danger" data-act="aiClear">امسح إعدادات الـ AI</button>
         </div>
-      </div></details>
+      
+      </section>
 
-      <details class="setsec" id="secPlayer"><summary><i style="--c:var(--watching)"></i>البلاير والتحميل</summary><div class="ssin">
-        <label>الترجمة الافتراضية</label>
-        <div class="sublangs" id="subLangs">
-          <button class="sl" data-act="subLang" data-v="ar">عربي</button>
-          <button class="sl" data-act="subLang" data-v="en">إنجليزي</button>
-          <button class="sl" data-act="subLang" data-v="fr">فرنسي</button>
-          <button class="sl" data-act="subLang" data-v="es">إسباني</button>
-          <button class="sl" data-act="subLang" data-v="off">بدون</button>
-        </div>
-        <div class="sub">بتتفعّل لوحدها وقت التشغيل لو السيرفر عنده ترجمة باللغة دي</div>
+      <section class="spage" id="pgWatch" hidden>
+        <h3>السيرفر الافتراضي</h3>
+        <p class="sub">البلاير بيفتح عليه — وتقدر تبدّل من جوه البلاير لو واحد مش شغال. في الـ Watch Party: سيرفر 1 أو 4 عشان صحابك اللي على الويب يتزامنوا معاك.</p>
+        <div class="sublangs" id="defSrv" role="radiogroup" aria-label="السيرفر الافتراضي"></div>
+        <h3 class="mt">الحماية</h3>
         <div class="shieldrow">
           <span class="sq"><i data-ic="shield"></i></span>
           <span class="grow"><b style="font-weight:600;display:block">مانع الإعلانات الصارم</b><span class="sub">العادي بيمنع الـ popups لوحده — فعّل الصارم بس مع دومين مخصص</span></span>
           <button class="switch" role="switch" aria-checked="false" data-act="playerShield" id="shieldBtn" aria-label="مانع الإعلانات الصارم"></button>
         </div>
-        <label for="playerTpl">قالب البلاير — لو الدومين وقع: <span dir="ltr">vidsrc-embed.su · vidsrcme.su · vsrc.su</span></label>
-        <div class="fieldrow">
-          <input type="text" id="playerTpl" dir="ltr" class="mono">
-          <button class="btn btn-amber" data-act="savePlayer">حفظ</button>
-        </div>
-        <label for="dlTpl">لينك التحميل — نفس الـ placeholders: <b dir="ltr">{type}</b> <b dir="ltr">{tmdbID}</b> <b dir="ltr">{imdbID}</b></label>
-        <div class="fieldrow">
-          <input type="text" id="dlTpl" dir="ltr" class="mono">
-          <button class="btn btn-amber" data-act="saveDl">حفظ</button>
-        </div>
-      </div></details>
+        <details class="adv">
+          <summary>متقدم</summary>
+          <div class="advin">
+            <label for="playerTpl">قالب البلاير المخصص — بيظهر كـ "مخصص" في السيرفرات. لو الدومين وقع جرّب: <span dir="ltr">vidsrc-embed.su · vidsrcme.su · vsrc.su</span></label>
+            <input type="text" id="playerTpl" dir="ltr" class="mono" spellcheck="false">
+            <div class="ferr" id="playerTplErr" role="alert"></div>
+            <label for="dlTpl">لينك زرار التحميل</label>
+            <input type="text" id="dlTpl" dir="ltr" class="mono" spellcheck="false">
+            <div class="ferr" id="dlTplErr" role="alert"></div>
+            <div class="sub">بيتحفظوا لوحدهم أول ما تخرج من الخانة، وفاضي = الافتراضي. الـ placeholders: <b dir="ltr">{tmdbID}</b> <b dir="ltr">{imdbID}</b> <b dir="ltr">{type}</b> <b dir="ltr">{season}</b> <b dir="ltr">{episode}</b></div>
+          </div>
+        </details>
+      </section>
 
-      <details class="setsec" id="secSites"><summary><i style="--c:#9BE4A8"></i>مواقع المشاهدة</summary><div class="ssin">
+      <section class="spage" id="pgSites" hidden>
+        <h3>مواقع المشاهدة</h3>
+        <p class="sub">مواقع بتظهر كزراير في صفحة أي فيلم أو مسلسل في "هشوفهم" و"بتفرج"، وبتفتح في نافذة جوه البرنامج.</p>
+        
         <div class="sub">الـ placeholders: <b dir="ltr">{q}</b> اسم العمل، <b dir="ltr">{tmdbID}</b> رقم TMDB، <b dir="ltr">{type}</b> movie أو tv، <b dir="ltr">{season}</b> و<b dir="ltr">{episode}</b> الحلقة الجاية (وبيتشالوا لوحدهم مع الأفلام). مثال: <span dir="ltr" style="color:var(--ink)">lordflix.org/watch/{type}/{tmdbID}</span></div>
         <div id="sitesList" style="display:flex;flex-direction:column;gap:6px"></div>
         <div class="fieldrow">
@@ -1057,32 +1113,51 @@
           <input type="text" id="siteUrl" dir="ltr" placeholder="https://example.com/?s={q}" style="flex:2;min-width:200px">
           <button class="btn btn-amber" data-act="addSite"><i data-ic="plus"></i>إضافة</button>
         </div>
-      </div></details>
+      
+      </section>
 
-      <details class="setsec" id="secBackup"><summary><i style="--c:var(--dropped)"></i>النسخ الاحتياطي ونقل الإعدادات</summary><div class="ssin">
-        <div class="sub">القايمة والتقييمات والمفاتيح والمواقع كلها في ملف واحد — خد نسخة قبل أي تجربة، والاسترجاع بيرجّع كل حاجة حتى على تثبيت جديد</div>
-        <div class="fieldrow">
-          <button class="btn btn-amber" data-act="backup"><i data-ic="download"></i>نزّل نسخة احتياطية</button>
-          <button class="btn" data-act="restore"><i data-ic="upload"></i>استرجاع من ملف</button>
-          <input type="file" id="restoreFile" accept=".json,application/json" style="display:none">
+      <section class="spage" id="pgData" hidden>
+        <h3>البيانات</h3>
+        <div class="dcard">
+          <b>نسخة احتياطية كاملة</b>
+          <p class="sub">القايمة والتقييمات والملاحظات + كل الإعدادات والمفاتيح. خد نسخة قبل أي تجربة، والاسترجاع بيرجّع كل حاجة حتى على جهاز جديد. <b>متبعتهاش لحد</b> — فيها مفاتيحك وقايمتك.</p>
+          <div class="fieldrow">
+            <button class="btn btn-amber" data-act="backup"><i data-ic="download"></i>نزّل نسخة احتياطية</button>
+            <button class="btn" data-act="restore"><i data-ic="upload"></i>استرجاع من نسخة</button>
+            <input type="file" id="restoreFile" accept=".json,application/json" style="display:none">
+          </div>
         </div>
-        <label style="margin-top:6px">نقل الإعدادات بين المتصفحات</label>
-        <div class="sub">بيصدّر الإعدادات بس (المفاتيح، المواقع، قالب البلاير، التفضيلات) من غير القايمة</div>
-        <div class="fieldrow">
-          <button class="btn" data-act="setExport"><i data-ic="download"></i>صدّر الإعدادات</button>
-          <button class="btn" data-act="setImport"><i data-ic="upload"></i>استورد إعدادات</button>
-          <input type="file" id="setFile" accept=".json,application/json" style="display:none">
+        <div class="dcard">
+          <b>الإعدادات بس</b>
+          <p class="sub">المفاتيح والمواقع والتفضيلات من غير القايمة — ده الملف اللي تبعته لصاحبك عشان يبدأ على طول من غير ما يجيب مفاتيح.</p>
+          <div class="fieldrow">
+            <button class="btn" data-act="setExport"><i data-ic="download"></i>صدّر الإعدادات</button>
+            <button class="btn" data-act="setImport"><i data-ic="upload"></i>استورد إعدادات</button>
+            <input type="file" id="setFile" accept=".json,application/json" style="display:none">
+          </div>
         </div>
-      </div></details>
-      <details class="setsec" id="updSec" style="display:none"><summary><i style="--c:var(--accent)"></i>التحديثات</summary><div class="ssin">
-        <div class="sub" id="updCur"></div>
-        <div id="updStatus" role="status" aria-live="polite"></div>
-        <div class="updbar" id="updBar" hidden><b id="updFill"></b></div>
-        <div class="fieldrow">
-          <button class="btn" data-act="updCheck" id="updCheckBtn"><i data-ic="refresh"></i>دوّر على تحديث</button>
-          <button class="btn btn-amber" data-act="updInstall" id="updInstallBtn" hidden>ثبّت وأعد التشغيل</button>
+      </section>
+
+      <section class="spage" id="pgAbout" hidden>
+        <h3>عن rilio</h3>
+        <div class="dcard" id="updSec" style="display:none">
+          <b>التحديثات</b>
+          <div class="sub" id="updCur"></div>
+          <div id="updStatus" role="status" aria-live="polite"></div>
+          <div class="updbar" id="updBar" hidden><b id="updFill"></b></div>
+          <div class="fieldrow">
+            <button class="btn" data-act="updCheck" id="updCheckBtn"><i data-ic="refresh"></i>دوّر على تحديث</button>
+            <button class="btn btn-amber" data-act="updInstall" id="updInstallBtn" hidden>ثبّت وأعد التشغيل</button>
+          </div>
         </div>
-      </div></details>
+        <div class="dcard">
+          <div class="krow">
+            <button class="linkbtn" data-act="openGh"><i data-ic="github"></i>صفحة البرنامج على GitHub</button>
+            <button class="linkbtn" data-act="showTerms"><i data-ic="clipboard"></i>اقرا شروط الاستخدام</button>
+          </div>
+          <p class="sub tmdbnote">البرنامج بيستخدم TMDB API بس مش معتمد من TMDB. تقييمات IMDb وRotten Tomatoes من OMDb.</p>
+        </div>
+      </section>
     </div>
   </div>
 </div>

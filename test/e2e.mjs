@@ -115,10 +115,10 @@ try {
   await check('updates section: shows current version; dev build never checks or installs', async () => {
     const r = await app.ev(`(async()=>{const st=await __wlDesktop.update.check();const inst=await __wlDesktop.update.install();
       await new Promise(r=>setTimeout(r,200));
-      return {st:st.status,cur:st.current,inst,shown:$('updSec').style.display!=='none',nav:$('navUpd').style.display!=='none',
+      return {st:st.status,cur:st.current,inst,shown:$('updSec').style.display!=='none',nav:$('updSec').closest('.spage')?.id==='pgAbout',
         txt:$('updStatus').textContent,ver:$('verTxt').textContent,btnDisabled:$('updCheckBtn').disabled}})()`);
     assert.equal(r.st, 'dev'); assert.equal(r.inst, false);
-    assert.ok(r.shown && r.nav, 'section + nav visible on desktop');
+    assert.ok(r.shown && r.nav, 'updates block visible on desktop, inside the about page');
     assert.match(r.txt, /المتثبّتة/); assert.equal(r.ver, 'v' + r.cur); assert.equal(r.btnDisabled, true);
   });
   await check('web guest page uses the exact same server list as the app (same order)', async () => {
@@ -457,9 +457,12 @@ try {
 
     await check('web guest: room playing → hint to press play; once the guest player is in sync the hint goes away', async () => {
       await until(async () => /شغالين/.test(await hintText()), 6000, 'play hint');
-      const roomPos = (await vstate(FA)).t;
+      // مكان الأوضة زي ما الصفحة شايفاه (الوقت المكتوب في الشريط) — مش من فيديو البرنامج، عشان فرق التوقيت بين الاتنين ميأثرش
+      const t = await W.ev(`document.querySelector('#hint .t').textContent`);
+      const roomPos = t.split(':').reduce((a, x) => a * 60 + Number(x), 0);
       await fake('playing', roomPos + 1);
-      await until(async () => (await hintText()) === '', 6000, 'hint cleared');
+      try { await until(async () => (await hintText()) === '', 6000, 'hint cleared'); }
+      catch (e) { throw new Error(e.message + ' — hint: ' + (await hintText()) + ' | roomPos(page)=' + roomPos + ' | app A=' + JSON.stringify(await vstate(FA))); }
     });
     await check('web guest pauses (player event) → both app instances pause near that position', async () => {
       const pos = (await vstate(FA)).t + 1;
@@ -583,7 +586,7 @@ try {
   });
   await check('UI: "رشّحلي" button fills the pick list with titles and reasons', async () => {
     const r = await app.ev(`(async()=>{await aiLoad();$('tasteBtn').click();
-      const shown=getComputedStyle($('aiRunBtn')).display!=='none'&&getComputedStyle($('aiSec')).display!=='none';
+      const shown=getComputedStyle($('aiRunBtn')).display!=='none'&&getComputedStyle($('navAi')).display!=='none'; // الـ AI صفحة في الإعدادات — المهم إن زرارها ظاهر على الديسكتوب
       await aiRun();return {shown,rows:[...document.querySelectorAll('#impList .impRow')].map(x=>x.innerText.replace(/\\s+/g,' ').trim())}})()`);
     assert.equal(r.shown, true);
     assert.equal(r.rows.length, 1); assert.match(r.rows[0], /Heat.*سبب/);
@@ -640,6 +643,115 @@ try {
   });
   app.close();
 } finally { proc.kill(); mock.close(); }
+}
+
+// ---------- تشغيل 6: أول تشغيل (الشروط + شرح المفاتيح) والإعدادات الجديدة ----------
+{
+  const ud6 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-'));
+  const GOOD_TMDB = '0123456789abcdef0123456789abcdef', GOOD_OMDB = 'good1234';
+  const until = async (fn, ms = 6000, what = 'condition') => {
+    const end = Date.now() + ms;
+    for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error('timeout: ' + what); await sleep(200); }
+  };
+  proc = await launch(ud6);
+  try {
+    console.log('run 6: first run (terms + key guide) and settings');
+    const app = await conn('app://local/');
+    // TMDB/OMDb متزيّفين: مفتاح واحد بس صحيح لكل خدمة
+    app.on('Fetch.requestPaused', ({ requestId, request }) => {
+      const u = new URL(request.url);
+      let status = 200, json = {};
+      if (u.host === 'api.themoviedb.org') {
+        const ok = u.searchParams.get('api_key') === GOOD_TMDB;
+        status = ok ? 200 : 401; json = ok ? { images: {} } : { status_message: 'Invalid API key' };
+      } else if (u.host === 'www.omdbapi.com') {
+        const ok = u.searchParams.get('apikey') === GOOD_OMDB;
+        status = ok ? 200 : 401; json = ok ? { Response: 'True', Title: 'The Shawshank Redemption' } : { Response: 'False', Error: 'Invalid API key!' };
+      }
+      app('Fetch.fulfillRequest', { requestId, responseCode: status, body: Buffer.from(JSON.stringify(json)).toString('base64'),
+        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Access-Control-Allow-Origin', value: '*' }] });
+    });
+    await app('Fetch.enable', { patterns: [{ urlPattern: 'https://api.themoviedb.org/*' }, { urlPattern: 'https://www.omdbapi.com/*' }] });
+    const stored = k => app.ev(`chrome.storage.local.get(${JSON.stringify(k)}).then(d=>d[${JSON.stringify(k)}]??null)`);
+    const step = () => app.ev(`wsteps[wix]`);
+
+    await check('first run: terms first; continue disabled until the box is ticked; acceptance is versioned', async () => {
+      const r = JSON.parse(await app.ev(`JSON.stringify({shown:$('welcomeOverlay').classList.contains('show'),steps:wsteps,dis:$('wAgreeBtn').disabled})`));
+      assert.deepEqual(r, { shown: true, steps: ['terms', 'choice', 'tmdb', 'omdb', 'done'], dis: true });
+      await app.ev(`wAgree().then(()=>1)`);
+      assert.equal(await step(), 'terms', 'not accepted without the checkbox');
+      await app.ev(`$('wAgree').click();1`);
+      assert.equal(await app.ev(`$('wAgreeBtn').disabled`), false);
+      await app.ev(`$('wAgreeBtn').click();1`); await sleep(200);
+      assert.equal(await stored('watchlist:termsAccepted'), '1');
+      assert.equal(await step(), 'choice');
+    });
+    await check('TMDB step: a wrong key is rejected and NOT saved; a working key is saved and moves on', async () => {
+      await app.ev(`$('wFresh')?.click?.();document.querySelector('[data-act="wFresh"]').click();1`); await sleep(100);
+      assert.equal(await step(), 'tmdb');
+      await app.ev(`$('wTmdb').value='ffffffffffffffffffffffffffffffff';wKeySave('tmdb').then(()=>1)`);
+      assert.match(await app.ev(`$('wTmdbStat').textContent`), /مش شغال/);
+      assert.equal(await stored('watchlist:tmdbkey'), null);
+      await app.ev(`$('wTmdb').value=${JSON.stringify(GOOD_TMDB)};wKeySave('tmdb').then(()=>1)`);
+      assert.match(await app.ev(`$('wTmdbStat').textContent`), /شغال واتحفظ/);
+      assert.equal(await stored('watchlist:tmdbkey'), GOOD_TMDB);
+      await until(async () => (await step()) === 'omdb', 3000, 'auto next to OMDb');
+    });
+    await check('OMDb is optional: skip → done → onboarded; reopening shows nothing', async () => {
+      await app.ev(`$('wOmdbSkip').click();1`);
+      assert.equal(await step(), 'done');
+      await app.ev(`document.querySelector('[data-act="wDone"]').click();1`); await sleep(200);
+      assert.equal(await stored('watchlist:onboarded'), '1');
+      assert.equal(await app.ev(`$('welcomeOverlay').classList.contains('show')`), false);
+      await app.ev(`startOnboarding().then(()=>1)`);
+      assert.equal(await app.ev(`$('welcomeOverlay').classList.contains('show')`), false);
+    });
+    await check('existing user + new terms version → only the terms screen (no key steps)', async () => {
+      await app.ev(`chrome.storage.local.set({'watchlist:termsAccepted':'0'}).then(()=>startOnboarding()).then(()=>1)`);
+      assert.deepEqual(JSON.parse(await app.ev(`JSON.stringify(wsteps)`)), ['terms']);
+      await app.ev(`$('wAgree').click();$('wAgreeBtn').click();1`); await sleep(200);
+      assert.equal(await app.ev(`$('welcomeOverlay').classList.contains('show')`), false);
+    });
+    await check('settings: one page at a time; keys page shows live status (TMDB ok, OMDb shared)', async () => {
+      await app.ev(`openSettings('pgKeys');1`);
+      await until(() => app.ev(`$('tmdbBadge').textContent.includes('شغال')`), 4000, 'tmdb badge');
+      const r = JSON.parse(await app.ev(`JSON.stringify({visible:[...document.querySelectorAll('#setBody .spage')].filter(p=>!p.hidden).map(p=>p.id),omdb:$('omdbBadge').textContent,sharedBtn:$('keySharedBtn').hidden})`));
+      assert.deepEqual(r, { visible: ['pgKeys'], omdb: 'المفتاح المشترك', sharedBtn: true });
+    });
+    await check('settings: wrong OMDb key not saved; good key saved; back to shared clears it', async () => {
+      await app.ev(`$('apiKey').value='bad99999';keySave('omdb').then(()=>1)`);
+      assert.equal(await stored('watchlist:omdbkey'), null);
+      await app.ev(`$('apiKey').value=${JSON.stringify(GOOD_OMDB)};keySave('omdb').then(()=>1)`);
+      assert.equal(await stored('watchlist:omdbkey'), GOOD_OMDB);
+      assert.equal(await app.ev(`$('keySharedBtn').hidden`), false);
+      await app.ev(`keyShared().then(()=>1)`);
+      assert.equal(await stored('watchlist:omdbkey'), '');
+      assert.equal(await app.ev(`$('omdbBadge').textContent`), 'المفتاح المشترك');
+    });
+    await check('settings: advanced templates validated on change (javascript: rejected), default server saved', async () => {
+      await app.ev(`setNav('pgWatch');$('playerTpl').value='javascript:alert(1)';$('playerTpl').dispatchEvent(new Event('change'));1`);
+      await sleep(200);
+      assert.match(await app.ev(`$('playerTplErr').textContent`), /https/);
+      assert.equal(await stored('watchlist:playerTpl'), null);
+      await app.ev(`$('playerTpl').value='https://example.org/e/{type}/{tmdbID}';$('playerTpl').dispatchEvent(new Event('change'));1`);
+      await sleep(300);
+      assert.equal(await stored('watchlist:playerTpl'), 'https://example.org/e/{type}/{tmdbID}');
+      assert.match(await app.ev(`$('defSrv').textContent`), /مخصص/, 'custom template shows as a server option');
+      await app.ev(`document.querySelector('#defSrv [data-ix="3"]').click();1`); await sleep(300);
+      assert.equal(await stored('watchlist:playerSrv'), '3');
+      assert.equal(await app.ev(`playerSrv`), 3);
+    });
+    await check('terms can be re-read from "about" (read-only, closable); key-guide links are allowlisted exactly', async () => {
+      await app.ev(`setNav('pgAbout');document.querySelector('[data-act="showTerms"]').click();1`);
+      const r = JSON.parse(await app.ev(`JSON.stringify({step:wsteps[wix],guide:$('welcomeOverlay').classList.contains('guide'),agreeHidden:getComputedStyle(document.querySelector('.wagree')).display==='none',close:!$('wClose').hidden})`));
+      assert.deepEqual(r, { step: 'terms', guide: true, agreeHidden: true, close: true });
+      await app.ev(`$('wClose').click();1`);
+      for (const u of ['https://www.themoviedb.org/signup?next=evil', 'https://www.themoviedb.org/login', 'https://www.omdbapi.com/', 'https://themoviedb.org/signup']) {
+        assert.equal(await app.ev(`__wlDesktop.openExternal(${JSON.stringify(u)})`), false, u);
+      }
+    });
+    app.close();
+  } finally { proc.kill(); await sleep(1000); }
 }
 
 console.log(`\n${passed} checks passed`);

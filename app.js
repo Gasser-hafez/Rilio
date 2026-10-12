@@ -197,7 +197,7 @@ async function load(){
   try{items=parseItems(await sget(KEY));}
   catch(e){items=[];}
   await seedOnce();
-  $('apiKey').value=(await sget('watchlist:omdbkey'))||DEFAULT_OMDB_KEY;
+  $('apiKey').value=(await sget('watchlist:omdbkey'))||'';
   $('tmdbKey').value=(await sget('watchlist:tmdbkey'))||'';
   $('playerTpl').value=(await sget('watchlist:playerTpl'))||DEFAULT_PLAYER;
   $('dlTpl').value=(await sget('watchlist:dlTpl'))||DEFAULT_DL;
@@ -250,17 +250,86 @@ async function setTheme(t){
 }
 
 /* ================= مودال الإعدادات ================= */
-function openSettings(){
+function openSettings(page){
   shieldLabel();
   document.querySelectorAll('#subLangs .sl').forEach(b=>b.classList.toggle('on',b.dataset.v===(subLang||'ar')));
+  renderDefSrv();
+  setNav(typeof page==='string'?page:'pgGeneral');
   $('settingsOverlay').classList.add('show');
 }
+// كل قسم صفحة لوحده — القايمة الجانبية بتبدّل الصفحة بدل ما تنزل في صفحة طويلة
 function setNav(id){
-  const el=$(id);if(!el)return;
-  if(el.tagName==='DETAILS')el.open=true;
-  el.scrollIntoView({behavior:'smooth',block:'start'});
+  const page=$(id);if(!page||!page.classList.contains('spage'))return;
+  document.querySelectorAll('#setBody .spage').forEach(p=>{p.hidden=p!==page;});
   document.querySelectorAll('.setnav button').forEach(b=>b.classList.toggle('on',b.dataset.v===id));
+  $('setBody').scrollTop=0;
+  if(id==='pgKeys')refreshKeyStatus();
 }
+
+/* ---- المفاتيح ---- */
+const KEY_BADGE={ok:['ok','✓ شغال'],bad:['bad','✗ مش شغال'],limit:['warn','خلص حده النهارده'],offline:['warn','مش متأكد — مفيش نت؟'],none:['bad','مش متسجّل'],shared:['soft','المفتاح المشترك'],checking:['soft','بيتأكد...']};
+function keyBadge(el,st){const [cls,txt]=KEY_BADGE[st];el.className='kbadge '+cls;el.textContent=txt;}
+let keyCheckSeq=0;
+async function refreshKeyStatus(){
+  const seq=++keyCheckSeq;
+  const tmdb=(await sget('watchlist:tmdbkey'))||'', omdb=(await sget('watchlist:omdbkey'))||'';
+  $('tmdbKey').value=tmdb;$('apiKey').value=omdb;
+  $('tmdbStat').textContent='';$('omdbStat').textContent='';
+  $('keySharedBtn').hidden=!omdb;
+  keyBadge($('tmdbBadge'),tmdb?'checking':'none');
+  keyBadge($('omdbBadge'),omdb?'checking':'shared');
+  const [a,b]=await Promise.all([tmdb?checkTmdbKey(tmdb):null,omdb?checkOmdbKey(omdb):null]);
+  if(seq!==keyCheckSeq)return; // اتفتحت تاني في النص
+  if(a)keyBadge($('tmdbBadge'),a);
+  if(b)keyBadge($('omdbBadge'),b);
+}
+async function keySave(kind){
+  const input=$(kind==='tmdb'?'tmdbKey':'apiKey'), stat=$(kind==='tmdb'?'tmdbStat':'omdbStat');
+  if(kind==='omdb'&&!input.value.trim())return keyShared();
+  const st=await saveCheckedKey(kind,input.value,stat);
+  if(st==='ok'||st==='limit'){keyBadge($(kind==='tmdb'?'tmdbBadge':'omdbBadge'),st);if(kind==='omdb')$('keySharedBtn').hidden=false;}
+}
+async function keyShared(){
+  await sset('watchlist:omdbkey','');
+  $('apiKey').value='';$('keySharedBtn').hidden=true;
+  keyBadge($('omdbBadge'),'shared');
+  keyStat($('omdbStat'),'ok');$('omdbStat').textContent='✓ رجعت للمفتاح المشترك';
+}
+
+/* ---- المشاهدة ---- */
+// السيرفر الافتراضي: نفس playerSrv اللي البلاير بيبدّله، و"مخصص" بيظهر بس لو فيه قالب غير الافتراضي
+function renderDefSrv(){
+  const custom=$('playerTpl').value.trim();
+  const opts=PLAYER_SERVERS.map((s,ix)=>({ix,name:s.name}));
+  if(custom&&custom!==DEFAULT_PLAYER)opts.push({ix:PLAYER_SERVERS.length,name:'مخصص'});
+  $('defSrv').innerHTML=opts.map(o=>`<button class="sl${o.ix===playerSrv?' on':''}" role="radio" aria-checked="${o.ix===playerSrv}" data-act="defSrv" data-ix="${o.ix}">${esc(o.name)}</button>`).join('');
+}
+async function defSrv(ix){
+  if(!Number.isInteger(ix)||ix<0||ix>PLAYER_SERVERS.length)return;
+  playerSrv=ix;
+  await sset('watchlist:playerSrv',String(ix));
+  await sset(SRV_LIST_LEN_KEY,String(PLAYER_SERVERS.length));
+  renderDefSrv();
+  if(modalId&&playerOpen)renderModal();
+  toast('السيرفر الافتراضي اتغيّر ✔');
+}
+// القوالب بتتحفظ لوحدها لما تخرج من الخانة — لينك http(s) فيه رقم الفيلم، وإلا خطأ تحت الخانة ومبيتحفظش
+function bindTemplate(inputId,errId,storeKey,def){
+  $(inputId).addEventListener('change',async()=>{
+    const v=$(inputId).value.trim();
+    if(v&&(!isHttp(v)||!/\{(tmdbID|imdbID|q)\}/.test(v))){
+      $(errId).textContent='لازم يكون لينك يبدأ بـ https:// وفيه {tmdbID} أو {imdbID}';
+      return;
+    }
+    $(errId).textContent='';
+    await sset(storeKey,v);
+    if(!v)$(inputId).value=def;
+    if(inputId==='playerTpl')renderDefSrv();
+    toast('اتحفظ ✔');
+  });
+}
+bindTemplate('playerTpl','playerTplErr','watchlist:playerTpl',DEFAULT_PLAYER);
+bindTemplate('dlTpl','dlTplErr','watchlist:dlTpl',DEFAULT_DL);
 function closeSettings(){$('settingsOverlay').classList.remove('show');}
 $('settingsOverlay').addEventListener('click',e=>{if(e.target===$('settingsOverlay'))closeSettings();});
 
@@ -1113,11 +1182,6 @@ async function del(id){
 }
 
 /* ================= TMDB ================= */
-async function saveTmdb(){
-  const k=$('tmdbKey').value.trim();
-  await sset('watchlist:tmdbkey',k);
-  toast(k?'مفتاح TMDB اتحفظ ✔':'المفتاح اتشال');
-}
 async function tmdbFetch(path){
   const tok=(await sget('watchlist:tmdbkey'))||'';
   if(!tok)throw new Error('NO_KEY');
@@ -1224,12 +1288,6 @@ async function openWatch(id,ix){
     catch(e){toast('لينك الموقع ده مش صالح — راجعه في الإعدادات');}
   }
 }
-async function saveDl(){
-  const t=$('dlTpl').value.trim();
-  await sset('watchlist:dlTpl',t||'');
-  if(!t)$('dlTpl').value=DEFAULT_DL;
-  toast('لينك التحميل اتحفظ ✔');
-}
 async function openDownload(id){
   const it=items.find(i=>i.id===id);if(!it)return;
   const tpl=($('dlTpl')&&$('dlTpl').value.trim())||(await sget('watchlist:dlTpl'))||DEFAULT_DL;
@@ -1253,12 +1311,6 @@ function openTrailer(id){
 }
 
 /* ================= البلاير الداخلي ================= */
-async function savePlayer(){
-  const t=$('playerTpl').value.trim();
-  await sset('watchlist:playerTpl',t||'');
-  if(!t)$('playerTpl').value=DEFAULT_PLAYER;
-  toast('قالب البلاير اتحفظ ✔');
-}
 async function openPlayer(id){
   const it=items.find(i=>i.id===id);if(!it)return;
   playerOpen=true;
@@ -1423,12 +1475,6 @@ function renderPlayer(it){
 }
 
 /* ================= المفاتيح ================= */
-async function saveKey(){
-  const k=$('apiKey').value.trim();
-  if(!k){toast('اكتب المفتاح الأول');return;}
-  await sset('watchlist:omdbkey',k);
-  toast('المفتاح اتحفظ ✔');
-}
 
 /* ================= نسخة احتياطية واسترجاع ================= */
 async function backup(){
@@ -2018,7 +2064,7 @@ async function updInstall(){
   if(!(await updApi.install()))toast('التحديث لسه مش جاهز');
 }
 if(updApi){
-  $('updSec').style.display='';$('navUpd').style.display='';
+  $('updSec').style.display='';
   updApi.get().then(st=>{upd=st;renderUpd();}).catch(()=>{});
   updApi.onState(st=>{upd=st;renderUpd();});
 }
@@ -2083,6 +2129,7 @@ function wShow(){
   document.querySelectorAll('#welcomeOverlay .wstep').forEach(s=>{s.hidden=s.dataset.step!==step;});
   $('wDots').innerHTML=wsteps.length>1?wsteps.map((s,i)=>`<b class="${i===wix?'on':i<wix?'done':''}"></b>`).join(''):'';
   $('wClose').hidden=!wGuide;
+  $('welcomeOverlay').classList.toggle('guide',wGuide);
   $('wTmdbLater').hidden=wGuide;$('wOmdbSkip').hidden=wGuide;
   $('welcomeOverlay').classList.add('show');
 }
@@ -2132,8 +2179,6 @@ document.addEventListener('click',(e)=>{
     case 'watch': openWatch(id, parseInt(el.dataset.site)); break;
     case 'trailer': openTrailer(id); break;
     case 'ackSeason': ackSeason(id); break;
-    case 'saveKey': saveKey(); break;
-    case 'saveTmdb': saveTmdb(); break;
     case 'addSite': addSite(); break;
     case 'delSite': delSite(parseInt(el.dataset.ix)); break;
     case 'backup': backup(); break;
@@ -2153,8 +2198,6 @@ document.addEventListener('click',(e)=>{
     case 'player': openPlayer(id); break;
     case 'playerClose': if(mysteryMode||String(modalId).startsWith('party-')){closeModal();}else{playerOpen=false;renderModal();} break;
     case 'playerNext': playerNext(id); break;
-    case 'savePlayer': savePlayer(); break;
-    case 'saveDl': saveDl(); break;
     case 'subLang': saveSubLang(el.dataset.v); break;
     case 'download': openDownload(id); break;
     case 'playerSrv': setPlayerSrv(parseInt(el.dataset.ix)); break;
@@ -2179,6 +2222,11 @@ document.addEventListener('click',(e)=>{
     case 'partyCopy': partyCopy(); break;
     case 'partyCopyLink': partyCopyLink(); break;
     case 'updCheck': updCheck(); break;
+    case 'keySave': keySave(el.dataset.k); break;
+    case 'keyShared': keyShared(); break;
+    case 'keyGuide': showGuide(el.dataset.k); break;
+    case 'showTerms': showGuide('terms'); break;
+    case 'defSrv': defSrv(parseInt(el.dataset.ix)); break;
     case 'wAgree': wAgree(); break;
     case 'wHaveFile': $('setFile').click(); break; // الاستيراد بيعمل reload، وأول ما يفتح هيلاقي المفتاح فمش هيعرض الخطوات
     case 'wFresh': case 'wNext': wNext(); break;

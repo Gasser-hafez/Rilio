@@ -27,10 +27,19 @@ jobs:
 
       - run: npm ci
       - run: npm ci --prefix party-server
-      # منطق الأوضة + السيرفر الحقيقي محلياً (wrangler dev)
-      - run: npm test --prefix party-server
-      # e2e للبرنامج — منها Watch Party بين نسختين على سيرفر محلي
-      - run: npm test
+      # النتيجة بتتكتب كـ annotation (بتتشاف من غير تسجيل دخول) — عشان نتأكد إن الاختبارات كلها اشتغلت فعلاً
+      - name: Server tests (protocol + real worker via wrangler dev)
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test --prefix party-server 2>&1 | tee server-tests.txt || { echo "::error title=server tests::$(tail -8 server-tests.txt | paste -sd' ' -)"; exit 1; }
+          echo "::notice title=server tests::$(grep -E '^ℹ (pass|fail)' server-tests.txt | paste -sd' ' -)"
+      - name: App tests (unit + e2e, incl. Watch Party between two instances)
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee app-tests.txt || { echo "::error title=app tests::$(tail -8 app-tests.txt | paste -sd' ' -)"; exit 1; }
+          echo "::notice title=app tests::$(grep -E '^ℹ (pass|fail)|checks passed|^run [0-9]' app-tests.txt | paste -sd' ' -)"
 
       # لازم الـ draft يتعمل قبل electron-builder — لو ملقاش release بيرفع الملفات بالتوازي
       # وكل رفعة بتعمل draft لوحدها (حصلت في v4.1.0: draft فيه الـ blockmap وتاني فيه الباقي)
