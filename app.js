@@ -88,6 +88,9 @@ const ICONS={
   alert:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
   ext:'<path d="M7 17L17 7M9 7h8v8"/>',
   clipboard:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/>',
+  pause:'<path d="M8.5 5v14M15.5 5v14" stroke-width="2.6"/>',
+  vol:'<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+  mute:'<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
   github:'<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.2-1.5 6.2-6.7a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.6s-1.2-.3-3.8 1.4a13 13 0 0 0-7 0C6.4 1.6 5.2 1.9 5.2 1.9a4.8 4.8 0 0 0-.1 3.6 5.2 5.2 0 0 0-1.4 3.6c0 5.2 3.2 6.4 6.2 6.7a3.4 3.4 0 0 0-.9 2.6V22"/>'
 };
 const ic=(n,cls='')=>`<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]||''}</svg>`;
@@ -762,6 +765,8 @@ function epPct(it){
   const total=it.seasonEps?it.seasonEps[it.curSeason||1]:null;
   return total>0?Math.min(100,Math.round((it.curEp||0)/total*100)):null;
 }
+// العناوين اللي ليها ملف خلصان في المكتبة — شارة "متحمّل" على الكارت (بتتحسب مع كل render)
+let libHas=new Set();
 function pcardHtml(it,ix){
   const draggable=(tab==='queue'&&queueSort==='manual');
   const nextBadge=(draggable&&ix===0)?`<span class="pill-badge next-badge">${ic('play','fill sm')}التالي</span>`:'';
@@ -774,6 +779,7 @@ function pcardHtml(it,ix){
         ${stampHtml(it)}
         ${it.newSeason?`<button class="pill-badge bell" data-act="ackSeason" data-id="${it.id}" title="اضغط لما تشوفه">${ic('bell','sm')}موسم جديد</button>`:''}
         ${nextEpHtml(it,'pill-badge nextep')}
+        ${libHas.has(it.id)?`<span class="pill-badge dlb${nextEpHtml(it,'')?' low':''}" title="عندك نسخة في المكتبة (تنزيلاتي)">${ic('check','sm')}متحمّل</span>`:''}
         ${quickHtml(it)}
       </div>
       <div class="pmeta">
@@ -958,6 +964,7 @@ function render(){
     ?(sortDesc?'★ الأعلى':'★ الأقل')
     :(queueSort==='manual'?'ترتيبي':queueSort==='added'?'الأحدث':queueSort==='imdbDesc'?'IMDb ↑':'IMDb ↓'));
   $('sortBtn').title='اضغط لتغيير الترتيب';
+  libHas=new Set(dlApi?dl.library.filter(f=>!f.downloading).map(f=>{const l=libInfo(f);return l&&l.it.id;}).filter(Boolean):[]);
   renderHome();
 
   const q=$('search').value.trim().toLowerCase();
@@ -1037,6 +1044,7 @@ $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal(
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
   if(confirmResolve){confirmDone(false);return;}
+  if(!$('lp').hidden){if(!document.fullscreenElement)lpClose();return;} // في ملء الشاشة Escape بيخرج منها الأول
   // أول تشغيل: الشروط لازم الموافقة عليها — Escape بيقفل بس وضع الشرح من الإعدادات
   if($('welcomeOverlay').classList.contains('show')){if(wGuide)wFinish();return;}
   if($('importOverlay').classList.contains('show'))importClose();
@@ -2195,7 +2203,7 @@ if(partyApi){
 /* ================= التنزيلات والمكتبة (الديسكتوب بس) =================
    التنزيل والحفظ والتشغيل في main (downloads.js) — هنا العرض والأزرار بس */
 const dlApi=window.__wlDesktop&&window.__wlDesktop.dl;
-let dl={dir:'',items:[],library:[]}, dlPlaying=null;
+let dl={dir:'',items:[],library:[]};
 // ربط ملفات المكتبة بالعناوين: { اسم الملف: {id, s, e} } — بيتسجل لما التنزيل يبدأ من نافذة موقع اتفتحت من صفحة عنوان،
 // وإلا بنخمّن من اسم الملف (WlProgress.fileGuess)
 let libMap={}, lastSiteOpen=null;
@@ -2216,7 +2224,7 @@ function libInfo(f){
 // ملف محلي للحلقة اللي هتتشاف (اللي وقفت فيها، وإلا الجاية) أو للفيلم
 function libFileFor(it){
   const r=it.resume, s=r&&r.s?r.s:(it.curSeason||1), e=r&&r.e?r.e:(it.curEp||0)+1;
-  return dl.library.find(f=>{const l=libInfo(f);return l&&l.it===it&&(it.type!=='tv'||(l.s===s&&l.e===e));});
+  return dl.library.find(f=>{if(f.downloading)return false;const l=libInfo(f);return l&&l.it===it&&(it.type!=='tv'||(l.s===s&&l.e===e));});
 }
 const fmtSize=b=>!(b>0)?'':b>=1e9?(b/1e9).toFixed(2)+' GB':(b/1e6).toFixed(1)+' MB';
 // الوقت الفاضل: ثواني → "45 ث" / "12 د" / "1 س 20 د"
@@ -2233,65 +2241,152 @@ function dlActs(d){
 }
 function renderDl(){
   const box=$('dlBody');
-  if(dlPlaying){
-    box.innerHTML=`<div style="display:flex;gap:8px;align-items:center"><button class="srv" data-act="dlBack">${ic('x','sm')}رجوع</button><b dir="auto" class="dlname">${esc(dlPlaying.name)}</b></div>
-      <video id="dlVideo" controls autoplay crossorigin="anonymous" src="${esc(dlPlaying.url)}">${(dlPlaying.subs||[]).map((s,i)=>`<track kind="subtitles" src="${esc(s.url)}" label="${esc(s.label)}"${/^[a-z]{2,3}$/i.test(s.label)?` srclang="${esc(s.label)}"`:''}${i===0?' default':''}>`).join('')}</video>`;
-    return;
-  }
+  // كل رقم في <bdi> لوحده — الأرقام والوحدات الإنجليزي جوه سطر عربي بتتلخبط من غيره
+  const pctOf=d=>d.total>0?Math.min(100,Math.round(d.received/d.total*100)):null;
   const rows=dl.items.map(d=>{
-    const pct=d.total>0?Math.min(100,Math.round(d.received/d.total*100)):null, live=d.state!=='completed'&&d.state!=='cancelled';
-    return `<div class="dlrow"><div class="grow"><div class="dlname" dir="auto">${esc(d.name)}</div>
-      <div class="sub">${DL_STATE[d.state]||''}${live&&pct!=null?' · '+pct+'%':''} ${fmtSize(d.total)}${d.speed>0?' · '+fmtSize(d.speed)+'/ث'+(d.total>d.received?' · فاضل '+fmtEta((d.total-d.received)/d.speed):''):''}</div>
-      ${live&&pct!=null?`<progress max="100" value="${pct}"></progress>`:''}</div>${dlActs(d)}</div>`;
+    const pct=pctOf(d), live=d.state!=='completed'&&d.state!=='cancelled';
+    const meta=[`<span>${DL_STATE[d.state]||''}</span>`];
+    if(live&&pct!=null)meta.push(`<bdi>${pct}%</bdi>`);
+    if(d.total>0)meta.push(`<bdi dir="ltr">${live?fmtSize(d.received)+' / ':''}${fmtSize(d.total)}</bdi>`);
+    if(d.speed>0)meta.push(`<bdi dir="ltr">${fmtSize(d.speed)}/s</bdi>`);
+    if(d.speed>0&&d.total>d.received)meta.push(`<span>فاضل ${fmtEta((d.total-d.received)/d.speed)}</span>`);
+    return `<div class="dlrow"><div class="grow"><div class="dlname" dir="auto" title="${esc(d.name)}">${esc(d.name)}</div>
+      <div class="dlmeta">${meta.join('')}</div>
+      ${live&&pct!=null?`<progress max="100" value="${pct}"></progress>`:''}</div><div class="dlacts">${dlActs(d)}</div></div>`;
   }).join('');
-  const lib=dl.library.map((f,ix)=>{const l=libInfo(f), it=l&&l.it;
-    return `<div class="dlrow">${it?`<div class="cwthumb">${it.poster?`<img src="${esc(it.poster)}" alt="">`:noimgHtml(it,false)}</div>`:''}
-    <div class="grow"><div class="dlname" dir="auto">${it?esc(it.title)+(l.s&&l.e?` · S${pad(l.s)}E${pad(l.e)}`:''):esc(f.name)}</div>
-    <div class="sub">${it?`<span dir="ltr">${esc(f.name)}</span> · `:''}${fmtSize(f.size)}</div></div>
-    <button class="btn btn-amber btn-sm" data-act="dlPlay" data-ix="${ix}">${ic('play','fill sm')}شغّل</button><button class="srv" data-act="dlReveal" data-ix="${ix}">الفولدر</button></div>`;}).join('');
+  // المكتبة: شبكة بوسترات زي الصفحة الرئيسية. ملف لسه بيتنزّل بيبان بحالته (حجمه الصغير مش معناه إنه بايظ أو ضار) ومن غير تشغيل
+  const lib=dl.library.map((f,ix)=>{
+    const l=libInfo(f), it=l&&l.it, base=f.name.split('/').pop();
+    const busy=f.downloading?dl.items.find(d=>d.name===f.name):null, bp=busy&&pctOf(busy);
+    const r=it&&it.resume, watched=r&&r.dur>0&&(it.type!=='tv'||(r.s===l.s&&r.e===l.e))?Math.min(100,Math.round(r.pos/r.dur*100)):0;
+    const sub=[l&&l.s&&l.e?`S${pad(l.s)}E${pad(l.e)}`:'',fmtSize(f.size)].filter(Boolean).join(' · ');
+    return `<div class="libcard${f.downloading?' busy':''}"${f.downloading?'':` data-act="dlPlay" data-ix="${ix}" role="button" tabindex="0"`} title="${esc(f.name)}">
+      <div class="libart">${it&&it.poster?`<img src="${esc(it.poster)}" alt="" loading="lazy">`:noimgHtml(it||{title:stemOf(base)})}
+        ${f.downloading?`<span class="libbusy">لسه بيتحمّل${bp!=null?` <bdi>${bp}%</bdi>`:''}</span>`:`<span class="libplay">${ic('play','fill')}</span>`}
+        ${watched?`<div class="pprog"><i style="width:${watched}%"></i></div>`:''}</div>
+      <div class="libt" dir="auto">${esc(it?it.title:stemOf(base))}</div>
+      <div class="libs"><bdi dir="ltr">${esc(sub)}</bdi>${f.downloading?'':`<button class="libdir" data-act="dlReveal" data-ix="${ix}" title="افتح الفولدر" aria-label="افتح الفولدر">${ic('ext','sm')}</button>`}</div>
+    </div>`;}).join('');
   box.innerHTML=`<div class="sub" style="display:flex;gap:8px;align-items:center"><span>بيتحفظوا في</span>
       <span dir="ltr" class="dlname" style="flex:1;min-width:0;font-weight:400">${esc(dl.dir)}</span><button class="srv" data-act="dlPickDir">غيّر</button></div>
     ${rows?`<h3>التنزيلات</h3>${rows}`:''}
-    <h3>المكتبة</h3>${lib||'<div class="sub">لسه فاضية — أي فيلم تنزّله من مواقعك هيظهر هنا</div>'}`;
+    <h3>المكتبة</h3>${lib?`<div class="libgrid">${lib}</div>`:'<div class="sub">لسه فاضية — أي فيلم تنزّله من مواقعك هيظهر هنا</div>'}`;
 }
-async function dlRefresh(){try{dl=await dlApi.state();}catch(e){}if(!dlPlaying)renderDl();}
-function dlOpen(){dlPlaying=null;renderDl();$('dlOverlay').classList.add('show');dlRefresh();}
-// تشغيل ملف من المكتبة: بلايرنا إحنا، فالتتبع بيقرا الـ <video> مباشرة، و"كمّل من مكان ما وقفت" بيقدّم الفيديو فعلاً
+const stemOf=n=>n.replace(/\.[a-z0-9]{2,4}$/i,'');
+async function dlRefresh(){try{dl=await dlApi.state();}catch(e){}renderDl();render();}
+function dlOpen(){renderDl();$('dlOverlay').classList.add('show');dlRefresh();}
+
+/* ================= بلاير المكتبة =================
+   على الشاشة كلها جوه البرنامج بكنترولز بشكله. التتبع بيقرا الـ <video> مباشرة، و"كمّل من مكان ما وقفت" بيقدّم فعلاً */
+let lpAbort=null, lpFile=null, lpNextFile=null, lpIdleT=null;
+const RATES=[0.75,1,1.25,1.5,2];
+function lpUi(){
+  const v=$('dlVideo'), d=v.duration||0;
+  $('lpPlay').innerHTML=ic(v.paused?'play':'pause',v.paused?'fill':'');
+  $('lpPlay').setAttribute('aria-label',v.paused?'تشغيل':'إيقاف');
+  $('lpMute').innerHTML=ic(v.muted||v.volume===0?'mute':'vol');
+  $('lpTime').textContent=d?`${hms(v.currentTime)} / ${hms(d)}`:'';
+  if(!$('lp').classList.contains('seeking'))$('lpSeek').value=d?Math.round(v.currentTime/d*1000):0;
+  // الحلقة الجاية: آخر دقيقة من الحلقة (أو لما تخلص)
+  $('lpNext').hidden=!lpNextFile||!d||(d-v.currentTime>60&&!v.ended);
+}
+const hms=s=>{s=Math.max(0,Math.floor(s||0));const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+':'+pad(m):m)+':'+pad(s%60);};
+// الحلقة اللي بعدها في المكتبة (نفس الموسم وبعدين أول حلقة في الموسم الجاي)
+function libNext(f){
+  const l=libInfo(f);if(!l||!l.s||!l.e)return null;
+  const has=(s,e)=>dl.library.find(x=>{if(x.downloading)return false;const k=libInfo(x);return k&&k.it===l.it&&k.s===s&&k.e===e;});
+  return has(l.s,l.e+1)||has(l.s+1,1)||null;
+}
+function lpWake(){
+  const p=$('lp');p.classList.remove('idle');
+  clearTimeout(lpIdleT);
+  lpIdleT=setTimeout(()=>{if(!$('dlVideo').paused)p.classList.add('idle');},2500);
+}
 function dlPlayFile(f){
-  dlPlaying=f;
-  $('dlOverlay').classList.add('show');
-  renderDl();
-  const v=$('dlVideo'), l=libInfo(f), it=l&&l.it;
-  if(!v||!it||it._party)return;
+  lpClose(true);
+  lpFile=f;lpNextFile=libNext(f);
+  const v=$('dlVideo'), l=libInfo(f), it=l&&l.it, base=f.name.split('/').pop();
+  lpAbort=new AbortController();
+  const sig={signal:lpAbort.signal};
+  $('lpTitle').textContent=it?it.title:stemOf(base);
+  $('lpSub').textContent=[l&&l.s&&l.e?`S${pad(l.s)}E${pad(l.e)}`:'',it?base:''].filter(Boolean).join(' · ');
+  v.innerHTML=(f.subs||[]).map((s,i)=>`<track kind="subtitles" src="${esc(s.url)}" label="${esc(s.label)}"${/^[a-z]{2,3}$/i.test(s.label)?` srclang="${esc(s.label)}"`:''}${i===0?' default':''}>`).join('');
+  $('lpSubs').innerHTML=`<option value="-1">بدون ترجمة</option>`+(f.subs||[]).map((s,i)=>`<option value="${i}"${i===0?' selected':''}>${esc(s.label)}</option>`).join('');
+  $('lpSubs').hidden=!(f.subs||[]).length;
+  $('lpRate').value='1';v.playbackRate=1;
+  v.src=f.url;
+  $('lp').hidden=false;
+  lpWake();
+  v.play().catch(()=>{});
+  for(const ev of ['timeupdate','play','pause','volumechange','durationchange','ended'])v.addEventListener(ev,lpUi,sig);
+  v.addEventListener('pause',()=>$('lp').classList.remove('idle'),sig);
+  lpUi();
+  if(!it||it._party)return;
   const tv=it.type==='tv', s=l.s, e=l.e;
   if(tv&&!(s&&e))return; // حلقة مش معروفة — منعلّمش حلقة غلط
   const sess={done:new Set(),ep:null,savedAt:null}, key=tv?s+'x'+e:'0x0';
   v.addEventListener('loadedmetadata',()=>{
     const r=it.resume;
     if(r&&r.pos>=60&&r.pos<v.duration*WlProgress.DONE_AT&&(!tv||(r.s===s&&r.e===e))){v.currentTime=r.pos;toast('كمّلت من '+mmss(r.pos));}
-  },{once:true});
+  },{once:true,...sig});
   const onTime=()=>{
-    if(dlPlaying!==f||!Number.isFinite(v.duration))return;
+    if(lpFile!==f||!Number.isFinite(v.duration))return;
     addWatch(sess,it.id,v.currentTime,v.paused);
     const ev={pos:v.currentTime,dur:v.duration,paused:v.paused}, r=WlProgress.step(sess,ev,key);
     if(r==='save'){saveResume(it,s,e,ev.pos,ev.dur);persist();render();}
     else if(r==='done')autoDone(it,tv?s:0,tv?e:0);
   };
-  v.addEventListener('timeupdate',onTime);v.addEventListener('pause',onTime);
+  v.addEventListener('timeupdate',onTime,sig);v.addEventListener('pause',onTime,sig);
 }
+function lpClose(keepOpen){
+  const v=$('dlVideo');
+  if(lpAbort){lpAbort.abort();lpAbort=null;}
+  v.pause();v.removeAttribute('src');v.innerHTML='';v.load();
+  lpFile=null;lpNextFile=null;clearTimeout(lpIdleT);
+  if(!keepOpen){
+    $('lp').hidden=true;
+    if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
+    flushWatch();render();if($('dlOverlay').classList.contains('show'))renderDl();
+  }
+}
+function lpToggle(){const v=$('dlVideo');if(v.paused)v.play().catch(()=>{});else v.pause();}
+function lpSkip(sec){const v=$('dlVideo');if(v.duration)v.currentTime=Math.max(0,Math.min(v.duration-0.5,v.currentTime+sec));lpWake();}
+function lpFs(){const p=$('lp');if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});else p.requestFullscreen().catch(()=>{});}
+$('lpSeek').addEventListener('input',e=>{const v=$('dlVideo');$('lp').classList.add('seeking');if(v.duration)v.currentTime=e.target.value/1000*v.duration;});
+$('lpSeek').addEventListener('change',()=>$('lp').classList.remove('seeking'));
+$('lpVol').addEventListener('input',e=>{const v=$('dlVideo');v.volume=+e.target.value;v.muted=v.volume===0;});
+$('lpSubs').addEventListener('change',e=>{const t=$('dlVideo').textTracks;for(let i=0;i<t.length;i++)t[i].mode=i===+e.target.value?'showing':'disabled';});
+$('lpRate').addEventListener('change',e=>{$('dlVideo').playbackRate=+e.target.value||1;});
+$('lp').addEventListener('mousemove',lpWake);
+// دوسة على الصورة نفسها = تشغيل/إيقاف، ودوستين = ملء الشاشة
+$('dlVideo').addEventListener('click',lpToggle);
+$('dlVideo').addEventListener('dblclick',lpFs);
+document.addEventListener('keydown',e=>{
+  if($('lp').hidden||(e.target.closest&&e.target.closest('select,input:not([type=range])')))return;
+  const v=$('dlVideo'), k=e.key;
+  if(k===' '||k==='k'){lpToggle();}
+  else if(k==='ArrowRight')lpSkip(10);
+  else if(k==='ArrowLeft')lpSkip(-10);
+  else if(k==='ArrowUp'){v.volume=Math.min(1,v.volume+0.1);v.muted=false;$('lpVol').value=v.volume;}
+  else if(k==='ArrowDown'){v.volume=Math.max(0,v.volume-0.1);$('lpVol').value=v.volume;}
+  else if(k==='f'||k==='F')lpFs();
+  else if(k==='m'||k==='M')v.muted=!v.muted;
+  else return;
+  e.preventDefault();lpWake();
+},true);
 // زرار ▶ في "كمّل مشاهدة": الملف المحلي لو موجود (بيكمّل من نفس الثانية)، وإلا البلاير
 function cwPlay(id){
   const it=items.find(i=>i.id===id);if(!it)return;
   const f=dlApi&&libFileFor(it);
   if(f)dlPlayFile(f);else openPlayer(id);
 }
-function dlClose(){dlPlaying=null;$('dlOverlay').classList.remove('show');renderDl();} // renderDl بيشيل الفيديو فبيقف
+function dlClose(){lpClose();$('dlOverlay').classList.remove('show');}
 if(dlApi){
   $('dlBtn').style.display='';
   // المكتبة من أول ما البرنامج يفتح — زرار "كمّل" محتاج يعرف لو فيه ملف محلي
   sget(LIB_KEY).then(r=>{libMap=parseLib(r);return dlRefresh();}).then(()=>render(),()=>{});
   $('dlOverlay').addEventListener('click',e=>{if(e.target===$('dlOverlay'))dlClose();});
-  dlApi.onList(l=>{dl.items=Array.isArray(l)?l:[];if(!dlPlaying)renderDl();});
+  dlApi.onList(l=>{dl.items=Array.isArray(l)?l:[];renderDl();});
   // قبل ما أي تنزيل يبدأ: اسم الملف وحجمه وجاي منين — عشان محدش ينزّل برنامج ضار وهو فاكره فيلم
   dlApi.onAsk(async a=>{
     if(!a||!Number.isInteger(a.id))return;
@@ -2310,7 +2405,7 @@ if(dlApi){
   });
   dlApi.onEvent(ev=>{
     const n=String(ev&&ev.name||'');
-    if(ev.kind==='started')toast('بدأ تنزيل '+n+' — تابعه من تنزيلاتي');
+    if(ev.kind==='started'){toast('بدأ تنزيل '+n+' — تابعه من تنزيلاتي');dlRefresh();}
     else if(ev.kind==='blocked')toast('اتمنع تنزيل '+n+' — نوع الملف ده ممكن يكون برنامج ضار');
     else if(ev.kind==='done'){toast('خلص تنزيل '+n+' ✔');dlRefresh();}
     else if(ev.kind==='open')dlOpen();
@@ -2471,7 +2566,12 @@ document.addEventListener('click',(e)=>{
     case 'dlAct': dlApi.act(parseInt(el.dataset.id),el.dataset.a); break;
     case 'dlPlay': {const f=dl.library[parseInt(el.dataset.ix)];if(f)dlPlayFile(f);} break;
     case 'cwPlay': cwPlay(id); break;
-    case 'dlBack': dlPlaying=null;dlRefresh(); break;
+    case 'lpClose': lpClose(); break;
+    case 'lpToggle': lpToggle(); break;
+    case 'lpSkip': lpSkip(parseInt(el.dataset.s)); break;
+    case 'lpMute': $('dlVideo').muted=!$('dlVideo').muted; break;
+    case 'lpFs': lpFs(); break;
+    case 'lpNext': if(lpNextFile)dlPlayFile(lpNextFile); break;
     case 'dlReveal': {const f=dl.library[parseInt(el.dataset.ix)];if(f)dlApi.reveal(f.name);} break;
     case 'dlPickDir': dlApi.pickDir().then(()=>dlRefresh()); break;
     case 'backup': backup(); break;

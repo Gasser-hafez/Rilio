@@ -13,11 +13,11 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace
 const PORT = 9333;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function launch(userData, { port = PORT, env = {} } = {}) {
+async function launch(userData, { port = PORT, env = {}, args = [] } = {}) {
   // لو نافذة التست متغطية بنافذة تانية، ويندوز بيعلّمها hidden وChromium بيوقف توصيل الضغطات —
   // الـ flags دي بتخلي التست مايعتمدش على ترتيب النوافذ على الشاشة
   const flags = ['--disable-features=CalculateNativeWinOcclusion', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'];
-  const proc = spawn(electron, [root, `--remote-debugging-port=${port}`, `--user-data-dir=${userData}`, ...flags], { stdio: 'ignore', env: { ...process.env, ...env } });
+  const proc = spawn(electron, [root, `--remote-debugging-port=${port}`, `--user-data-dir=${userData}`, ...flags, ...args], { stdio: 'ignore', env: { ...process.env, ...env } });
   for (let i = 0; i < 40; i++) {
     await sleep(500);
     try {
@@ -291,7 +291,12 @@ try {
         await approve('popfile.wav');
         await until(async () => (await item('popfile.wav'))?.state === 'completed', 8000, 'download from a new-window link');
         // نوافذ المواقع بتفتح بآخر مقاس اتساب عليه (sitewin.json اتحط قبل التشغيل — Electron مبيدعمش تغيير المقاس من CDP)
-        assert.equal(await page.ev(`outerWidth+'x'+outerHeight`), '900x650');
+        assert.equal(await page.ev(`innerWidth`), 900);
+        // الشريط اللي فوق (sitebar.html) بشكل البرنامج: أوامر نافذته بس — مفيش تخزين ولا APIs الواجهة
+        const bar = await conn('sitebar.html');
+        assert.deepEqual(JSON.parse(await bar.ev(`JSON.stringify([typeof __wlBar, typeof (window.chrome&&chrome.storage), typeof __wlDesktop, typeof __wlAi, document.getElementById('host').textContent])`)),
+          ['object', 'undefined', 'undefined', 'undefined', '127.0.0.1']);
+        bar.close();
         page.close();
       });
       await check('downloads: pause stops progress, resume finishes', async () => {
@@ -300,7 +305,7 @@ try {
         await until(async () => (await item('slow.mp4'))?.received > 0, 8000, 'slow started');
         await until(async () => (await item('slow.mp4'))?.speed > 0, 5000, 'speed measured');
         await app.ev(`dlOpen();1`);
-        await until(() => app.ev(`document.getElementById('dlBody').innerText.includes('/ث · فاضل')`), 4000, 'speed + time left shown');
+        await until(() => app.ev(`(t=>t.includes('/s')&&t.includes('فاضل'))(document.getElementById('dlBody').innerText)`), 4000, 'speed + time left shown');
         await app.ev(`dlClose();1`);
         const id = (await item('slow.mp4')).id;
         assert.equal(await app.ev(`__wlDesktop.dl.act(${id},'pause')`), true);
@@ -326,7 +331,7 @@ try {
           assert.equal(err, 'refused', bad);
         }
         await app.ev(`dlClose();1`);
-        assert.equal(await app.ev(`!!document.getElementById('dlVideo')`), false, 'closing stops the video');
+        assert.equal(await app.ev(`document.getElementById('lp').hidden&&!document.getElementById('dlVideo').getAttribute('src')`), true, 'closing hides the player and stops the video');
       });
       await check('library: a subtitle file next to the video loads (srt → vtt, Windows-1256 Arabic)', async () => {
         fs.writeFileSync(path.join(dlDir, 'Sub Movie.wav'), wav);
@@ -347,10 +352,15 @@ try {
         await until(async () => (await item('ep.wav'))?.state === 'completed', 15000, 'episode downloaded');
         await app.ev(`dlOpen();1`);
         await until(() => app.ev(`dl.library.some(f=>f.name==='ep.wav')`), 4000, 'in library');
-        assert.match(await app.ev(`document.getElementById('dlBody').innerText`), /Lib Show · S01E03/);
+        assert.match(await app.ev(`document.getElementById('dlBody').innerText`), /Lib Show\s+S01E03/);
+        // شارة "متحمّل" على كارت العنوان في الصفحة الرئيسية
+        assert.equal(await app.ev(`tab='watching';render();!!document.querySelector('[data-itemid="lib1"] .dlb')`), true, 'downloaded badge on the card');
+        await app.ev(`tab='queue';render();1`);
         // نقدّم لـ 5:00 → مكان الوقوف يتحفظ على S01E03
         await app.ev(`dlPlayFile(dl.library.find(f=>f.name==='ep.wav'));1`);
         await until(() => app.ev(`(v=>v&&v.duration>800)(document.getElementById('dlVideo'))`), 8000, 'metadata');
+        // البلاير على الشاشة كلها باسم العنوان والحلقة
+        assert.deepEqual(JSON.parse(await app.ev(`JSON.stringify([document.getElementById('lp').hidden,$('lpTitle').textContent,/S01E03/.test($('lpSub').textContent)])`)), [false, 'Lib Show', true]);
         await app.ev(`(v=>{v.pause();v.currentTime=300})(document.getElementById('dlVideo'));1`);
         await until(async () => (await app.ev(`JSON.stringify(items.find(i=>i.id==='lib1').resume||null)`)).includes('"pos":300'), 5000, 'resume saved');
         // "كمّل" من الصفحة الرئيسية بيشغّل الملف المحلي ويقدّم لنفس الثانية
@@ -1065,6 +1075,79 @@ try {
     });
     app.close();
   } finally { proc.kill(); await sleep(1000); }
+}
+
+// ---------- تشغيل 7: التنزيلات بتكمّل بعد قفل البرنامج + المكتبة بفولدرات فرعية ----------
+{
+  const ud7 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-')), dl7 = path.join(ud7, 'dl');
+  fs.writeFileSync(path.join(ud7, 'storage.json'), JSON.stringify({ 'watchlist:seeded': '1' }));
+  // سيرفر بيدعم Range (زي أغلب مواقع التحميل)، محتوى معروف عشان نتأكد إن الملف اتكمّل صح مش اتلخبط
+  const SIZE = 96 * 65536, body = Buffer.from(Uint8Array.from({ length: SIZE }, (_, k) => k % 251));
+  const ranges = [];
+  const srv = http.createServer((req, res) => {
+    const m = /bytes=(\d+)-/.exec(req.headers.range || ''), from = m ? +m[1] : 0;
+    if (m) ranges.push(from);
+    res.writeHead(m ? 206 : 200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${req.url.slice(1)}"`,
+      'Accept-Ranges': 'bytes', ETag: '"v1"', 'Last-Modified': 'Mon, 01 Jan 2024 00:00:00 GMT', 'Content-Length': SIZE - from,
+      ...(m ? { 'Content-Range': `bytes ${from}-${SIZE - 1}/${SIZE}` } : {}) });
+    let p = from;
+    const t = setInterval(() => { const n = Math.min(65536, SIZE - p); res.write(body.subarray(p, p + n)); p += n; if (p >= SIZE) { clearInterval(t); res.end(); } }, 60);
+    res.on('close', () => clearInterval(t));
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const opts = { env: { WL_DL_DIR: dl7 }, args: ['--inspect=9231'] };
+  const item = async (app, name) => (await app.ev(`__wlDesktop.dl.state()`)).items.find(i => i.name === name);
+  const startDl = async (app, name) => {
+    await app.ev(`(()=>{const w=window.open('about:blank','_blank');w.location=${JSON.stringify(base + '/')}+${JSON.stringify(name)};return 1})()`);
+    await until(() => app.ev(`$('confirmOverlay').classList.contains('show')`), 8000, 'confirm ' + name);
+    await app.ev(`$('confirmYes').click();1`);
+    await until(async () => (await item(app, name))?.received > 1000000, 15000, name + ' started');
+  };
+  const sameBytes = name => { const f = fs.readFileSync(path.join(dl7, name)); return f.length === SIZE && f.equals(body); };
+  let p7 = await launch(ud7, opts);
+  try {
+    console.log('run 7: downloads survive closing the app; library subfolders');
+    let app = await conn('app://local/');
+    await check('download in progress → app quits normally → next start continues from where it stopped (Range); file intact', async () => {
+      await startDl(app, 'a.mp4');
+      // خروج عادي (زي "اقفل" من الـ tray) — Electron بيمسح الملف الناقص لوحده، والـ hard link بيحافظ عليه
+      const node = await conn('', 9231); // inspector بتاع main (التست بس — --inspect)
+      await node('Runtime.evaluate', { expression: `process.mainModule.require('electron').app.quit()` });
+      node.close(); // Node بـ --inspect بيستنى الـ debugger يفصل قبل ما يقفل
+      await until(() => p7.exitCode !== null, 10000, 'app quit');
+      assert.ok(fs.existsSync(path.join(dl7, 'a.mp4')) || fs.existsSync(path.join(dl7, 'a.mp4.wlpart')), 'partial data kept');
+      p7 = await launch(ud7, opts); app = await conn('app://local/');
+      await until(async () => (await item(app, 'a.mp4'))?.state === 'completed', 30000, 'a.mp4 continued and finished');
+      assert.ok(ranges.some(r => r > 1000000), 'continued with a Range request: ' + ranges.join(','));
+      assert.ok(sameBytes('a.mp4'), 'file content intact');
+      assert.equal(fs.existsSync(path.join(dl7, 'a.mp4.wlpart')), false);
+    });
+    await check('app killed mid-download (crash) → continues on next start', async () => {
+      ranges.length = 0;
+      await startDl(app, 'b.mp4');
+      await sleep(700); // آخر حالة اتحفظت (كل 300ms)
+      p7.kill(); await sleep(1500);
+      p7 = await launch(ud7, opts); app = await conn('app://local/');
+      await until(async () => (await item(app, 'b.mp4'))?.state === 'completed', 30000, 'b.mp4 continued and finished');
+      assert.ok(ranges.some(r => r > 1000000), 'continued with a Range request: ' + ranges.join(','));
+      assert.ok(sameBytes('b.mp4'), 'file content intact');
+    });
+    await check('library: subfolders (up to 3 levels), episode from folder/file names, paths cannot escape the folder', async () => {
+      fs.mkdirSync(path.join(dl7, 'Lib Show', 'Season 2'), { recursive: true });
+      fs.writeFileSync(path.join(dl7, 'Lib Show', 'Season 2', 'Lib Show - Episode 05.mp4'), 'x');
+      fs.mkdirSync(path.join(dl7, 'a', 'b', 'c', 'd'), { recursive: true });
+      fs.writeFileSync(path.join(dl7, 'a', 'b', 'c', 'd', 'deep.mp4'), 'x');
+      await app.ev(`items.push(cleanItem({id:'ls',title:'Lib Show',type:'tv',status:'watching',tmdbId:77}));dlRefresh().then(()=>1)`);
+      const r = JSON.parse(await app.ev(`JSON.stringify(dl.library.map(f=>{const l=libInfo(f);return {n:f.name,id:l&&l.it.id,s:l&&l.s,e:l&&l.e}}))`));
+      const ep = r.find(x => x.n === 'Lib Show/Season 2/Lib Show - Episode 05.mp4');
+      assert.deepEqual(ep, { n: 'Lib Show/Season 2/Lib Show - Episode 05.mp4', id: 'ls', s: 2, e: 5 }, JSON.stringify(r));
+      assert.ok(!r.some(x => x.n.endsWith('deep.mp4')), 'deeper than 3 levels is skipped');
+      for (const bad of ['../storage.json', '..\\storage.json', 'Lib Show/../../storage.json', 'C:/Windows/win.ini', 'a.mp4/../a.mp4'])
+        assert.equal(await app.ev(`__wlDesktop.dl.reveal(${JSON.stringify(bad)})`), false, bad);
+    });
+    app.close();
+  } finally { p7.kill(); srv.close(); await sleep(1000); }
 }
 
 console.log(`\n${passed} checks passed`);

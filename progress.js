@@ -46,7 +46,9 @@ const WlProgress = (() => {
   const norm = s => ' ' + String(s).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9؀-ۿ]+/g, ' ').trim() + ' ';
   function fileGuess(name, items) {
     const n = norm(String(name).replace(/\.[a-z0-9]{2,4}$/i, ''));
-    const m = /\ss(\d{1,2})\s?e(\d{1,3})\s/.exec(n) || /\s(\d{1,2})x(\d{1,3})\s/.exec(n);
+    const m = /\ss(\d{1,2})\s?e(\d{1,3})\s/.exec(n) || /\s(\d{1,2})x(\d{1,3})\s/.exec(n)
+      // فولدرات: "The Boys/Season 2/Episode 05.mkv" (الـ / بقت مسافة)
+      || /\sseason\s?(\d{1,2})\s(?:.*\s)?(?:e|ep|episode)\s?(\d{1,3})\s/.exec(n);
     let best = null;
     for (const it of items || []) {
       const t = norm(it.title);

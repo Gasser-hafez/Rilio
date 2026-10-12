@@ -53,6 +53,8 @@ test('fileGuess: downloaded file name → title + episode from the list', () => 
   assert.deepEqual(P.fileGuess('You Me and Tuscany 2026 1080p.mkv', items), { id: 'tt', s: null, e: null }, 'punctuation ignored');
   assert.equal(P.fileGuess('Italy.Trip.mp4', items), null, '"It" is too short to match inside words');
   assert.equal(P.fileGuess('random.mkv', []), null);
+  assert.deepEqual(P.fileGuess('The Boys/Season 2/The Boys - Episode 05.mkv', items), { id: 'b', s: 2, e: 5 }, 'library subfolders');
+  assert.deepEqual(P.fileGuess('The Boys/Season 1/E03.mp4', items), { id: 'b', s: 1, e: 3 });
 });
 
 test('step: resume saved every 30s of play and once per pause position', () => {

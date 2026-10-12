@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-if (process.isMainFrame && location.origin === 'app://local') {
+if (process.isMainFrame && location.origin === 'app://local' && location.pathname === '/sitebar.html') {
+  // شريط نوافذ المواقع: أوامر النافذة دي بس — مفيش تخزين ولا أي حاجة تانية من بتاعة الواجهة
+  contextBridge.exposeInMainWorld('__wlBar', {
+    cmd: c => ipcRenderer.send('wl:bar:cmd', c),
+    onState: fn => ipcRenderer.on('wl:bar:state', (e, s) => fn(s)),
+  });
+} else if (process.isMainFrame && location.origin === 'app://local') {
   // واجهة البرنامج نفسها: shim لـ chrome.storage.local عشان app.js يشتغل من غير تعديل
   const listeners = [];
   ipcRenderer.on('wl:changed', (e, changes) => listeners.forEach(fn => fn(changes, 'local')));

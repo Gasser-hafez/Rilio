@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<!-- شريط نوافذ المواقع (main.js openSiteWindow): رجوع/تقدّم/تحديث + اسم الصفحة، بلون مزاج البرنامج -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com">
+<link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--bar:#130F1A;--ink:#F6EEE3;--muted:#A99CB8;--hover:rgba(246,238,227,.08);--accent:#FF9466}
+  :root[data-mood="mint"]{--bar:#0B1615;--ink:#EAF6F1;--muted:#8FB3AA;--hover:rgba(234,246,241,.08);--accent:#6EE7C8}
+  :root[data-mood="coffee"]{--bar:#140E0B;--ink:#F8EEE2;--muted:#B59F8C;--hover:rgba(248,238,226,.08);--accent:#FFB070}
+  :root[data-mood="sunrise"]{--bar:#F6EBDD;--ink:#2B2233;--muted:#6E5F78;--hover:rgba(43,34,51,.07);--accent:#E0703F}
+  *{box-sizing:border-box;margin:0}
+  html,body{height:40px;overflow:hidden;background:var(--bar);color:var(--ink);font:500 13px/1 'Readex Pro',system-ui,sans-serif}
+  /* أزرار ويندوز (تصغير/تكبير/قفل) على اليمين فوق الشريط — بنسيب لها مكان. الشريط نفسه بيسحب النافذة */
+  body{display:flex;align-items:center;gap:6px;padding:0 10px 0 150px;-webkit-app-region:drag;user-select:none}
+  button{-webkit-app-region:no-drag;display:inline-flex;align-items:center;justify-content:center;width:32px;height:30px;border:0;border-radius:9px;background:transparent;color:var(--ink);cursor:pointer}
+  button:hover:not(:disabled){background:var(--hover)}
+  button:disabled{opacity:.3;cursor:default}
+  button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  #reload.loading svg{animation:spin .9s linear infinite;color:var(--accent)}
+  @keyframes spin{to{transform:rotate(-360deg)}}
+  .t{display:flex;align-items:baseline;gap:8px;min-width:0;padding-inline-start:6px}
+  #title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #host{color:var(--muted);font-size:12px;direction:ltr;white-space:nowrap}
+</style>
+</head>
+<body>
+  <button id="back" title="رجوع (Alt+←)" aria-label="رجوع" disabled><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+  <button id="fwd" title="تقدّم (Alt+→)" aria-label="تقدّم" disabled><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+  <button id="reload" title="تحديث (F5)" aria-label="تحديث"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8M21 3v5h-5"/></svg></button>
+  <div class="t"><span id="title" dir="auto"></span><span id="host"></span></div>
+  <script src="sitebar.js"></script>
+</body>
+</html>

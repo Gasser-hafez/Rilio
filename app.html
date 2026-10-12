@@ -626,6 +626,59 @@
   .site-row .blk[aria-pressed=false]{opacity:.35}
   .dlrow{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
   .dlrow .grow{flex:1;min-width:0}
+  .modal.dlmodal{max-width:900px}
+  /* المكتبة: شبكة بوسترات */
+  .libgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:16px 14px;margin-top:6px}
+  .libcard{position:relative;cursor:pointer;border-radius:16px;outline:none}
+  .libcard.busy{cursor:default}
+  .libart{position:relative;aspect-ratio:2/3;border-radius:14px;overflow:hidden;background:var(--raised);box-shadow:0 10px 24px -14px rgba(0,0,0,.7)}
+  .libart img,.libart .noimg{width:100%;height:100%;object-fit:cover;display:block}
+  .libplay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);color:#fff;opacity:0;transition:opacity .2s}
+  .libplay .ic{width:38px;height:38px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))}
+  .libcard:hover .libplay,.libcard:focus-visible .libplay{opacity:1}
+  .libcard:focus-visible .libart{outline:2px solid var(--accent);outline-offset:2px}
+  .libbusy{position:absolute;inset:auto 8px 8px 8px;padding:5px 8px;border-radius:10px;background:color-mix(in srgb,var(--queue) 92%,#000);color:var(--queue-ink);font-size:12px;font-weight:700;text-align:center}
+  .libart .pprog{position:absolute;inset:auto 0 0 0;height:4px;background:rgba(0,0,0,.45)}
+  .libart .pprog i{display:block;height:100%;background:var(--accent)}
+  .libt{margin-top:8px;font-weight:600;font-size:14px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .libs{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);min-height:22px}
+  .libs bdi{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+  .libdir{border:0;background:transparent;color:var(--muted);width:24px;height:22px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+  .libdir:hover{background:var(--hover);color:var(--ink)}
+  /* بلاير المكتبة */
+  .lp{position:fixed;inset:0;z-index:90;background:#000;color:#fff}
+  html.desktop .lp{top:40px}
+  .lp:fullscreen{top:0}
+  .lp video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+  .lp video::cue{font-family:'Readex Pro',system-ui,sans-serif;font-size:clamp(18px,2.6vw,34px);background:rgba(0,0,0,.55)}
+  .lp-top,.lp-bar{position:absolute;inset-inline:0;transition:opacity .35s;z-index:1}
+  .lp-top{top:0;display:flex;align-items:center;gap:14px;padding:16px 22px 40px;background:linear-gradient(rgba(0,0,0,.75),transparent)}
+  .lp-title{display:flex;flex-direction:column;min-width:0}
+  .lp-title b{font-size:19px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lp-title span{font-size:12.5px;color:rgba(255,255,255,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lp-bar{bottom:0;padding:40px 22px 14px;background:linear-gradient(transparent,rgba(0,0,0,.8))}
+  .lp-ctl{display:flex;align-items:center;gap:6px;margin-top:6px}
+  .lp-ctl .grow{flex:1}
+  .lp-btn{display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:40px;padding:0 8px;border:0;border-radius:12px;background:transparent;color:#fff;cursor:pointer;font-weight:700;font-size:14px}
+  .lp-btn:hover{background:rgba(255,255,255,.12)}
+  .lp-btn .ic{width:22px;height:22px}
+  .lp-time{font-size:13.5px;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.85);padding-inline:8px;white-space:nowrap}
+  .lp select{height:34px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;padding:0 8px}
+  .lp select option{background:#1b1b1b;color:#fff}
+  .lp input[type=range]{accent-color:var(--accent);cursor:pointer}
+  #lpSeek{width:100%;height:18px;display:block}
+  #lpVol{width:90px}
+  .lp-next{position:absolute;bottom:110px;inset-inline-end:28px;z-index:2;box-shadow:0 10px 30px -8px rgba(0,0,0,.8)}
+  .lp.idle{cursor:none}
+  .lp.idle .lp-top,.lp.idle .lp-bar{opacity:0;pointer-events:none}
+  .dlrow .dlfile{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+  .dlmeta{display:flex;flex-wrap:wrap;gap:2px 8px;font-size:12.5px;color:var(--muted)}
+  .dlmeta>*+*::before{content:'·';margin-inline-end:8px;color:var(--faint)}
+  .dlmeta .dlbusy{color:var(--queue);font-weight:600}
+  .dlacts{display:flex;gap:6px;flex-shrink:0;align-items:center}
+  .dlb{top:10px;inset-inline-end:10px;background:rgba(10,10,12,.78);color:#fff;backdrop-filter:blur(4px)}
+  .dlb .ic{color:var(--watching)}
+  .dlb.low{top:42px}
   .nextep{top:10px;inset-inline-end:10px;background:color-mix(in srgb,var(--watching) 88%,#000);color:#fff}
   .cwnext{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);margin-top:2px}
   .dlrow .cwthumb{width:44px;height:44px}
@@ -882,7 +935,7 @@
 </div>
 
 <div class="overlay" id="dlOverlay">
-  <div class="modal party" role="dialog" aria-label="تنزيلاتي">
+  <div class="modal party dlmodal" role="dialog" aria-label="تنزيلاتي">
     <div class="mhead-plain" style="margin-bottom:16px">
       <span class="sq" style="background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)"><i data-ic="download"></i></span>
       <div class="grow">
@@ -894,6 +947,31 @@
     <div id="dlBody"></div>
   </div>
 </div>
+<!-- بلاير المكتبة (الملفات المحلية): على الشاشة كلها جوه البرنامج — app.js dlPlayFile -->
+<div class="lp" id="lp" hidden>
+  <video id="dlVideo" crossorigin="anonymous" playsinline></video>
+  <div class="lp-top">
+    <button class="lp-btn" data-act="lpClose" title="رجوع (Esc)" aria-label="رجوع"><i data-ic="x"></i></button>
+    <div class="lp-title"><b id="lpTitle" dir="auto"></b><span id="lpSub" dir="auto"></span></div>
+  </div>
+  <button class="btn btn-amber lp-next" id="lpNext" data-act="lpNext" hidden><i data-ic="play" class="fill sm"></i>الحلقة الجاية</button>
+  <div class="lp-bar">
+    <input type="range" id="lpSeek" min="0" max="1000" value="0" aria-label="مكان الفيديو" dir="ltr">
+    <div class="lp-ctl">
+      <button class="lp-btn" data-act="lpToggle" id="lpPlay" aria-label="تشغيل"></button>
+      <button class="lp-btn txt" data-act="lpSkip" data-s="-10" title="رجوع 10 ثواني (←)" aria-label="رجوع 10 ثواني">−10</button>
+      <button class="lp-btn txt" data-act="lpSkip" data-s="10" title="قدّام 10 ثواني (→)" aria-label="قدّام 10 ثواني">+10</button>
+      <span class="lp-time" id="lpTime" dir="ltr"></span>
+      <span class="grow"></span>
+      <select id="lpSubs" aria-label="الترجمة" hidden></select>
+      <select id="lpRate" aria-label="السرعة"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
+      <button class="lp-btn" data-act="lpMute" id="lpMute" aria-label="الصوت"></button>
+      <input type="range" id="lpVol" min="0" max="1" step="0.05" value="1" aria-label="مستوى الصوت" dir="ltr">
+      <button class="lp-btn" data-act="lpFs" title="ملء الشاشة (F)" aria-label="ملء الشاشة"><i data-ic="expand"></i></button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="welcomeOverlay" role="dialog" aria-modal="true" aria-label="أهلاً بيك في rilio">
   <div class="modal welcome">
     <button class="mclose plain" id="wClose" data-act="wClose" title="إغلاق" aria-label="إغلاق" hidden><i data-ic="x"></i></button>

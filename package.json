@@ -47,6 +47,8 @@
       "app.html",
       "app.js",
       "progress.js",
+      "sitebar.html",
+      "sitebar.js",
       "popupblock.js",
       "mysteryhide.js",
       "icon*.png",

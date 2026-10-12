@@ -1,5 +1,5 @@
 // نسخة الديسكتوب — نفس app.html/app.js بتاعة الاكستنشن، والـ chrome.storage بيتعمله shim في preload.js
-const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, protocol, net, session, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, BaseWindow, WebContentsView, ipcMain, Tray, Menu, Notification, protocol, net, session, safeStorage, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -16,7 +16,7 @@ app.setAppUserModelId('com.watchlist.desktop');
 
 // الواجهة بتتحمل من app://local بدل file:// — صفحة file:// تقدر تقرا أي ملف على الجهاز لو حصل فيها injection
 const APP_ORIGIN = 'app://local/';
-const APP_FILES = new Set(['app.html', 'app.js', 'progress.js', 'icon16.png', 'icon48.png', 'icon128.png']);
+const APP_FILES = new Set(['app.html', 'app.js', 'progress.js', 'sitebar.html', 'sitebar.js', 'icon16.png', 'icon48.png', 'icon128.png']);
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true } },
   { scheme: 'wlmedia', privileges: { standard: true, secure: true, stream: true, corsEnabled: true } }, // تشغيل ملفات المكتبة (downloads.js)
@@ -54,7 +54,7 @@ function saveStore(next) {
 }
 
 // الواجهة الرئيسية بس هي اللي ليها تكلّم التخزين — مش أي فريم أو موقع خارجي
-const fromApp = e => !!e.senderFrame && e.senderFrame.parent === null && e.senderFrame.url.startsWith(APP_ORIGIN);
+const fromApp = e => !!e.senderFrame && e.senderFrame.parent === null && e.senderFrame.url.startsWith(APP_ORIGIN + 'app.html'); // الواجهة بس — مش شريط نوافذ المواقع
 
 // إعدادات الـ AI (فيها المفتاح متشفّر) مقفولة على الواجهة: مبتطلعش في النسخة الاحتياطية،
 // ونسخة احتياطية/إعدادات من حد تاني متقدرش تغيّر الـ endpoint وتسحب المفتاح لسيرفرها
@@ -284,16 +284,15 @@ function guardPopups(wc, isAppWindow) {
       if (!openGrants.length) return { action: 'deny' };
       openGrants.shift();
     } else if (!/^https?:/.test(url) || !adblock || adblock.isAdPopup(url, wc.getURL())) return { action: 'deny' };
-    return {
-      action: 'allow',
-      overrideBrowserWindowOptions: { ...siteWinSize(), autoHideMenuBar: true, icon: path.join(__dirname, 'icon128.png'), webPreferences },
-    };
+    return { action: 'allow', createWindow: openSiteWindow };
   });
-  wc.on('did-create-window', child => { siteWindows.add(child.webContents); siteWindowChrome(child); guardPopups(child.webContents, false); });
 }
 const siteWindows = new WeakSet(); // نوافذ المواقع — حظر الإعلانات شغال فيها بس
 
-// نوافذ المواقع: شريط رجوع/تقدّم/تحديث (+ Alt+الأسهم وF5 وزراير الماوس الجانبية)، وبتفتكر آخر مقاس سبتها عليه
+// نوافذ المواقع بشكل البرنامج: شريط فوق بلون المزاج (sitebar.html: رجوع/تقدّم/تحديث + اسم الصفحة) بدل شريط ويندوز الأبيض.
+// الموقع نفسه في WebContentsView تحت الشريط — نفس الـ webContents اللي window.open عمله، فالصفحة اللي فتحته لسه تقدر توجّهه
+const BAR_H = 40;
+const siteBars = new Map(); // id بتاع webContents الشريط → webContents الموقع
 const SITE_WIN = () => path.join(app.getPath('userData'), 'sitewin.json');
 function siteWinSize() {
   try {
@@ -303,24 +302,66 @@ function siteWinSize() {
   } catch (e) {}
   return { width: 1280, height: 800 };
 }
-function siteWindowChrome(win) {
-  const h = win.webContents.navigationHistory;
-  const back = () => { if (h.canGoBack()) h.goBack(); }, fwd = () => { if (h.canGoForward()) h.goForward(); };
-  win.setMenu(Menu.buildFromTemplate([
-    { label: '← رجوع', accelerator: 'Alt+Left', click: back },
-    { label: 'تقدّم →', accelerator: 'Alt+Right', click: fwd },
-    { label: '⟳ تحديث', accelerator: 'F5', click: () => win.webContents.reload() },
-  ]));
-  win.setAutoHideMenuBar(false);
-  win.setMenuBarVisibility(true);
-  win.on('app-command', (e, cmd) => { if (cmd === 'browser-backward') back(); else if (cmd === 'browser-forward') fwd(); });
-  win.on('close', () => {
-    if (win.isMaximized() || win.isMinimized() || win.isFullScreen()) return;
-    const [width, height] = win.getSize();
+function siteNav(swc, cmd) {
+  if (!swc || swc.isDestroyed()) return;
+  const h = swc.navigationHistory;
+  if (cmd === 'back' && h.canGoBack()) h.goBack();
+  else if (cmd === 'fwd' && h.canGoForward()) h.goForward();
+  else if (cmd === 'reload') swc.reload();
+}
+function openSiteWindow(options) {
+  const t = store['watchlist:theme'], key = MOODS[OLD_THEMES[t] || t] ? (OLD_THEMES[t] || t) : 'sahra', mood = MOODS[key];
+  const bw = new BaseWindow({
+    ...siteWinSize(), minWidth: 480, minHeight: 320, title: 'rilio', icon: path.join(__dirname, 'icon.ico'),
+    backgroundColor: mood.bg, titleBarStyle: 'hidden', titleBarOverlay: { color: mood.bar, symbolColor: mood.sym, height: BAR_H },
+  });
+  const bar = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const site = new WebContentsView({ webContents: options.webContents, webPreferences });
+  bar.setBackgroundColor(mood.bar);
+  bw.contentView.addChildView(site);
+  bw.contentView.addChildView(bar);
+  const layout = () => {
+    const [w, h] = bw.getContentSize();
+    bar.setBounds({ x: 0, y: 0, width: w, height: BAR_H });
+    site.setBounds({ x: 0, y: BAR_H, width: w, height: Math.max(0, h - BAR_H) });
+  };
+  layout();
+  bw.on('resize', layout);
+  const swc = site.webContents, bwc = bar.webContents;
+  siteWindows.add(swc);
+  siteBars.set(bwc.id, swc);
+  // الشريط بيمنع أي تنقل برا ملفه وأي نوافذ
+  bwc.on('will-navigate', e => e.preventDefault());
+  bwc.setWindowOpenHandler(() => ({ action: 'deny' }));
+  bwc.loadURL(APP_ORIGIN + 'sitebar.html#' + key);
+  const state = () => {
+    if (bwc.isDestroyed() || swc.isDestroyed()) return;
+    const h = swc.navigationHistory;
+    bwc.send('wl:bar:state', { title: swc.getTitle().slice(0, 200), host: hostOf(swc.getURL()), back: h.canGoBack(), fwd: h.canGoForward(), loading: swc.isLoading() });
+  };
+  for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated']) swc.on(ev, state);
+  bwc.on('did-finish-load', state);
+  swc.on('page-title-updated', (e, title) => { if (!bw.isDestroyed()) bw.setTitle(title ? `${title.slice(0, 120)} — rilio` : 'rilio'); });
+  // Alt+الأسهم وF5 من جوه الموقع، وزراير الماوس الجانبية
+  swc.on('before-input-event', (e, i) => {
+    if (i.type !== 'keyDown') return;
+    const cmd = i.alt && i.key === 'ArrowLeft' ? 'back' : i.alt && i.key === 'ArrowRight' ? 'fwd' : i.key === 'F5' ? 'reload' : null;
+    if (cmd) { e.preventDefault(); siteNav(swc, cmd); }
+  });
+  bw.on('app-command', (e, cmd) => siteNav(swc, cmd === 'browser-backward' ? 'back' : cmd === 'browser-forward' ? 'fwd' : null));
+  // آخر مقاس للنافذة الجاية
+  bw.on('close', () => {
+    if (bw.isMaximized() || bw.isMinimized() || bw.isFullScreen()) return;
+    const [width, height] = bw.getSize();
     try { fs.writeFileSync(SITE_WIN(), JSON.stringify({ width, height })); } catch (e) {}
   });
+  // WebContentsView مبيقفلش الـ webContents بتاعه لوحده
+  bw.on('closed', () => { siteBars.delete(bwc.id); if (!swc.isDestroyed()) swc.close(); if (!bwc.isDestroyed()) bwc.close(); });
+  swc.on('destroyed', () => { if (!bw.isDestroyed()) bw.close(); }); // window.close() من الموقع، أو نافذة تنزيل فاضية
+  guardPopups(swc, false);
+  return swc;
 }
-
+ipcMain.on('wl:bar:cmd', (e, cmd) => siteNav(siteBars.get(e.sender.id), cmd));
 // المواقع اللي المستخدم قفل حظر الإعلانات ليها من الإعدادات (noBlock) — بالـ hostname
 const hostOf = u => { try { return new URL(String(u).replace(/\{[^}]+\}/g, 'x')).hostname; } catch (e) { return ''; } };
 function siteAllowed(url) {
@@ -424,7 +465,8 @@ function createWindow() {
 }
 
 app.on('second-instance', () => win && show());
-app.on('before-quit', () => { quitting = true; });
+let downloads = null;
+app.on('before-quit', () => { quitting = true; if (downloads) downloads.beforeQuit(); });
 
 // سيرفر الـ Watch Party: من package.json — والـ override بالـ env للتست بس (مش في النسخة المتثبتة)
 function partyServerUrl() {
@@ -453,7 +495,7 @@ app.whenReady().then(() => {
     devFilters: !app.isPackaged && process.env.WL_ADBLOCK_FILTERS, // التست بس
     isSiteWindow: wc => siteWindows.has(wc), isAllowed: siteAllowed,
   });
-  initDownloads({
+  downloads = initDownloads({
     session: session.defaultSession, protocol, getWindow: () => win, fromApp, isSiteWindow: wc => siteWindows.has(wc),
     settingsPath: path.join(app.getPath('userData'), 'downloads.json'),
     defaultDir: (!app.isPackaged && process.env.WL_DL_DIR) || path.join(app.getPath('downloads'), 'rilio'), // الـ env للتست بس
