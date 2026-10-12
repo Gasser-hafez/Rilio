@@ -136,7 +136,10 @@ function cleanItem(it){
   out.recFrom=Array.isArray(it.recFrom)?it.recFrom.filter(t=>typeof t==='string'&&t).slice(0,5).map(t=>t.slice(0,120)):[];
   if(!out.recFrom.length)out.recFrom=undefined;
   // مكان الوقوف في البلاير: {pos} للفيلم، {s,e,pos} للحلقة — أرقام بس
-  {const r=it.resume;out.resume=r&&typeof r==='object'&&num(r.pos)!=null?{pos:num(r.pos),s:num(r.s),e:num(r.e)}:undefined;}
+  {const r=it.resume;out.resume=r&&typeof r==='object'&&num(r.pos)!=null?{pos:num(r.pos),s:num(r.s),e:num(r.e),dur:num(r.dur),at:num(r.at)}:undefined;}
+  // الحلقة الجاية من TMDB (تاريخ YYYY-MM-DD) + آخر حلقة نزلت واتبعت عنها إشعار ("2x5")
+  {const n=it.nextEp;out.nextEp=n&&typeof n==='object'&&num(n.s)!=null&&num(n.e)!=null&&/^\d{4}-\d{2}-\d{2}$/.test(str(n.date))?{s:num(n.s),e:num(n.e),date:n.date}:undefined;}
+  out.epNotified=/^\d{1,3}x\d{1,4}$/.test(str(it.epNotified))?it.epNotified:undefined;
   if(it.seasonEps&&typeof it.seasonEps==='object'){
     out.seasonEps={};
     for(const [s,n] of Object.entries(it.seasonEps))if(/^\d+$/.test(s)&&num(n)!=null)out.seasonEps[s]=num(n);
@@ -362,7 +365,8 @@ async function checkSeasons(){
   try{
     const shows=items.filter(i=>i.type==='tv'&&(i.status==='watched'||i.status==='watching'));
     let changed=false, ok=0;
-    const fresh=[];
+    const fresh=[], airedEps=[];
+    const today=new Date().toISOString().slice(0,10);
     for(const it of shows){
       try{
         const tid=await resolveTmdb(it);
@@ -374,6 +378,21 @@ async function checkSeasons(){
         // بيانات قديمة اتحسبت بالمواسم المعلنة — نرجّعها للي نزل فعلاً عشان الإشعار ييجي لما الموسم ينزل
         if(it.lastKnownSeasons==null||it.lastKnownSeasons>n){it.lastKnownSeasons=n;changed=true;}
         else if(n>it.lastKnownSeasons&&!it.newSeason){it.newSeason=true;changed=true;fresh.push(it);}
+        // مواعيد الحلقات (للي بتتفرج عليه بس): الجاية للشارة على الكارت، وآخر واحدة نزلت للإشعار
+        if(it.status==='watching'){
+          const nx=d.next_episode_to_air, ls=d.last_episode_to_air;
+          const nextEp=nx&&Number.isInteger(nx.season_number)&&Number.isInteger(nx.episode_number)&&/^\d{4}-\d{2}-\d{2}$/.test(str(nx.air_date))
+            ?{s:nx.season_number,e:nx.episode_number,date:nx.air_date}:undefined;
+          if(JSON.stringify(nextEp)!==JSON.stringify(it.nextEp)){it.nextEp=nextEp;changed=true;}
+          if(ls&&Number.isInteger(ls.season_number)&&Number.isInteger(ls.episode_number)&&str(ls.air_date)&&ls.air_date<=today){
+            const k=ls.season_number+'x'+ls.episode_number;
+            if(it.epNotified!==k){
+              // أول مرة بنشوف المسلسل: نسجّل من غير إشعار. وموسم جديد ليه إشعاره لوحده
+              if(it.epNotified!=null&&!fresh.includes(it))airedEps.push({it,s:ls.season_number,e:ls.episode_number});
+              it.epNotified=k;changed=true;
+            }
+          }
+        }
       }catch(e){if(e.message==='NO_KEY'||e.message==='BAD_KEY')break;}
     }
     // لو كله فشل (مفيش نت) منسجلش إننا فحصنا — نحاول تاني الساعة الجاية
@@ -384,6 +403,12 @@ async function checkSeasons(){
       notifyDesktop({title:'🔔 موسم جديد نزل',body:`${it.title} — الموسم ${it.latestSeasons}`,itemId:it.id});
     }else if(fresh.length>1){
       notifyDesktop({title:`🔔 ${fresh.length} مسلسلات نزلها مواسم جديدة`,body:fresh.map(i=>i.title).join('، ')});
+    }
+    if(airedEps.length===1){
+      const {it,s,e}=airedEps[0];
+      notifyDesktop({title:'🎬 حلقة جديدة نزلت',body:`${it.title} — S${pad(s)}E${pad(e)}`,itemId:it.id});
+    }else if(airedEps.length>1){
+      notifyDesktop({title:`🎬 ${airedEps.length} حلقات جديدة نزلت`,body:airedEps.map(x=>`${x.it.title} S${pad(x.s)}E${pad(x.e)}`).join('، ')});
     }
   }finally{seasonCheckRunning=false;}
 }
@@ -710,6 +735,15 @@ function stampHtml(it){
 }
 const pad=n=>String(n).padStart(2,'0');
 function progLabel(it){return `S${pad(it.curSeason||1)}E${pad(it.curEp||0)}`;}
+// ميعاد الحلقة الجاية: "النهارده" / "بكرة" / اسم اليوم خلال أسبوع / التاريخ — null لو عدّى
+function airLabel(date){
+  const today=new Date().toISOString().slice(0,10);
+  if(!date||date<today)return null;
+  const days=Math.round((Date.parse(date)-Date.parse(today))/864e5), d=new Date(date+'T12:00:00Z');
+  return days===0?'النهارده':days===1?'بكرة':days<7?d.toLocaleDateString('ar-EG',{weekday:'long'}):d.toLocaleDateString('ar-EG',{day:'numeric',month:'short'});
+}
+const nextEpHtml=(it,cls)=>{const n=it.nextEp, l=n&&it.status==='watching'&&airLabel(n.date);
+  return l?`<span class="${cls}" title="الحلقة الجاية S${pad(n.s)}E${pad(n.e)}">${ic('clock','sm')}E${pad(n.e)} ${l}</span>`:'';};
 // نسبة الموسم الحالي — null لو عدد الحلقات لسه مجاش من TMDB
 function epPct(it){
   const total=it.seasonEps?it.seasonEps[it.curSeason||1]:null;
@@ -726,6 +760,7 @@ function pcardHtml(it,ix){
         ${nextBadge}
         ${stampHtml(it)}
         ${it.newSeason?`<button class="pill-badge bell" data-act="ackSeason" data-id="${it.id}" title="اضغط لما تشوفه">${ic('bell','sm')}موسم جديد</button>`:''}
+        ${nextEpHtml(it,'pill-badge nextep')}
         ${quickHtml(it)}
       </div>
       <div class="pmeta">
@@ -842,17 +877,23 @@ function renderHome(){
   }
   if(!modalId)setAmbient(it);
 
-  const watching=items.filter(i=>i.status==='watching').slice(0,3);
+  // كمّل مشاهدة: اللي وقفت في نصه الأول (الأحدث)، وبعدين باقي اللي بتتفرج عليه
+  const live=i=>!i._party&&(i.status==='watching'||i.status==='queue');
+  const paused=items.filter(i=>live(i)&&i.resume&&i.resume.pos>=60).sort((a,b)=>(b.resume.at||0)-(a.resume.at||0));
+  const watching=[...paused,...items.filter(i=>i.status==='watching'&&!paused.includes(i))].slice(0,4);
   $('cwBox').hidden=!watching.length;
   $('cwList').innerHTML=watching.map(w=>{
-    const p=epPct(w);
+    const r=w.resume&&w.resume.pos>=60?w.resume:null;
+    const p=r?(r.dur>0?Math.min(100,Math.round(r.pos/r.dur*100)):null):epPct(w);
+    const label=r?(w.type==='tv'&&r.s&&r.e?`S${pad(r.s)}E${pad(r.e)} · `:'')+'وقفت عند '+mmss(r.pos):progLabel(w);
     return `<div class="cwrow" data-act="open" data-id="${w.id}" tabindex="0" role="button" aria-label="${esc(w.title)}">
       <div class="cwthumb">${w.poster?`<img src="${esc(w.poster)}" alt="" loading="lazy">`:noimgHtml(w,false)}</div>
       <div class="cwbody">
-        <div class="cwtop"><span class="cwtitle" dir="auto">${esc(w.title)}</span><span class="cwep">${progLabel(w)}</span></div>
+        <div class="cwtop"><span class="cwtitle" dir="auto">${esc(w.title)}</span><span class="cwep">${label}</span></div>
+        ${nextEpHtml(w,'cwnext')}
         ${p!=null?`<div class="bar"><i style="width:${p}%"></i></div>`:''}
       </div>
-      <button class="cwplay" data-act="player" data-id="${w.id}" aria-label="كمّل ${esc(w.title)}">${ic('play','fill sm')}</button>
+      <button class="cwplay" data-act="cwPlay" data-id="${w.id}" aria-label="كمّل ${esc(w.title)}">${ic('play','fill sm')}</button>
     </div>`;
   }).join('');
   const hasFilms=items.some(i=>i.status==='queue'&&i.type==='film');
@@ -1287,9 +1328,12 @@ function fillUrl(tpl,it,tid){
   if(!isHttp(u))throw new Error('BAD_URL');
   return u;
 }
+// آخر صفحة عنوان فتحت نافذة موقع — التنزيل اللي يطلع منها يتربط بالعنوان ده في المكتبة
+const markSiteOpen=it=>{lastSiteOpen={id:it.id,s:it.type==='tv'?it.curSeason||1:null,e:it.type==='tv'?(it.curEp||0)+1:null,at:Date.now()};};
 async function openWatch(id,ix){
   const it=items.find(i=>i.id===id);const s=sites[ix];
   if(!it||!s)return;
+  markSiteOpen(it);
   if(s.url.includes('{tmdbID}')){
     // بنفتح التاب فوراً قبل الـ fetch عشان مانع النوافذ المنبثقة ميقفلوش
     const win=window.open('about:blank','_blank');
@@ -1309,6 +1353,7 @@ async function openWatch(id,ix){
 }
 async function openDownload(id){
   const it=items.find(i=>i.id===id);if(!it)return;
+  markSiteOpen(it);
   const tpl=($('dlTpl')&&$('dlTpl').value.trim())||(await sget('watchlist:dlTpl'))||DEFAULT_DL;
   const needsTmdb=tpl.includes('{tmdbID}');
   const win=window.open('about:blank','_blank');
@@ -1461,9 +1506,10 @@ addEventListener('message',e=>{
   // الحلقة: اللي البلاير بيقول عليها (لو اختارتها من جواه)، وإلا اللي البرنامج فتحها
   const tv=it.type==='tv', s=tv?(ev.s??track.s):0, ep=tv?(ev.e??track.e):0;
   const r=WlProgress.step(track,ev,s+'x'+ep);
-  if(r==='save'){it.resume=tv?{s,e:ep,pos:Math.floor(ev.pos)}:{pos:Math.floor(ev.pos)};persist();}
+  if(r==='save'){saveResume(it,tv?s:null,tv?ep:null,ev.pos,ev.dur);persist();}
   else if(r==='done')autoDone(it,s,ep);
 });
+const saveResume=(it,s,e,pos,dur)=>{it.resume={...(s&&e?{s,e}:{}),pos:Math.floor(pos),dur:Math.floor(dur),at:Date.now()};};
 async function autoDone(it,s,e){
   it.resume=undefined;
   if(it.type!=='tv'){
@@ -2113,6 +2159,28 @@ if(partyApi){
    التنزيل والحفظ والتشغيل في main (downloads.js) — هنا العرض والأزرار بس */
 const dlApi=window.__wlDesktop&&window.__wlDesktop.dl;
 let dl={dir:'',items:[],library:[]}, dlPlaying=null;
+// ربط ملفات المكتبة بالعناوين: { اسم الملف: {id, s, e} } — بيتسجل لما التنزيل يبدأ من نافذة موقع اتفتحت من صفحة عنوان،
+// وإلا بنخمّن من اسم الملف (WlProgress.fileGuess)
+let libMap={}, lastSiteOpen=null;
+const LIB_KEY='watchlist:lib', SITE_LINK_MS=30*60*1000;
+function parseLib(raw){
+  const out={};
+  try{const o=JSON.parse(raw||'{}');
+    if(o&&typeof o==='object')for(const [k,v] of Object.entries(o).slice(0,2000))
+      if(k.length<=200&&v&&/^[\w-]{1,40}$/.test(str(v.id)))out[k]={id:v.id,s:num(v.s),e:num(v.e)};
+  }catch(e){}
+  return out;
+}
+function libInfo(f){
+  const l=libMap[f.name]||WlProgress.fileGuess(f.name,items.filter(i=>!i._party));
+  const it=l&&items.find(i=>i.id===l.id);
+  return it?{it,s:it.type==='tv'?l.s:null,e:it.type==='tv'?l.e:null}:null;
+}
+// ملف محلي للحلقة اللي هتتشاف (اللي وقفت فيها، وإلا الجاية) أو للفيلم
+function libFileFor(it){
+  const r=it.resume, s=r&&r.s?r.s:(it.curSeason||1), e=r&&r.e?r.e:(it.curEp||0)+1;
+  return dl.library.find(f=>{const l=libInfo(f);return l&&l.it===it&&(it.type!=='tv'||(l.s===s&&l.e===e));});
+}
 const fmtSize=b=>!(b>0)?'':b>=1e9?(b/1e9).toFixed(2)+' GB':(b/1e6).toFixed(1)+' MB';
 const DL_STATE={confirm:'مستني موافقتك',progressing:'بيتنزّل',paused:'متوقف',interrupted:'اتقطع',completed:'خلص',cancelled:'اتلغى'};
 function dlActs(d){
@@ -2137,8 +2205,11 @@ function renderDl(){
       <div class="sub">${DL_STATE[d.state]||''}${live&&pct!=null?' · '+pct+'%':''} ${fmtSize(d.total)}</div>
       ${live&&pct!=null?`<progress max="100" value="${pct}"></progress>`:''}</div>${dlActs(d)}</div>`;
   }).join('');
-  const lib=dl.library.map((f,ix)=>`<div class="dlrow"><div class="grow"><div class="dlname" dir="auto">${esc(f.name)}</div><div class="sub">${fmtSize(f.size)}</div></div>
-    <button class="btn btn-amber btn-sm" data-act="dlPlay" data-ix="${ix}">${ic('play','fill sm')}شغّل</button><button class="srv" data-act="dlReveal" data-ix="${ix}">الفولدر</button></div>`).join('');
+  const lib=dl.library.map((f,ix)=>{const l=libInfo(f), it=l&&l.it;
+    return `<div class="dlrow">${it?`<div class="cwthumb">${it.poster?`<img src="${esc(it.poster)}" alt="">`:noimgHtml(it,false)}</div>`:''}
+    <div class="grow"><div class="dlname" dir="auto">${it?esc(it.title)+(l.s&&l.e?` · S${pad(l.s)}E${pad(l.e)}`:''):esc(f.name)}</div>
+    <div class="sub">${it?`<span dir="ltr">${esc(f.name)}</span> · `:''}${fmtSize(f.size)}</div></div>
+    <button class="btn btn-amber btn-sm" data-act="dlPlay" data-ix="${ix}">${ic('play','fill sm')}شغّل</button><button class="srv" data-act="dlReveal" data-ix="${ix}">الفولدر</button></div>`;}).join('');
   box.innerHTML=`<div class="sub" style="display:flex;gap:8px;align-items:center"><span>بيتحفظوا في</span>
       <span dir="ltr" class="dlname" style="flex:1;min-width:0;font-weight:400">${esc(dl.dir)}</span><button class="srv" data-act="dlPickDir">غيّر</button></div>
     ${rows?`<h3>التنزيلات</h3>${rows}`:''}
@@ -2146,9 +2217,39 @@ function renderDl(){
 }
 async function dlRefresh(){try{dl=await dlApi.state();}catch(e){}if(!dlPlaying)renderDl();}
 function dlOpen(){dlPlaying=null;renderDl();$('dlOverlay').classList.add('show');dlRefresh();}
+// تشغيل ملف من المكتبة: بلايرنا إحنا، فالتتبع بيقرا الـ <video> مباشرة، و"كمّل من مكان ما وقفت" بيقدّم الفيديو فعلاً
+function dlPlayFile(f){
+  dlPlaying=f;
+  $('dlOverlay').classList.add('show');
+  renderDl();
+  const v=$('dlVideo'), l=libInfo(f), it=l&&l.it;
+  if(!v||!it||it._party)return;
+  const tv=it.type==='tv', s=l.s, e=l.e;
+  if(tv&&!(s&&e))return; // حلقة مش معروفة — منعلّمش حلقة غلط
+  const sess={done:new Set(),ep:null,savedAt:null}, key=tv?s+'x'+e:'0x0';
+  v.addEventListener('loadedmetadata',()=>{
+    const r=it.resume;
+    if(r&&r.pos>=60&&r.pos<v.duration*WlProgress.DONE_AT&&(!tv||(r.s===s&&r.e===e))){v.currentTime=r.pos;toast('كمّلت من '+mmss(r.pos));}
+  },{once:true});
+  const onTime=()=>{
+    if(dlPlaying!==f||!Number.isFinite(v.duration))return;
+    const ev={pos:v.currentTime,dur:v.duration,paused:v.paused}, r=WlProgress.step(sess,ev,key);
+    if(r==='save'){saveResume(it,s,e,ev.pos,ev.dur);persist();render();}
+    else if(r==='done')autoDone(it,tv?s:0,tv?e:0);
+  };
+  v.addEventListener('timeupdate',onTime);v.addEventListener('pause',onTime);
+}
+// زرار ▶ في "كمّل مشاهدة": الملف المحلي لو موجود (بيكمّل من نفس الثانية)، وإلا البلاير
+function cwPlay(id){
+  const it=items.find(i=>i.id===id);if(!it)return;
+  const f=dlApi&&libFileFor(it);
+  if(f)dlPlayFile(f);else openPlayer(id);
+}
 function dlClose(){dlPlaying=null;$('dlOverlay').classList.remove('show');renderDl();} // renderDl بيشيل الفيديو فبيقف
 if(dlApi){
   $('dlBtn').style.display='';
+  // المكتبة من أول ما البرنامج يفتح — زرار "كمّل" محتاج يعرف لو فيه ملف محلي
+  sget(LIB_KEY).then(r=>{libMap=parseLib(r);return dlRefresh();}).then(()=>render(),()=>{});
   $('dlOverlay').addEventListener('click',e=>{if(e.target===$('dlOverlay'))dlClose();});
   dlApi.onList(l=>{dl.items=Array.isArray(l)?l:[];if(!dlPlaying)renderDl();});
   // قبل ما أي تنزيل يبدأ: اسم الملف وحجمه وجاي منين — عشان محدش ينزّل برنامج ضار وهو فاكره فيلم
@@ -2160,6 +2261,11 @@ if(dlApi){
     else if(video&&size<50e6)warn.push('⚠ حجمه صغير أوي على فيلم أو حلقة — غالباً مش اللي إنت عايزه');
     if(/^\.(zip|rar|7z)$/.test(ext))warn.push('⚠ ملف مضغوط — لو لقيت جواه .exe أو أي برنامج متفتحوش');
     const ok=await uiConfirm(`تنزّل الملف ده؟\n${String(a.name||'')}\n${size?fmtSize(size):'حجم مش معروف'} · من ${String(a.host||'موقع مش معروف')}${warn.length?'\n\n'+warn.join('\n'):''}`,{yes:'نزّل',no:'لأ، الغيه'});
+    // التنزيل جاي من نافذة موقع اتفتحت من صفحة عنوان؟ يتربط بيه (وبالحلقة اللي كانت عليها)
+    if(ok&&lastSiteOpen&&Date.now()-lastSiteOpen.at<SITE_LINK_MS&&items.some(i=>i.id===lastSiteOpen.id)){
+      libMap[String(a.name)]={id:lastSiteOpen.id,s:lastSiteOpen.s,e:lastSiteOpen.e};
+      sset(LIB_KEY,JSON.stringify(libMap));
+    }
     dlApi.act(a.id,ok?'start':'cancel');
   });
   dlApi.onEvent(ev=>{
@@ -2322,7 +2428,8 @@ document.addEventListener('click',(e)=>{
     case 'dlOpen': dlOpen(); break;
     case 'dlClose': dlClose(); break;
     case 'dlAct': dlApi.act(parseInt(el.dataset.id),el.dataset.a); break;
-    case 'dlPlay': {const f=dl.library[parseInt(el.dataset.ix)];if(f){dlPlaying=f;renderDl();}} break;
+    case 'dlPlay': {const f=dl.library[parseInt(el.dataset.ix)];if(f)dlPlayFile(f);} break;
+    case 'cwPlay': cwPlay(id); break;
     case 'dlBack': dlPlaying=null;dlRefresh(); break;
     case 'dlReveal': {const f=dl.library[parseInt(el.dataset.ix)];if(f)dlApi.reveal(f.name);} break;
     case 'dlPickDir': dlApi.pickDir().then(()=>dlRefresh()); break;

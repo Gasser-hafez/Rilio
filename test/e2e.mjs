@@ -230,6 +230,7 @@ try {
       if (req.url === '/wl-adpop') { adpop++; res.writeHead(200); return res.end('ad'); }
       if (req.url === '/popfile.wav') { res.writeHead(200, { ...att('popfile.wav'), 'Content-Length': 44 }); return res.end(wav.subarray(0, 44)); }
       if (req.url === '/evil.exe') { res.writeHead(200, { ...att('evil.exe'), 'Content-Length': 2 }); return res.end('MZ'); }
+      if (req.url.split('?')[0] === '/ep.wav') { res.writeHead(200, { ...att('ep.wav'), 'Content-Length': wav.length }); return res.end(wav); }
       if (req.url === '/movie.mp4') { res.writeHead(200, { ...att('movie.mp4'), 'Content-Type': 'application/x-msdownload', 'Content-Length': 2 }); return res.end('MZ'); }
       if (req.url === '/slow.mp4' || req.url === '/nope.mp4') {
         res.writeHead(200, { ...att(req.url.slice(1)), 'Content-Length': SLOW });
@@ -319,6 +320,27 @@ try {
         }
         await app.ev(`dlClose();1`);
         assert.equal(await app.ev(`!!document.getElementById('dlVideo')`), false, 'closing stops the video');
+      });
+      await check('library: a download from a title page is linked to it; local playback tracks the episode and really resumes', async () => {
+        await app.ev(`items.push(cleanItem({id:'lib1',title:'Lib Show',type:'tv',status:'watching',tmdbId:55,curSeason:1,curEp:2}));
+          sites=[{name:'L',url:${JSON.stringify(base + '/ep.wav?q={q}')},dl:true}];openWatch('lib1',0).then(()=>1)`);
+        await approve('ep.wav');
+        await until(async () => (await item('ep.wav'))?.state === 'completed', 15000, 'episode downloaded');
+        await app.ev(`dlOpen();1`);
+        await until(() => app.ev(`dl.library.some(f=>f.name==='ep.wav')`), 4000, 'in library');
+        assert.match(await app.ev(`document.getElementById('dlBody').innerText`), /Lib Show · S01E03/);
+        // نقدّم لـ 5:00 → مكان الوقوف يتحفظ على S01E03
+        await app.ev(`dlPlayFile(dl.library.find(f=>f.name==='ep.wav'));1`);
+        await until(() => app.ev(`(v=>v&&v.duration>800)(document.getElementById('dlVideo'))`), 8000, 'metadata');
+        await app.ev(`(v=>{v.pause();v.currentTime=300})(document.getElementById('dlVideo'));1`);
+        await until(async () => (await app.ev(`JSON.stringify(items.find(i=>i.id==='lib1').resume||null)`)).includes('"pos":300'), 5000, 'resume saved');
+        // "كمّل" من الصفحة الرئيسية بيشغّل الملف المحلي ويقدّم لنفس الثانية
+        await app.ev(`dlClose();render();document.querySelector('#cwList [data-act=cwPlay][data-id=lib1]').click();1`);
+        await until(() => app.ev(`(v=>v&&Math.abs(v.currentTime-300)<2)(document.getElementById('dlVideo'))`), 8000, 'resumed at 5:00');
+        // 90% → الحلقة اتعلّمت والعدّاد اتقدم
+        await app.ev(`(v=>{v.pause();v.currentTime=820})(document.getElementById('dlVideo'));1`);
+        await until(() => app.ev(`items.find(i=>i.id==='lib1').curEp===3`), 5000, 'episode marked watched');
+        await app.ev(`dlClose();1`);
       });
     } finally { srv.close(); }
   }
@@ -462,6 +484,22 @@ try {
     assert.equal(notes[2].itemId, undefined);
     assert.match(notes[2].title, /2/);
   });
+  await check('episode dates: next episode on the card; a newly aired episode notifies once (first sight is silent)', async () => {
+    TMDB[200] = { seasons: seasons(5), next_episode_to_air: { season_number: 5, episode_number: 4, air_date: day(2) }, last_episode_to_air: { season_number: 5, episode_number: 3, air_date: day(-1) } };
+    await runCheck();
+    const r = JSON.parse(await app.ev(`JSON.stringify((i=>({n:i.nextEp,k:i.epNotified}))(items.find(i=>i.id==='s200')))`));
+    assert.deepEqual(r, { n: { s: 5, e: 4, date: day(2) }, k: '5x3' });
+    const epNotes = async () => (await app.ev('__notes')).filter(n => /حلقة/.test(n.title));
+    assert.equal((await epNotes()).length, 0, 'first sight is silent');
+    await app.ev(`tab='watching';render();1`);
+    assert.match(await app.ev(`document.querySelector('[data-itemid="s200"] .nextep').textContent`), /E04/);
+    TMDB[200] = { seasons: seasons(5), next_episode_to_air: { season_number: 5, episode_number: 5, air_date: day(9) }, last_episode_to_air: { season_number: 5, episode_number: 4, air_date: day(0) } };
+    await runCheck(); await runCheck();
+    const eps = await epNotes();
+    assert.equal(eps.length, 1, JSON.stringify(eps));
+    assert.match(eps[0].body, /Show B — S05E04/); assert.equal(eps[0].itemId, 's200');
+    await app.ev(`tab='queue';render();1`);
+  });
   await check('quick add from search, then undo from the same row', async () => {
     TMDB[500] = { seasons: seasons(1), name: 'Quick Show' };
     const r = await app.ev(`(async()=>{qaRows.set('t500',{key:'t500',src:'tmdb',tv:true,tmdbId:500,title:'Quick Show',year:'2020',poster:null,posterBig:null,backdrop:null,desc:''});
@@ -497,7 +535,9 @@ try {
   await check('auto-track: resume position saved from player events (episode + position)', async () => {
     await openFake({ id: 's600', title: 'Show F', type: 'tv', status: 'watching', tmdbId: 600, imdbID: 'tt600', curSeason: 2, curEp: 3, seasonEps: { 1: 10, 2: 4 }, totalSeasons: 3 });
     const saved = await app.ev(`chrome.storage.local.get('watchlist:data').then(d=>JSON.parse(d['watchlist:data']).find(i=>i.id==='s600').resume)`);
-    assert.deepEqual(saved, { s: 2, e: 4, pos: 120 });
+    const { at, ...rest } = saved;
+    assert.deepEqual(rest, { s: 2, e: 4, pos: 120, dur: 2700 });
+    assert.ok(Math.abs(Date.now() - at) < 60000, 'saved time');
   });
   await check('auto-track: messages not from the player iframe are ignored', async () => {
     await app.ev(`window.postMessage({type:'PLAYER_EVENT',data:{player_status:'playing',player_progress:2650,player_duration:2700}},'*');1`);
@@ -537,7 +577,8 @@ try {
     await app.ev(`items.push(cleanItem({id:'s650',title:'Show H',type:'tv',status:'watching',tmdbId:650,imdbID:'tt650',curSeason:1,curEp:1}));playerSrv=PLAYER_SERVERS.length;openPlayer('s650').then(()=>1)`);
     assert.equal(await app.ev(`${frame}.src.includes('episode')`), false);
     await until(async () => { await ev(120, 5); return (await itemOf('s650')).resume?.e === 5; }, 8000, 'resume for S1E5');
-    assert.deepEqual((await itemOf('s650')).resume, { s: 1, e: 5, pos: 120 });
+    const { at, ...rest } = (await itemOf('s650')).resume;
+    assert.deepEqual(rest, { s: 1, e: 5, pos: 120, dur: 2700 });
     await ev(2450, 5);
     await until(async () => (await itemOf('s650')).curEp === 5, 4000, 'counter jumps to E5 watched');
     await ev(2600, 6, 999); await sleep(500);
@@ -553,6 +594,16 @@ try {
     await until(async () => { await fakeEv('playing', 2650); return (await app.ev('__pe')) >= 3; }, 8000, 'party player events');
     const it = await itemOf('party-800');
     assert.deepEqual([it.curEp, it.resume], [0, undefined]);
+    await app.ev(`closeModal();1`);
+  });
+  await check('continue watching: half-watched titles first (episode + time); ▶ opens the player when there is no local file', async () => {
+    await app.ev(`items.push(cleanItem({id:'cw1',title:'Half Film',type:'film',status:'queue',tmdbId:901,imdbID:'tt901',resume:{pos:1500,dur:6000,at:Date.now()}}),
+      cleanItem({id:'cw2',title:'Half Show',type:'tv',status:'watching',tmdbId:902,imdbID:'tt902',curSeason:2,curEp:3,resume:{s:2,e:4,pos:610,dur:2700,at:Date.now()-1000}}));render();1`);
+    const rows = await app.ev(`[...document.querySelectorAll('#cwList .cwrow')].map(r=>r.innerText.replace(/\\s+/g,' '))`);
+    assert.match(rows[0], /Half Film.*وقفت عند 25:00/, JSON.stringify(rows));
+    assert.match(rows[1], /Half Show.*S02E04 · وقفت عند 10:10/, JSON.stringify(rows));
+    await app.ev(`document.querySelector('#cwList [data-act=cwPlay][data-id=cw2]').click();1`);
+    await until(() => app.ev(`playerOpen&&modalId==='cw2'&&!!document.querySelector('.playerbox iframe')`), 4000, 'player opened');
     await app.ev(`closeModal();1`);
   });
   await check('offline: failed check is not recorded, retried next hour', async () => {

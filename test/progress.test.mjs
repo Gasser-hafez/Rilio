@@ -44,6 +44,17 @@ test('step: short videos (ads/trailers) and impossible positions are ignored', (
   assert.equal(s.done.size, 0);
 });
 
+test('fileGuess: downloaded file name → title + episode from the list', () => {
+  const items = [{ id: 'b', title: 'The Boys', type: 'tv' }, { id: 'b2', title: 'Boys', type: 'tv' }, { id: 'it', title: 'It', type: 'film' },
+    { id: 'am', title: 'Amélie', type: 'film' }, { id: 'tt', title: 'You, Me and Tuscany', type: 'film' }];
+  assert.deepEqual(P.fileGuess('The.Boys.S02E05.1080p.WEB.mkv', items), { id: 'b', s: 2, e: 5 }, 'longest title wins');
+  assert.deepEqual(P.fileGuess('the boys 3x07.mp4', items), { id: 'b', s: 3, e: 7 });
+  assert.deepEqual(P.fileGuess('Amelie (2001).mp4', items), { id: 'am', s: null, e: null }, 'accents ignored, films have no episode');
+  assert.deepEqual(P.fileGuess('You Me and Tuscany 2026 1080p.mkv', items), { id: 'tt', s: null, e: null }, 'punctuation ignored');
+  assert.equal(P.fileGuess('Italy.Trip.mp4', items), null, '"It" is too short to match inside words');
+  assert.equal(P.fileGuess('random.mkv', []), null);
+});
+
 test('step: resume saved every 30s of play and once per pause position', () => {
   const s = sess();
   assert.equal(P.step(s, at(0), '1x1'), 'save');

@@ -41,6 +41,23 @@ const WlProgress = (() => {
     return null;
   }
 
-  return { parse, step, DONE_AT, MIN_DUR_S };
+  // ملف متنزّل → أنهي عنوان من القايمة وأنهي حلقة (لو التنزيل مجاش من صفحة عنوان معروف)
+  // "The.Boys.S02E05.1080p.mkv" → { id, s:2, e:5 }. العنوان الأطول اللي اسمه كله جوه اسم الملف هو اللي بيكسب
+  const norm = s => ' ' + String(s).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9؀-ۿ]+/g, ' ').trim() + ' ';
+  function fileGuess(name, items) {
+    const n = norm(String(name).replace(/\.[a-z0-9]{2,4}$/i, ''));
+    const m = /\ss(\d{1,2})\s?e(\d{1,3})\s/.exec(n) || /\s(\d{1,2})x(\d{1,3})\s/.exec(n);
+    let best = null;
+    for (const it of items || []) {
+      const t = norm(it.title);
+      if (t.trim().length < 3 || !n.includes(t)) continue;
+      if (!best || t.length > best.t.length) best = { t, it };
+    }
+    if (!best) return null;
+    const tv = best.it.type === 'tv';
+    return { id: best.it.id, s: tv && m ? +m[1] : null, e: tv && m ? +m[2] : null };
+  }
+
+  return { parse, step, fileGuess, DONE_AT, MIN_DUR_S };
 })();
 if (typeof module === 'object') module.exports = WlProgress;
