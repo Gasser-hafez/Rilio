@@ -2106,9 +2106,10 @@ if(partyApi){
 const dlApi=window.__wlDesktop&&window.__wlDesktop.dl;
 let dl={dir:'',items:[],library:[]}, dlPlaying=null;
 const fmtSize=b=>!(b>0)?'':b>=1e9?(b/1e9).toFixed(2)+' GB':(b/1e6).toFixed(1)+' MB';
-const DL_STATE={progressing:'بيتنزّل',paused:'متوقف',interrupted:'اتقطع',completed:'خلص',cancelled:'اتلغى'};
+const DL_STATE={confirm:'مستني موافقتك',progressing:'بيتنزّل',paused:'متوقف',interrupted:'اتقطع',completed:'خلص',cancelled:'اتلغى'};
 function dlActs(d){
   const b=(a,t)=>`<button class="srv" data-act="dlAct" data-id="${Number(d.id)}" data-a="${a}">${t}</button>`;
+  if(d.state==='confirm')return b('start','نزّل')+b('cancel','إلغاء');
   if(d.state==='progressing')return b('pause','إيقاف مؤقت')+b('cancel','إلغاء');
   if(d.state==='paused')return b('resume','كمّل')+b('cancel','إلغاء');
   if(d.state==='interrupted')return b('resume','كمّل');
@@ -2142,6 +2143,17 @@ if(dlApi){
   $('dlBtn').style.display='';
   $('dlOverlay').addEventListener('click',e=>{if(e.target===$('dlOverlay'))dlClose();});
   dlApi.onList(l=>{dl.items=Array.isArray(l)?l:[];if(!dlPlaying)renderDl();});
+  // قبل ما أي تنزيل يبدأ: اسم الملف وحجمه وجاي منين — عشان محدش ينزّل برنامج ضار وهو فاكره فيلم
+  dlApi.onAsk(async a=>{
+    if(!a||!Number.isInteger(a.id))return;
+    const size=Number(a.size)||0, ext=String(a.ext||''), video=/^\.(mp4|m4v|webm|mkv|mov|avi|ts)$/.test(ext);
+    const warn=[];
+    if(!size)warn.push('⚠ الموقع مقالش حجمه');
+    else if(video&&size<50e6)warn.push('⚠ حجمه صغير أوي على فيلم أو حلقة — غالباً مش اللي إنت عايزه');
+    if(/^\.(zip|rar|7z)$/.test(ext))warn.push('⚠ ملف مضغوط — لو لقيت جواه .exe أو أي برنامج متفتحوش');
+    const ok=await uiConfirm(`تنزّل الملف ده؟\n${String(a.name||'')}\n${size?fmtSize(size):'حجم مش معروف'} · من ${String(a.host||'موقع مش معروف')}${warn.length?'\n\n'+warn.join('\n'):''}`,{yes:'نزّل',no:'لأ، الغيه'});
+    dlApi.act(a.id,ok?'start':'cancel');
+  });
   dlApi.onEvent(ev=>{
     const n=String(ev&&ev.name||'');
     if(ev.kind==='started')toast('بدأ تنزيل '+n+' — تابعه من تنزيلاتي');

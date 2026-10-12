@@ -13,6 +13,8 @@ const MEDIA = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm',
 // اللي مسموح يتنزل: ميديا + ترجمة + أرشيف. أي حاجة تانية (exe, msi, bat, scr, lnk, js...) بتتلغي — المواقع دي مليانة برامج ضارة
 const ALLOWED = new Set([...Object.keys(MEDIA), '.avi', '.ts', '.srt', '.vtt', '.ass', '.ssa', '.sub', '.zip', '.rar', '.7z']);
 const extOf = n => path.extname(n).toLowerCase();
+// ملف تشغيل متنكر (movie.mp4 بس السيرفر بيقول إنه برنامج) — بيتمنع حتى لو الامتداد مسموح
+const EXE_MIME = /^application\/(x-msdownload|x-msdos-program|x-dosexec|vnd\.microsoft\.portable-executable|x-ms-installer|x-msi)\b/i;
 
 // اسم ملف آمن: من غير مسارات ولا حروف ممنوعة في ويندوز ولا أسماء محجوزة (CON, NUL...)
 function safeName(n) {
@@ -33,7 +35,7 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
   const toApp = (ch, p) => { const w = getWindow(); if (w && !w.isDestroyed()) w.webContents.send(ch, p); };
   const view = d => ({
     id: d.id, name: d.name, received: d.item.getReceivedBytes(), total: d.item.getTotalBytes(),
-    state: d.state === 'progressing' && d.item.isPaused() ? 'paused' : d.state,
+    state: d.asking ? 'confirm' : d.state === 'progressing' && d.item.isPaused() ? 'paused' : d.state,
   });
   const list = () => [...dls.values()].reverse().map(view);
   const push = () => { if (!pushTimer) pushTimer = setTimeout(() => { pushTimer = null; toApp('wl:dl:list', list()); }, 300); };
@@ -51,7 +53,7 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     const name = safeName(item.getFilename());
     // نافذة فاضية اتفتحت للتنزيل بس — تتقفل
     const closeBlank = () => { if (!wc.isDestroyed() && /^(about:blank)?$/.test(wc.getURL())) wc.close(); };
-    if (!ALLOWED.has(extOf(name))) {
+    if (!ALLOWED.has(extOf(name)) || EXE_MIME.test(item.getMimeType())) {
       e.preventDefault();
       toApp('wl:dl:event', { kind: 'blocked', name });
       closeBlank();
@@ -60,14 +62,20 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     try { fs.mkdirSync(dir, { recursive: true }); } catch (err) {}
     const file = uniquePath(name);
     item.setSavePath(file);
-    const d = { id: ++seq, name: path.basename(file), file, item, state: 'progressing' };
+    // مبيبدأش غير لما المستخدم يشوف الاسم والحجم ويوافق (الواجهة بتسأله — wl:dl:ask)
+    item.pause();
+    const d = { id: ++seq, name: path.basename(file), file, item, state: 'progressing', asking: true };
     dls.set(d.id, d);
     item.on('updated', (ev, st) => { d.state = st; push(); });
     item.once('done', (ev, st) => {
       d.state = st; push();
       if (st === 'completed') toApp('wl:dl:event', { kind: 'done', name: d.name });
     });
-    toApp('wl:dl:event', { kind: 'started', name: d.name });
+    let host = '';
+    try { host = new URL(item.getURL()).hostname; } catch (err) {}
+    const w = getWindow();
+    if (w && !w.isDestroyed()) { w.show(); w.focus(); }
+    toApp('wl:dl:ask', { id: d.id, name: d.name, size: item.getTotalBytes(), host, ext: extOf(d.name) });
     push();
     closeBlank();
   });
@@ -120,9 +128,11 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     guard(e);
     const d = dls.get(id);
     if (!d) return false;
-    if (act === 'pause' && d.state === 'progressing' && !d.item.isPaused()) d.item.pause();
+    if (act === 'start' && d.asking) { d.asking = false; d.item.resume(); toApp('wl:dl:event', { kind: 'started', name: d.name }); }
+    else if (d.asking && act !== 'cancel') return false; // لازم موافقة الأول
+    else if (act === 'pause' && d.state === 'progressing' && !d.item.isPaused()) d.item.pause();
     else if (act === 'resume' && (d.item.isPaused() || d.state === 'interrupted') && d.item.canResume()) d.item.resume();
-    else if (act === 'cancel' && d.state === 'progressing') d.item.cancel();
+    else if (act === 'cancel' && d.state === 'progressing') { d.asking = false; d.item.cancel(); }
     else if (act === 'show' && d.state === 'completed') shell.showItemInFolder(d.file);
     else return false;
     push();

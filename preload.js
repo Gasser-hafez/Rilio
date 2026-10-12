@@ -47,6 +47,7 @@ if (process.isMainFrame && location.origin === 'app://local') {
       pickDir: () => ipcRenderer.invoke('wl:dl:pickDir'),
       onList: fn => ipcRenderer.on('wl:dl:list', (e, l) => fn(l)),
       onEvent: fn => ipcRenderer.on('wl:dl:event', (e, ev) => fn(ev)),
+      onAsk: fn => ipcRenderer.on('wl:dl:ask', (e, a) => fn(a)),
     },
   });
   contextBridge.executeInMainWorld({

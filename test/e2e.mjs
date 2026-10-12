@@ -223,8 +223,9 @@ try {
       if (req.url === '/wl-adpop') { adpop++; res.writeHead(200); return res.end('ad'); }
       if (req.url === '/popfile.wav') { res.writeHead(200, { ...att('popfile.wav'), 'Content-Length': 44 }); return res.end(wav.subarray(0, 44)); }
       if (req.url === '/evil.exe') { res.writeHead(200, { ...att('evil.exe'), 'Content-Length': 2 }); return res.end('MZ'); }
-      if (req.url === '/slow.mp4') {
-        res.writeHead(200, { ...att('slow.mp4'), 'Content-Length': SLOW });
+      if (req.url === '/movie.mp4') { res.writeHead(200, { ...att('movie.mp4'), 'Content-Type': 'application/x-msdownload', 'Content-Length': 2 }); return res.end('MZ'); }
+      if (req.url === '/slow.mp4' || req.url === '/nope.mp4') {
+        res.writeHead(200, { ...att(req.url.slice(1)), 'Content-Length': SLOW });
         let i = 0; const t = setInterval(() => { res.write(Buffer.alloc(65536)); if (++i === 40) { clearInterval(t); res.end(); } }, 150);
         res.on('close', () => clearInterval(t)); return;
       }
@@ -235,15 +236,39 @@ try {
     const st = () => app.ev(`__wlDesktop.dl.state()`);
     const siteOpen = url => app.ev(`(()=>{const w=window.open('about:blank','_blank');w.location=${JSON.stringify(url)};return 1})()`);
     const item = async name => (await st()).items.find(i => i.name === name);
+    // كل تنزيل بيستنى موافقة: الاسم + الحجم + الموقع في نافذة التأكيد بتاعة البرنامج
+    const approve = async (name, yes = true) => {
+      const msg = await until(() => app.ev(`$('confirmOverlay').classList.contains('show')&&$('confirmMsg').textContent.includes(${JSON.stringify(name)})&&$('confirmMsg').textContent`), 8000, 'confirm for ' + name);
+      await app.ev(`document.getElementById('${yes ? 'confirmYes' : 'confirmNo'}').click();1`);
+      return msg;
+    };
     try {
       await check('downloads: site-window download saved to the folder (reserved name made safe); .exe blocked', async () => {
         await siteOpen(base + '/con.wav');
+        await until(async () => (await item('_CON.wav'))?.state === 'confirm', 8000, 'waiting for approval');
+        await sleep(800);
+        assert.equal((await item('_CON.wav')).state, 'confirm', 'nothing downloads before approval');
+        const msg = await approve('_CON.wav');
+        assert.match(msg, /14\.4 MB/); assert.match(msg, /127\.0\.0\.1/);
         await until(async () => (await item('_CON.wav'))?.state === 'completed', 15000, 'wav downloaded');
         assert.equal(fs.statSync(path.join(dlDir, '_CON.wav')).size, wav.length);
         await siteOpen(base + '/evil.exe');
         await sleep(2000);
         assert.equal(fs.existsSync(path.join(dlDir, 'evil.exe')), false);
         assert.equal(await item('evil.exe'), undefined);
+        // exe متنكر في اسم فيلم (السيرفر نفسه بيقول إنه برنامج)
+        await siteOpen(base + '/movie.mp4');
+        await sleep(2000);
+        assert.equal(await item('movie.mp4'), undefined);
+        assert.equal(fs.existsSync(path.join(dlDir, 'movie.mp4')), false);
+      });
+      await check('downloads: saying no cancels it — nothing saved; tiny "video" gets a warning', async () => {
+        await siteOpen(base + '/nope.mp4');
+        const msg = await approve('nope.mp4', false);
+        assert.match(msg, /صغير/);
+        await until(async () => (await item('nope.mp4'))?.state === 'cancelled', 5000, 'cancelled');
+        await sleep(500);
+        assert.equal(fs.readdirSync(dlDir).some(n => n.startsWith('nope')), false, fs.readdirSync(dlDir).join(','));
       });
       await check('site windows: download links that open a new window work; known ad popups are denied', async () => {
         // التشيك اللي فات قفل الحظر لـ 127.0.0.1 (نفس السيرفر ده) — نرجّعه
@@ -254,11 +279,13 @@ try {
         await click('ad'); await sleep(1500);
         assert.equal(adpop, 0, 'ad popup was opened');
         await click('file');
+        await approve('popfile.wav');
         await until(async () => (await item('popfile.wav'))?.state === 'completed', 8000, 'download from a new-window link');
         page.close();
       });
       await check('downloads: pause stops progress, resume finishes', async () => {
         await siteOpen(base + '/slow.mp4');
+        await approve('slow.mp4');
         await until(async () => (await item('slow.mp4'))?.received > 0, 8000, 'slow started');
         const id = (await item('slow.mp4')).id;
         assert.equal(await app.ev(`__wlDesktop.dl.act(${id},'pause')`), true);
