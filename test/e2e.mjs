@@ -275,8 +275,8 @@ try {
   const relay = spawn(process.execPath, [path.join(partyDir, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--port', String(RELAY_PORT), '--ip', '127.0.0.1',
     '--persist-to', fs.mkdtempSync(path.join(os.tmpdir(), 'wl-relay-'))], { cwd: partyDir, stdio: 'ignore' });
   const killTree = p => { if (process.platform === 'win32') { try { execSync(`taskkill /pid ${p.pid} /T /F`, { stdio: 'ignore' }); } catch (e) {} } else p.kill(); };
-  // فيديو تست: WAV صامت 3 دقايق (أطول من حد الإعلانات 60 ثانية) جوه iframe من دومين تاني
-  const FAKE_VIDEO = `(()=>{const sr=8000,secs=180,n=sr*secs,b=new ArrayBuffer(44+n*2),d=new DataView(b);
+  // فيديو تست: WAV صامت 15 دقيقة (أطول من حد الإعلانات 60 ثانية، وأطول من مدة التست كلها عشان مايخلصش في النص) جوه iframe من دومين تاني
+  const FAKE_VIDEO = `(()=>{const sr=8000,secs=900,n=sr*secs,b=new ArrayBuffer(44+n*2),d=new DataView(b);
     const w=(o,s)=>{for(let i=0;i<s.length;i++)d.setUint8(o+i,s.charCodeAt(i))};
     w(0,'RIFF');d.setUint32(4,36+n*2,true);w(8,'WAVE');w(12,'fmt ');d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);
     d.setUint32(24,sr,true);d.setUint32(28,sr*2,true);d.setUint16(32,2,true);d.setUint16(34,16,true);w(36,'data');d.setUint32(40,n*2,true);

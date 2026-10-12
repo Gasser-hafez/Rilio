@@ -86,9 +86,7 @@
     background:color-mix(in srgb,var(--titlebar) 82%,transparent);backdrop-filter:blur(14px);
   }
   html.desktop .overlay{top:40px}
-  .tb-mark{width:22px;height:22px;border-radius:7px;background:var(--accent);position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .tb-mark .ic{width:14px;height:14px;color:var(--accent-ink);stroke-width:3}
-  .tb-mark::after{content:'';position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:var(--watching)}
+  .tb-icon{width:22px;height:22px;flex-shrink:0;display:block}
 
   /* الوردمارك: الـ o زرار تشغيل */
   .wordmark{font-family:var(--display);font-weight:800;line-height:1;color:var(--ink);letter-spacing:-.3px;direction:ltr;unicode-bidi:isolate;white-space:nowrap}
@@ -190,6 +188,29 @@
   .seg button{height:36px;padding:0 16px;border:none;border-radius:10px;background:transparent;color:var(--muted);font-size:13px;font-weight:500}
   .seg button.on{background:var(--raised);color:var(--ink);font-weight:600}
 
+
+  /* الإضافة السريعة */
+  .qadd{padding:16px;display:flex;flex-direction:column;gap:14px}
+  .qa-top{display:flex;align-items:center;gap:10px}
+  .qa-search{flex:1;display:flex;align-items:center;gap:12px;height:58px;margin:0;padding:0 20px;background:var(--field);border:1.5px solid var(--line-2);border-radius:20px;transition:border-color .2s,box-shadow .2s}
+  .qa-search:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 14%,transparent)}
+  .qa-search .ic{color:var(--muted);width:20px;height:20px}
+  .qa-search input{flex:1;min-width:0;height:auto;padding:0;border:none;background:transparent;font-size:16px;box-shadow:none!important}
+  .qa-spin{width:18px;height:18px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .8s linear infinite;flex-shrink:0}
+  .qa-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:10px}
+  .qa-results:empty{display:none}
+  .qa-row{display:flex;align-items:center;gap:14px;padding:10px 12px 10px 10px;padding-inline:10px 12px;border-radius:18px;background:var(--surface-2);border:1px solid var(--line);transition:border-color .2s}
+  .qa-row:hover{border-color:color-mix(in srgb,var(--ink) 18%,transparent)}
+  .qa-p{width:52px;height:78px;border-radius:10px;flex-shrink:0;position:relative;overflow:hidden;background:var(--raised);display:flex;align-items:center;justify-content:center;color:var(--faint)}
+  .qa-p img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .qa-info{flex:1;min-width:0}
+  .qa-t{font-weight:600;font-size:15px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .qa-m{font-size:12px;color:var(--muted);margin-top:2px}
+  .qa-acts{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+  .qa-acts .btn{height:34px;padding:0 12px;font-size:13px}
+  .qa-own{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--watching);font-weight:600;padding:0 6px}
+  .qa-row.added{opacity:.75}
+  .qa-hint{grid-column:1/-1;text-align:center;color:var(--muted);font-size:14px;padding:14px}
   /* ============ اختيار الليلة + كمّل ============ */
   .hometop{display:flex;gap:20px;flex-wrap:wrap;align-items:stretch}
   .hero{
@@ -690,7 +711,7 @@
 <div id="ambient" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
 
 <div class="titlebar" dir="ltr">
-  <span class="tb-mark" aria-hidden="true"><i data-ic="playring"></i></span>
+  <img class="tb-icon" src="icon48.png" alt="" aria-hidden="true">
   <span class="wordmark" style="font-size:16px" aria-label="rilio">r<span class="i1">i</span>l<span class="i2">i</span><span class="o"></span></span>
 </div>
 
@@ -715,6 +736,18 @@
       <button class="iconbtn" id="gearBtn" title="الإعدادات" aria-label="الإعدادات"><i data-ic="sliders"></i></button>
     </div>
   </header>
+
+  <section class="panel qadd" id="quickAdd" hidden aria-label="ضيف فيلم أو مسلسل">
+    <div class="qa-top">
+      <label class="qa-search">
+        <i data-ic="search"></i>
+        <input type="text" id="qaInput" dir="auto" autocomplete="off" placeholder="اكتب اسم فيلم أو مسلسل…" aria-label="دوّر على فيلم أو مسلسل تضيفه">
+        <span class="qa-spin" id="qaSpin" hidden></span>
+      </label>
+      <button class="iconbtn" data-act="qaClose" title="إغلاق" aria-label="إغلاق"><i data-ic="x"></i></button>
+    </div>
+    <div class="qa-results" id="qaResults" aria-live="polite"></div>
+  </section>
 
   <details class="panel addbox" id="addBox">
     <summary><span class="sq"><i data-ic="plus"></i></span><span id="formTitle">ضيف حاجة جديدة</span></summary>

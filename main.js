@@ -333,7 +333,7 @@ function createWindow() {
     backgroundColor: mood.bg, autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: mood.bar, symbolColor: mood.sym, height: 40 },
-    icon: path.join(__dirname, 'icon128.png'),
+    icon: path.join(__dirname, 'icon.ico'),
     title: 'rilio',
     webPreferences,
   });
@@ -373,7 +373,7 @@ app.whenReady().then(() => {
 
   createWindow();
   initParty({ getWindow: () => win, serverUrl: partyServerUrl(), fromApp });
-  tray = new Tray(path.join(__dirname, 'icon16.png'));
+  tray = new Tray(path.join(__dirname, 'icon.ico'));
   const updater = initUpdater({
     onChange: st => {
       buildTrayMenu();
