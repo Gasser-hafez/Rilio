@@ -207,6 +207,13 @@ try {
       assert.equal(await app.ev(`document.querySelector('#sitesList [data-act=siteBlock]').getAttribute('aria-pressed')`), 'false');
       await until(() => hits['/ok.gif'] >= 2, 10000, 'site page loaded again');
       await until(() => hits['/wl-ad.gif'] === 1, 3000, 'ad allowed once the site is excluded');
+      // المفتاح العام: الموقع رجع محمي، بس الحظر مقفول لكل المواقع → الإعلان يعدّي. ونرجّعه
+      await app.ev(`siteBlock(0).then(()=>toggleAdblock()).then(()=>openWatch('ok1',0)).then(()=>1)`);
+      assert.equal(await app.ev(`$('adblockBtn').getAttribute('aria-checked')`), 'false');
+      await until(() => hits['/ok.gif'] >= 3, 10000, 'site page loaded a third time');
+      await until(() => hits['/wl-ad.gif'] === 2, 3000, 'ad allowed with the global switch off');
+      await app.ev(`toggleAdblock().then(()=>1)`);
+      assert.equal(await app.ev(`chrome.storage.local.get('watchlist:adblock').then(d=>d['watchlist:adblock'])`), '1');
     } finally { srv.close(); }
   });
   {

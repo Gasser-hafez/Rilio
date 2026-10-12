@@ -296,6 +296,7 @@ const siteWindows = new WeakSet(); // نوافذ المواقع — حظر ال�
 // المواقع اللي المستخدم قفل حظر الإعلانات ليها من الإعدادات (noBlock) — بالـ hostname
 const hostOf = u => { try { return new URL(String(u).replace(/\{[^}]+\}/g, 'x')).hostname; } catch (e) { return ''; } };
 function siteAllowed(url) {
+  if (store['watchlist:adblock'] === '0') return true; // المستخدم قفل الحظر لكل المواقع من الإعدادات
   const h = hostOf(url);
   let sites = [];
   try { sites = JSON.parse(store['watchlist:sites'] || '[]'); } catch (e) {}

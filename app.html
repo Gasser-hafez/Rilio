@@ -1133,7 +1133,11 @@
         <p class="sub">مواقع بتظهر كزراير في صفحة أي فيلم أو مسلسل وبتفتح في نافذة جوه البرنامج. مواقع <b>المشاهدة</b> بتظهر في "هشوفهم" و"بتفرج"، ومواقع <b>التحميل</b> بتظهر في قسم "حمّل من" جنب الموقع الافتراضي. اللي بتنزّله منها بيروح "تنزيلاتي".</p>
         
         <div class="sub">الـ placeholders: <b dir="ltr">{q}</b> اسم العمل، <b dir="ltr">{tmdbID}</b> رقم TMDB، <b dir="ltr">{type}</b> movie أو tv، <b dir="ltr">{season}</b> و<b dir="ltr">{episode}</b> الحلقة الجاية (وبيتشالوا لوحدهم مع الأفلام). مثال: <span dir="ltr" style="color:var(--ink)">lordflix.org/watch/{type}/{tmdbID}</span></div>
-        <p class="sub desk-only">نوافذ المواقع فيها حظر إعلانات. لو موقع مشتغلش كويس، دوس <b>الدرع</b> جنبه تقفل الحظر ليه بس — مش كل المواقع بتقبل مانع الإعلانات.</p>
+        <div class="shieldrow desk-only">
+          <span class="sq"><i data-ic="shield"></i></span>
+          <span class="grow"><b style="font-weight:600;display:block">حظر الإعلانات في نوافذ المواقع</b><span class="sub">لو موقع مش راضي يشتغل غير من غيره، دوس <b>الدرع</b> جنبه تحت تقفله ليه بس — أو اقفله هنا لكل المواقع</span></span>
+          <button class="switch" role="switch" aria-checked="true" data-act="adblockToggle" id="adblockBtn" aria-label="حظر الإعلانات في نوافذ المواقع"></button>
+        </div>
         <div id="sitesList" style="display:flex;flex-direction:column;gap:6px"></div>
         <div class="fieldrow">
           <select id="siteKind" aria-label="نوع الموقع" style="min-width:110px"><option value="">للمشاهدة</option><option value="dl">للتحميل</option></select>

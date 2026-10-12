@@ -206,6 +206,7 @@ async function load(){
   {const d=await sget('watchlist:dlTpl');$('dlTpl').value=!d||d===LEGACY_DL?DEFAULT_DL:d;}
   playerSrv=restorePlayerSrv(await sget('watchlist:playerSrv'),await sget(SRV_LIST_LEN_KEY));
   playerShield=(await sget('watchlist:playerShield'))==='1';
+  $('adblockBtn').setAttribute('aria-checked',(await sget('watchlist:adblock'))==='0'?'false':'true');
   subLang=(await sget('watchlist:subLang'));if(subLang==null)subLang='ar';
   {const stored=await sget('watchlist:theme'), t=applyTheme(stored);
     if(stored&&stored!==t)await sset('watchlist:theme',t);} // الثيمات القديمة بتتحول للمزاج المقابل مرة واحدة
@@ -1353,6 +1354,13 @@ async function openPlayer(id){
   }
   renderModal();
 }
+// حظر الإعلانات في نوافذ المواقع (main بيقرا watchlist:adblock — '0' = مقفول لكل المواقع)
+async function toggleAdblock(){
+  const on=$('adblockBtn').getAttribute('aria-checked')!=='true';
+  await sset('watchlist:adblock',on?'1':'0');
+  $('adblockBtn').setAttribute('aria-checked',on?'true':'false');
+  toast(on?'حظر الإعلانات رجع ✔':'حظر الإعلانات اتقفل — افتح الموقع تاني');
+}
 function shieldLabel(){
   if($('shieldBtn'))$('shieldBtn').setAttribute('aria-checked',playerShield?'true':'false');
 }
@@ -2340,6 +2348,7 @@ document.addEventListener('click',(e)=>{
     case 'playerSrv': setPlayerSrv(parseInt(el.dataset.ix)); break;
     case 'playerSrvCycle': playerSrvCycle(parseInt(el.dataset.n)); break;
     case 'playerShield': togglePlayerShield(); break;
+    case 'adblockToggle': toggleAdblock(); break;
     case 'playerFs': playerFs(); break;
     case 'mysteryPlay': mysteryPlay(); break;
     case 'mysteryReveal': mysteryReveal(id); break;
