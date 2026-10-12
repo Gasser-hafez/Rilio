@@ -1,12 +1,13 @@
 {
   "name": "watchlist",
   "productName": "Watchlist",
-  "version": "4.1.1",
+  "version": "4.2.0",
   "description": "قائمة المشاهدة — نسخة الديسكتوب",
   "main": "main.js",
+  "partyServer": "wss://watchlist-party.gaser-7afez.workers.dev",
   "scripts": {
     "start": "electron .",
-    "test": "node test/security-check.mjs",
+    "test": "node test/e2e.mjs",
     "dist": "electron-builder --win nsis --publish never"
   },
   "build": {
@@ -44,7 +45,9 @@
       "app.js",
       "popupblock.js",
       "mysteryhide.js",
-      "icon*.png"
+      "icon*.png",
+      "party.js",
+      "party-server/src/protocol.mjs"
     ]
   },
   "devDependencies": {

@@ -5,3 +5,8 @@ dist/
 بلبول.json
 watchlist-backup-*.json
 watchlist-settings-*.json
+
+# سيرفر الـ Watch Party
+party-server/node_modules/
+party-server/.wrangler/
+.wrangler/

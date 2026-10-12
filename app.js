@@ -80,7 +80,8 @@ function parseSites(raw){
 
 /* ================= التخزين ================= */
 async function persist(){
-  try{selfWrites++;await sset(KEY,JSON.stringify(items));}
+  // عناصر الـ Watch Party المؤقتة (_party) مبتتحفظش
+  try{selfWrites++;await sset(KEY,JSON.stringify(items.filter(i=>!i._party)));}
   catch(e){selfWrites--;toast('⚠ فشل الحفظ — جرب تاني');}
 }
 chrome.storage.onChanged.addListener((ch,area)=>{
@@ -158,27 +159,57 @@ function closeSettings(){$('settingsOverlay').classList.remove('show');}
 $('settingsOverlay').addEventListener('click',e=>{if(e.target===$('settingsOverlay'))closeSettings();});
 
 /* ================= المواسم الجديدة ================= */
+/* ================= فحص المواسم الجديدة =================
+   بيشتغل عند الفتح وكل ساعة (والفحص الفعلي كل 6 ساعات) — في الديسكتوب النافذة عايشة في الـ tray فده شغال في الخلفية */
+const SEASON_CHECK_EVERY=6*3600*1000;
+let seasonCheckRunning=false;
+// آخر موسم نزل فعلاً — number_of_seasons بيزيد أول ما الموسم يتعلن حتى لو لسه فاضل عليه شهور
+function airedSeasons(d){
+  const today=new Date().toISOString().slice(0,10);
+  return (d.seasons||[]).reduce((m,s)=>
+    (s.season_number>0&&s.air_date&&s.air_date<=today)?Math.max(m,s.season_number):m,0);
+}
+// إشعار ويندوز — موجود في الديسكتوب بس؛ في الاكستنشن الجرس على الكارت كفاية
+function notifyDesktop(p){
+  if(window.__wlDesktop)return window.__wlDesktop.notify(p).catch(()=>{});
+}
 async function checkSeasons(){
+  if(seasonCheckRunning)return;
   const tok=(await sget('watchlist:tmdbkey'))||'';
   if(!tok)return;
   const last=parseInt((await sget('watchlist:lastSeasonCheck'))||'0');
-  if(Date.now()-last<12*3600*1000)return;
-  const shows=items.filter(i=>i.type==='tv'&&i.status==='watched');
-  let changed=false;
-  for(const it of shows){
-    try{
-      const tid=await resolveTmdb(it);
-      const d=await tmdbFetch(`/tv/${tid}`);
-      const n=d.number_of_seasons||0;
-      it.latestSeasons=n;
-      if(d.backdrop_path&&!it.backdrop){it.backdrop=d.backdrop_path;changed=true;}
-      if(it.lastKnownSeasons==null){it.lastKnownSeasons=n;changed=true;}
-      else if(n>it.lastKnownSeasons&&!it.newSeason){it.newSeason=true;changed=true;}
-    }catch(e){if(e.message==='NO_KEY'||e.message==='BAD_KEY')break;}
-  }
-  await sset('watchlist:lastSeasonCheck',String(Date.now()));
-  if(changed){await persist();render();}
+  if(Date.now()-last<SEASON_CHECK_EVERY)return;
+  seasonCheckRunning=true;
+  try{
+    const shows=items.filter(i=>i.type==='tv'&&(i.status==='watched'||i.status==='watching'));
+    let changed=false, ok=0;
+    const fresh=[];
+    for(const it of shows){
+      try{
+        const tid=await resolveTmdb(it);
+        const d=await tmdbFetch(`/tv/${tid}`);
+        ok++;
+        const n=airedSeasons(d);
+        if(it.latestSeasons!==n){it.latestSeasons=n;changed=true;}
+        if(d.backdrop_path&&!it.backdrop){it.backdrop=d.backdrop_path;changed=true;}
+        // بيانات قديمة اتحسبت بالمواسم المعلنة — نرجّعها للي نزل فعلاً عشان الإشعار ييجي لما الموسم ينزل
+        if(it.lastKnownSeasons==null||it.lastKnownSeasons>n){it.lastKnownSeasons=n;changed=true;}
+        else if(n>it.lastKnownSeasons&&!it.newSeason){it.newSeason=true;changed=true;fresh.push(it);}
+      }catch(e){if(e.message==='NO_KEY'||e.message==='BAD_KEY')break;}
+    }
+    // لو كله فشل (مفيش نت) منسجلش إننا فحصنا — نحاول تاني الساعة الجاية
+    if(ok||!shows.length)await sset('watchlist:lastSeasonCheck',String(Date.now()));
+    if(changed){await persist();render();}
+    if(fresh.length===1){
+      const it=fresh[0];
+      notifyDesktop({title:'🔔 موسم جديد نزل',body:`${it.title} — الموسم ${it.latestSeasons}`,itemId:it.id});
+    }else if(fresh.length>1){
+      notifyDesktop({title:`🔔 ${fresh.length} مسلسلات نزلها مواسم جديدة`,body:fresh.map(i=>i.title).join('، ')});
+    }
+  }finally{seasonCheckRunning=false;}
 }
+setInterval(checkSeasons,3600*1000);
+if(window.__wlDesktop)window.__wlDesktop.onOpenItem(id=>{if(items.some(i=>i.id===id))openModal(id);});
 async function ackSeason(id){
   const it=items.find(i=>i.id===id);if(!it)return;
   it.lastKnownSeasons=it.latestSeasons||it.lastKnownSeasons;
@@ -630,6 +661,7 @@ document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
   if($('importOverlay').classList.contains('show'))importClose();
   else if($('settingsOverlay').classList.contains('show'))closeSettings();
+  else if($('partyOverlay').classList.contains('show'))partyClose();
   else if($('statsOverlay').classList.contains('show'))closeStats();
   else if(playerOpen){playerOpen=false;renderModal();}
   else if(modalId)closeModal();
@@ -652,7 +684,7 @@ function renderModal(){
   if(!it){closeModal();return;}
   $('modal').classList.toggle('wide',playerOpen);
   $('overlay').classList.toggle('theater',playerOpen);
-  if(playerOpen){$('modal').innerHTML=renderPlayer(it);return;}
+  if(playerOpen){$('modal').innerHTML=renderPlayer(it);partySyncMedia(it);return;}
   const bd=it.backdrop?`https://image.tmdb.org/t/p/w780${it.backdrop}`:null;
   const sitesBtns=(it.status==='queue'||it.status==='watching')
     ?sites.map((s,ix)=>`<button class="btn btn-sm btn-watch" data-act="watch" data-id="${it.id}" data-site="${ix}">▶ ${esc(s.name)}</button>`).join('')
@@ -1114,6 +1146,7 @@ function renderPlayer(it){
       <div class="pt" dir="auto">${mystery?'🎁 فيلم غامض':'▶ '+esc(it.title)+epTxt}</div>
       ${mystery?'':srvChips}
       ${mystery?'':shieldChip}
+      ${mystery?'':`<span id="partyBadge">${partyBadgeHtml()}</span>`}
       <button class="srv" data-act="playerFs" title="ملء الشاشة">⛶ ملء الشاشة</button>
       ${mystery
         ?`<button class="srv" data-act="mysteryReveal" data-id="${it.id}" title="اكشف الفيلم">👁 اكشف الاسم</button>`
@@ -1336,6 +1369,126 @@ $('exportBtn').onclick=async()=>{
   }
 };
 
+/* ================= Watch Party (الديسكتوب بس) =================
+   الاتصال والتحكم في الفيديو في main/preload — هنا الواجهة بس.
+   صاحبك بيتفرج على نسخة مؤقتة (_party) مبتتحفظش ومبتغيرش تقدّمه في قايمته */
+const partyApi=window.__wlDesktop&&window.__wlDesktop.party;
+let party={status:'idle',code:null,peers:0,media:null,error:null,enabled:false};
+let partySavedSrv=null; // سيرفر المستخدم قبل الأوضة — بيرجع لما يخرج
+const PARTY_ERRORS={room_full:'الأوضة مليانة (8 أشخاص بالكتير)',bad_code:'الكود ده مش صحيح — 8 حروف وأرقام',no_server:'Watch Party مش متاح في النسخة دي'};
+const fmtCode=c=>c?c.slice(0,4)+'-'+c.slice(4):'';
+// البروتوكول بيقبل لحد 31 — أي رقم برا الليستة الثابتة يبقى سيرفر 1، عشان محدش في الأوضة يشغّل القالب المخصص بتاعك
+const partySrvOf=m=>Number.isInteger(m.srv)&&m.srv>=0&&m.srv<PLAYER_SERVERS.length?m.srv:0;
+
+function partyMediaOf(it){
+  const m={tmdbId:it.tmdbId,type:it.type==='tv'?'tv':'movie',srv:playerSrv,title:it.title};
+  if(it.type==='tv'){m.season=it.curSeason||1;m.episode=(it.curEp||0)+1;}
+  return m;
+}
+function itemMatchesMedia(it,m){
+  if(!it||!m||it.tmdbId!==m.tmdbId||(it.type==='tv'?'tv':'movie')!==m.type||playerSrv!==partySrvOf(m))return false;
+  return m.type!=='tv'||((it.curSeason||1)===m.season&&(it.curEp||0)+1===m.episode);
+}
+// البلاير اتفتح/اتغيّر عندي → بلّغ الأوضة (main بيتجاهل لو نفس الحلقة)
+function partySyncMedia(it){
+  if(!partyApi||party.status!=='connected'||mysteryMode||!it||!it.tmdbId)return;
+  if(playerSrv>=PLAYER_SERVERS.length){
+    // السيرفرات المخصصة متنفعش في الأوضة — صاحبك لازم يفتح نفس السيرفر من الليستة الثابتة
+    if(partySavedSrv==null)partySavedSrv=playerSrv;
+    playerSrv=0;toast('Watch Party بيشتغل على السيرفرات الأساسية بس — حوّلتك لسيرفر 1');
+    renderModal();return; // renderModal هينادي partySyncMedia تاني بالسيرفر الجديد
+  }
+  partyApi.setMedia(partyMediaOf(it)).catch(()=>{});
+}
+// الأوضة اختارت فيلم/حلقة → افتحها عندي
+function partyOpenMedia(m){
+  const cur=items.find(i=>i.id===modalId);
+  if(playerOpen&&itemMatchesMedia(cur,m))return;
+  items=items.filter(i=>!i._party);
+  const it={id:'party-'+m.tmdbId,title:m.title||'Watch Party',type:m.type==='tv'?'tv':'film',status:'party',_party:true,
+    tmdbId:m.tmdbId,curSeason:m.season||1,curEp:(m.episode||1)-1,genre:'',note:'',added:Date.now()};
+  items.push(it);
+  if(partySavedSrv==null)partySavedSrv=playerSrv;
+  playerSrv=partySrvOf(m);
+  mysteryMode=false;mysteryId=null;
+  modalId=it.id;playerOpen=true;
+  $('overlay').classList.add('show');
+  renderModal();
+  toast('👥 الأوضة شغّالة: '+it.title);
+}
+function partyBadgeHtml(){
+  if(!partyApi||!party.enabled)return'';
+  const txt=party.status==='connected'?`👥 ${esc(fmtCode(party.code))} · ${party.peers}`
+    :party.status==='connecting'||party.status==='reconnecting'?'👥 بيتصل...':'👥 Watch Party';
+  return `<button class="srv${party.status==='connected'?' on':''}" data-act="partyOpen" title="Watch Party">${txt}</button>`;
+}
+function renderParty(){
+  const badge=$('partyBadge');if(badge)badge.innerHTML=partyBadgeHtml(); // من غير renderModal — الـ iframe ميتعملوش reload
+  const body=$('partyBody');if(!body)return;
+  const err=party.error?`<div style="color:#ff7a7a;font-size:.85rem;margin-bottom:12px">${esc(PARTY_ERRORS[party.error]||'حصلت مشكلة — جرب تاني')}</div>`:'';
+  if(!party.enabled){body.innerHTML=`<div class="sub">${PARTY_ERRORS.no_server}</div>`;return;}
+  if(party.status==='idle'){
+    body.innerHTML=err+`
+      <button class="btn btn-amber" data-act="partyCreate" style="width:100%">＋ اعمل أوضة جديدة</button>
+      <div class="sub" style="margin:10px 0 6px;text-align:center">أو ادخل أوضة صاحبك</div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="partyCode" dir="ltr" maxlength="9" placeholder="ABCD-EFGH" style="flex:1;text-transform:uppercase;letter-spacing:2px;text-align:center">
+        <button class="btn" data-act="partyJoin">ادخل</button>
+      </div>`;
+    return;
+  }
+  if(party.status!=='connected'){
+    body.innerHTML=err+`<div class="sub" style="margin-bottom:12px">${party.status==='reconnecting'?'النت فصل — بحاول أرجع تاني...':'بيتصل بالأوضة...'}</div>
+      <button class="btn btn-ghost" data-act="partyLeave">إلغاء</button>`;
+    return;
+  }
+  body.innerHTML=err+`
+    <div style="text-align:center;margin-bottom:14px">
+      <div class="sub">كود الأوضة — ابعته لصاحبك</div>
+      <div dir="ltr" style="font-family:monospace;font-size:2rem;letter-spacing:4px;color:var(--amber);margin:6px 0">${esc(fmtCode(party.code))}</div>
+      <button class="btn btn-sm" data-act="partyCopy">📋 انسخ الكود</button>
+    </div>
+    <div class="sub" style="margin-bottom:6px">👥 في الأوضة: ${party.peers}</div>
+    <div class="sub" style="margin-bottom:14px">${party.media?'🎬 '+esc(party.media.title)+(party.media.type==='tv'?` — S${pad(party.media.season)}E${pad(party.media.episode)}`:''):'مستنيين حد يفتح فيلم أو حلقة من البلاير'}</div>
+    ${party.media&&!(playerOpen&&itemMatchesMedia(items.find(i=>i.id===modalId),party.media))?`<button class="btn btn-amber" data-act="partyWatch" style="width:100%;margin-bottom:10px">▶ افتح البلاير</button>`:''}
+    <button class="btn btn-ghost btn-danger" data-act="partyLeave">اخرج من الأوضة</button>`;
+}
+function partyOpen(){renderParty();$('partyOverlay').classList.add('show');}
+function partyClose(){$('partyOverlay').classList.remove('show');}
+$('partyOverlay').addEventListener('click',e=>{if(e.target===$('partyOverlay'))partyClose();});
+async function partyCreate(){
+  try{await partyApi.create();}catch(e){party.error=/no_server/.test(e.message)?'no_server':'x';renderParty();}
+}
+async function partyJoin(){
+  const c=($('partyCode')&&$('partyCode').value)||'';
+  try{await partyApi.join(c);}catch(e){party.error=/bad_code/.test(e.message)?'bad_code':/no_server/.test(e.message)?'no_server':'x';renderParty();}
+}
+async function partyLeave(){
+  await partyApi.leave().catch(()=>{});
+  const wasParty=items.some(i=>i._party&&i.id===modalId);
+  items=items.filter(i=>!i._party);
+  if(partySavedSrv!=null){playerSrv=partySavedSrv;partySavedSrv=null;}
+  if(wasParty)closeModal();else if(modalId&&playerOpen)renderModal();
+  party={...party,status:'idle',code:null,peers:0,media:null,error:null};
+  renderParty();
+}
+async function partyCopy(){
+  try{await navigator.clipboard.writeText(fmtCode(party.code));toast('الكود اتنسخ ✔ ابعته لصاحبك');}
+  catch(e){toast('معرفتش أنسخ — الكود: '+fmtCode(party.code));}
+}
+if(partyApi){
+  $('partyBtn').style.display='';
+  partyApi.status().then(st=>{party=st;renderParty();}).catch(()=>{});
+  partyApi.onStatus(st=>{
+    const wasConnected=party.status==='connected';
+    party={...st,enabled:party.enabled};
+    // لسه داخل الأوضة ومحدش اختار حاجة، وأنا فاتح بلاير → اعرضه على الأوضة
+    if(!wasConnected&&st.status==='connected'&&!st.media&&playerOpen)partySyncMedia(items.find(i=>i.id===modalId));
+    renderParty();
+  });
+  partyApi.onMedia(m=>partyOpenMedia(m));
+}
+
 /* ================= توجيه الأحداث (MV3 CSP يمنع inline onclick) ================= */
 document.addEventListener('click',(e)=>{
   const el=e.target.closest('[data-act]');
@@ -1374,7 +1527,7 @@ document.addEventListener('click',(e)=>{
     case 'importAdd': importAdd(); break;
     case 'importClose': importClose(); break;
     case 'player': openPlayer(id); break;
-    case 'playerClose': if(mysteryMode){closeModal();}else{playerOpen=false;renderModal();} break;
+    case 'playerClose': if(mysteryMode||String(modalId).startsWith('party-')){closeModal();}else{playerOpen=false;renderModal();} break;
     case 'playerNext': playerNext(id); break;
     case 'savePlayer': savePlayer(); break;
     case 'saveDl': saveDl(); break;
@@ -1395,6 +1548,13 @@ document.addEventListener('click',(e)=>{
     case 'statsClose': closeStats(); break;
     case 'moreToggle': {const m=$('moreActs');if(m)m.style.display=m.style.display==='none'?'flex':'none';} break;
     case 'setImport': $('setFile').click(); break;
+    case 'partyOpen': partyOpen(); break;
+    case 'partyClose': partyClose(); break;
+    case 'partyCreate': partyCreate(); break;
+    case 'partyJoin': partyJoin(); break;
+    case 'partyLeave': partyLeave(); break;
+    case 'partyCopy': partyCopy(); break;
+    case 'partyWatch': partyClose(); partyOpenMedia(party.media); break;
   }
 });
 // "/" يوصلك للبحث فوراً

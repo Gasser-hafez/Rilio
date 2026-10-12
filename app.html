@@ -609,6 +609,7 @@
     <button class="btn btn-sm" id="randBtn" title="مش عارف تتفرج على إيه؟" style="display:none">🎲 اختارلي</button>
     <button class="btn btn-sm sortbtn" id="sortBtn" style="display:none"></button>
     <button class="btn btn-sm" id="statsToggle" title="إحصائيات المشاهدة">📊</button>
+    <button class="btn btn-sm" id="partyBtn" data-act="partyOpen" title="Watch Party — اتفرج مع صاحبك" style="display:none">👥</button>
     <button class="btn btn-sm" id="gearBtn" title="الإعدادات">⚙</button>
     <button class="btn btn-sm" id="viewBtn" title="بدّل شكل العرض">☰</button>
   </div>
@@ -645,6 +646,17 @@
       <h2 style="font-family:'Changa',sans-serif;color:var(--amber);font-size:1.2rem;margin-bottom:4px">📊 ذوقك في أرقام</h2>
       <div class="sub" id="statsIntro" style="margin-bottom:18px"></div>
       <div id="statsContent"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="partyOverlay">
+  <div class="modal settings" style="max-width:460px">
+    <button class="mclose" style="position:sticky;top:12px;float:left;margin:12px" data-act="partyClose" title="إغلاق">✕</button>
+    <div class="mbody" style="padding-top:18px">
+      <h2 style="font-family:'Changa',sans-serif;color:var(--amber);font-size:1.2rem;margin-bottom:4px">👥 Watch Party</h2>
+      <div class="sub" style="margin-bottom:16px">اتفرجوا سوا: أي حد يوقّف أو يشغّل أو يقدّم، الفيديو بيتحرك عند الكل</div>
+      <div id="partyBody"></div>
     </div>
   </div>
 </div>

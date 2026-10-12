@@ -26,6 +26,10 @@ jobs:
           [ "$v" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != package.json $v"; exit 1; }
 
       - run: npm ci
+      - run: npm ci --prefix party-server
+      # منطق الأوضة + السيرفر الحقيقي محلياً (wrangler dev)
+      - run: npm test --prefix party-server
+      # e2e للبرنامج — منها Watch Party بين نسختين على سيرفر محلي
       - run: npm test
 
       # لازم الـ draft يتعمل قبل electron-builder — لو ملقاش release بيرفع الملفات بالتوازي

@@ -1,9 +1,10 @@
 // نسخة الديسكتوب — نفس app.html/app.js بتاعة الاكستنشن، والـ chrome.storage بيتعمله shim في preload.js
-const { app, BrowserWindow, ipcMain, Tray, Menu, protocol, net, session } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, protocol, net, session } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { initUpdater } = require('./updater');
+const { initParty } = require('./party');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 // لازم يطابق appId في package.json عشان إشعارات ويندوز تظهر
@@ -104,11 +105,37 @@ function guardPopups(wc, allowChildren) {
 /* ================= النافذة والـ tray ================= */
 let win, tray, quitting = false;
 
+/* ================= إشعارات (مواسم جديدة) ================= */
+// لازم نحتفظ بمرجع للإشعار — لو الـ GC شاله، الضغط عليه مبيعملش حاجة
+const liveNotifications = new Set();
+const clip = (s, n) => (typeof s === 'string' ? s : '').slice(0, n);
+ipcMain.handle('wl:notify', (e, p) => {
+  if (!fromApp(e)) throw new Error('forbidden');
+  if (!p || typeof p !== 'object') throw new Error('bad payload');
+  const title = clip(p.title, 80).trim();
+  const body = clip(p.body, 240);
+  const itemId = typeof p.itemId === 'string' && /^[\w-]{1,40}$/.test(p.itemId) ? p.itemId : null;
+  if (!title) throw new Error('bad payload');
+  if (!Notification.isSupported()) return false;
+  const n = new Notification({ title, body, icon: path.join(__dirname, 'icon128.png') });
+  liveNotifications.add(n);
+  const done = () => liveNotifications.delete(n);
+  n.on('click', () => {
+    done();
+    show();
+    if (itemId) win.webContents.send('wl:openItem', itemId);
+  });
+  n.on('close', done);
+  n.show();
+  return true;
+});
+
 function updateBadge() {
   let n = 0;
   try { n = JSON.parse(store['watchlist:data'] || '[]').filter(i => i && i.status === 'queue').length; } catch (e) {}
   // ponytail: tooltip بس — ويندوز مفيهوش badge رقمي؛ overlay icon لو احتجناه
-  tray && tray.setToolTip(n ? `قائمة المشاهدة — ${n} هشوفهم` : 'قائمة المشاهدة');
+  const base = `قائمة المشاهدة v${app.getVersion()}`;
+  tray && tray.setToolTip(n ? `${base} — ${n} هشوفهم` : base);
 }
 
 function show() { win.show(); win.focus(); }
@@ -132,6 +159,15 @@ function createWindow() {
 app.on('second-instance', () => win && show());
 app.on('before-quit', () => { quitting = true; });
 
+// سيرفر الـ Watch Party: من package.json — والـ override بالـ env للتست بس (مش في النسخة المتثبتة)
+function partyServerUrl() {
+  const dev = !app.isPackaged && process.env.WL_PARTY_URL;
+  const url = dev || require('./package.json').partyServer || '';
+  if (/^wss:\/\/[^/\s]+$/.test(url)) return url;
+  if (dev && /^ws:\/\/127\.0\.0\.1:\d+$/.test(url)) return url;
+  return '';
+}
+
 app.whenReady().then(() => {
   protocol.handle('app', req => {
     const { host, pathname } = new URL(req.url);
@@ -147,11 +183,14 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler((wc, perm) => ALLOWED_PERMS.has(perm));
 
   createWindow();
+  initParty({ getWindow: () => win, serverUrl: partyServerUrl(), fromApp });
   tray = new Tray(path.join(__dirname, 'icon16.png'));
   let readyVersion = null;
   const updater = initUpdater({ onReady: v => { readyVersion = v; buildTrayMenu(); } });
   function buildTrayMenu() {
     tray.setContextMenu(Menu.buildFromTemplate([
+      { label: `النسخة ${app.getVersion()}`, enabled: false },
+      { type: 'separator' },
       { label: 'افتح القايمة', click: show },
       ...(readyVersion ? [{ label: `أعد التشغيل للتحديث (${readyVersion})`, click: updater.install }] : []),
       { label: 'خروج', click: () => app.quit() },

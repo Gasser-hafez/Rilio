@@ -29,6 +29,7 @@ function initUpdater({ onReady }) {
   autoUpdater.autoInstallOnAppQuit = true; // "خروج" من الـ tray بيثبّت التحديث
   autoUpdater.allowDowngrade = false;
   autoUpdater.allowPrerelease = false;
+  autoUpdater.disableWebInstaller = true; // بنستخدم installer كامل بس — مفيش web installer
   // الأخطاء بتتسجل مرة واحدة من event 'error' تحت — من غير headers الـ HTTP (فيها كوكيز وكلام ملوش لازمة)
   autoUpdater.logger = { info: m => log('info', m), warn: m => log('warn', m), error: () => {}, debug: () => {} };
 
