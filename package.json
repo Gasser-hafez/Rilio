@@ -52,6 +52,7 @@
       "icon*.png",
       "icon.ico",
       "party.js",
+      "adblock.js",
       "party-server/public/protocol.mjs"
     ]
   },
@@ -60,7 +61,12 @@
     "electron-builder": "26.15.3"
   },
   "dependencies": {
+    "@ghostery/adblocker": "2.18.2",
     "electron-updater": "6.8.9"
+  },
+  "overrides": {
+    "@ghostery/adblocker-content": "2.18.2",
+    "@ghostery/adblocker-extended-selectors": "2.18.2"
   },
   "allowScripts": {
     "electron@44.7.0": true,

@@ -89,7 +89,7 @@ fs.writeFileSync(path.join(ud2, 'storage.json'), JSON.stringify({
   'watchlist:sites': JSON.stringify([{ name: 'bad', url: 'javascript:alert(1)' }, { name: 'good', url: 'https://example.org/{q}' }]),
   'watchlist:playerTpl': 'javascript:parent.document.title="pwned"',
 }));
-proc = await launch(ud2);
+proc = await launch(ud2, { env: { WL_ADBLOCK_FILTERS: '/wl-ad.gif' } });
 try {
   console.log('run 2: malicious backup + hostile iframe');
   const app = await conn('app://local/');
@@ -188,6 +188,26 @@ try {
     assert.equal(await child.ev('typeof (window.chrome && chrome.storage)'), 'undefined');
     child.close();
   });
+  await check('ad blocking: site windows block ad requests; the shield toggle turns it off for that site only', async () => {
+    const hits = {};
+    const srv = http.createServer((req, res) => {
+      const p = req.url.split('?')[0]; hits[p] = (hits[p] || 0) + 1;
+      res.writeHead(200, { 'Content-Type': p === '/site' ? 'text/html' : 'image/gif', 'Cache-Control': 'no-store' });
+      res.end(p === '/site' ? '<img src="/wl-ad.gif"><img src="/ok.gif">' : '');
+    });
+    await new Promise(r => srv.listen(0, '127.0.0.1', r));
+    try {
+      const url = `http://127.0.0.1:${srv.address().port}/site?q={q}`;
+      await app.ev(`sites=[{name:'T',url:${JSON.stringify(url)}}];sset('watchlist:sites',JSON.stringify(sites)).then(()=>openWatch('ok1',0)).then(()=>1)`);
+      await until(() => hits['/ok.gif'] >= 1, 10000, 'site page loaded');
+      await sleep(500);
+      assert.equal(hits['/wl-ad.gif'], undefined, 'ad request reached the server');
+      await app.ev(`siteBlock(0).then(()=>openWatch('ok1',0)).then(()=>1)`);
+      assert.equal(await app.ev(`document.querySelector('#sitesList [data-act=siteBlock]').getAttribute('aria-pressed')`), 'false');
+      await until(() => hits['/ok.gif'] >= 2, 10000, 'site page loaded again');
+      await until(() => hits['/wl-ad.gif'] === 1, 3000, 'ad allowed once the site is excluded');
+    } finally { srv.close(); }
+  });
   await check('in-app confirm instead of Windows dialogs: cancel keeps, confirm deletes', async () => {
     await app.ev(`items.push(cleanItem({id:'tmpdel',title:'Temp',type:'film',status:'queue'}));1`);
     const p1 = app.ev(`del('tmpdel').then(()=>1)`);
@@ -220,6 +240,11 @@ try {
     assert.deepEqual(JSON.parse(r), [94, null, null, null, 87, null, null]);
     await app.ev(`items.push(cleanItem({id:'rt1',title:'RT Film',type:'film',status:'queue',imdb:8.1,rt:87,rtChecked:true}));tab='queue';render();1`);
     assert.match(await app.ev(`document.querySelector('[data-itemid="rt1"]').textContent`), /🍅 87%/);
+    // RT باين في "شفتها" كمان (IMDb لأ — الكارت فيه تقييمك)
+    await app.ev(`items.push(cleanItem({id:'rt2',title:'RT Seen',type:'film',status:'watched',rating:7,imdb:8.1,rt:91,rtChecked:true}));tab='watched';render();1`);
+    const seen = await app.ev(`document.querySelector('[data-itemid="rt2"] .pyear').textContent`);
+    assert.match(seen, /🍅 91%/); assert.doesNotMatch(seen, /8\.1/);
+    await app.ev(`tab='queue';render();1`);
   });
   app.close();
 } finally { proc.kill(); }
@@ -525,8 +550,9 @@ try {
       // مكان الأوضة زي ما الصفحة شايفاه (الوقت المكتوب في الشريط) — مش من فيديو البرنامج، عشان فرق التوقيت بين الاتنين ميأثرش
       const t = await W.ev(`document.querySelector('#hint .t').textContent`);
       const roomPos = t.split(':').reduce((a, x) => a * 60 + Number(x), 0);
-      await fake('playing', roomPos + 1);
-      try { await until(async () => (await hintText()) === '', 6000, 'hint cleared'); }
+      // بنعيد الإرسال لحد ما يوصل (البلاير المزيف ممكن يكون لسه بيتحمّل) — بالمكان الحالي عشان ميتحسبش تقديم
+      const t0 = Date.now();
+      try { await until(async () => { await fake('playing', roomPos + 1 + (Date.now() - t0) / 1000); return (await hintText()) === ''; }, 6000, 'hint cleared'); }
       catch (e) { throw new Error(e.message + ' — hint: ' + (await hintText()) + ' | roomPos(page)=' + roomPos + ' | app A=' + JSON.stringify(await vstate(FA))); }
     });
     await check('web guest pauses (player event) → both app instances pause near that position', async () => {

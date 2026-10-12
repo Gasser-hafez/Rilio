@@ -5,6 +5,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const { initUpdater } = require('./updater');
 const { initParty } = require('./party');
+const { initAdblock } = require('./adblock');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 // لازم يطابق appId في package.json عشان إشعارات ويندوز تظهر
@@ -280,7 +281,17 @@ function guardPopups(wc, allowChildren) {
       overrideBrowserWindowOptions: { width: 1280, height: 800, autoHideMenuBar: true, icon: path.join(__dirname, 'icon128.png'), webPreferences },
     };
   });
-  wc.on('did-create-window', child => guardPopups(child.webContents, false));
+  wc.on('did-create-window', child => { siteWindows.add(child.webContents); guardPopups(child.webContents, false); });
+}
+const siteWindows = new WeakSet(); // نوافذ المواقع — حظر الإعلانات شغال فيها بس
+
+// المواقع اللي المستخدم قفل حظر الإعلانات ليها من الإعدادات (noBlock) — بالـ hostname
+const hostOf = u => { try { return new URL(String(u).replace(/\{[^}]+\}/g, 'x')).hostname; } catch (e) { return ''; } };
+function siteAllowed(url) {
+  const h = hostOf(url);
+  let sites = [];
+  try { sites = JSON.parse(store['watchlist:sites'] || '[]'); } catch (e) {}
+  return !!h && Array.isArray(sites) && sites.some(s => s && s.noBlock === true && hostOf(s.url) === h);
 }
 
 /* ================= لينكات تفتح في المتصفح برا ================= */
@@ -400,6 +411,11 @@ app.whenReady().then(() => {
   const ALLOWED_PERMS = new Set(['fullscreen', 'clipboard-sanitized-write']);
   session.defaultSession.setPermissionRequestHandler((wc, perm, cb) => cb(ALLOWED_PERMS.has(perm)));
   session.defaultSession.setPermissionCheckHandler((wc, perm) => ALLOWED_PERMS.has(perm));
+  initAdblock({
+    session: session.defaultSession, cachePath: path.join(app.getPath('userData'), 'adblock.bin'),
+    devFilters: !app.isPackaged && process.env.WL_ADBLOCK_FILTERS, // التست بس
+    isSiteWindow: wc => siteWindows.has(wc), isAllowed: siteAllowed,
+  });
 
   createWindow();
   initParty({ getWindow: () => win, serverUrl: partyServerUrl(), fromApp });

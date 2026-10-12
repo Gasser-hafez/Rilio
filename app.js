@@ -148,7 +148,7 @@ function parseItems(raw){
 }
 function parseSites(raw){
   const arr=JSON.parse(raw);
-  return Array.isArray(arr)?arr.filter(s=>s&&isHttp(s.url)).map(s=>({name:str(s.name)||s.url,url:s.url})):null;
+  return Array.isArray(arr)?arr.filter(s=>s&&isHttp(s.url)).map(s=>({name:str(s.name)||s.url,url:s.url,...(s.noBlock===true?{noBlock:true}:{})})):null;
 }
 
 /* ================= نافذة تأكيد جوه البرنامج =================
@@ -728,7 +728,7 @@ function pcardHtml(it,ix){
       </div>
       <div class="pmeta">
         <div class="ptitle" dir="auto">${esc(it.title)}</div>
-        <div class="pyear">${it.status==='watching'?`<span class="pep">${progLabel(it)}</span><span class="dotsep"></span>`:''}<span>${KIND(it)}${it.year?' · '+it.year:''}</span>${showImdb?`<span class="pimdb">★ ${it.imdb}</span>`:''}${showImdb?rtHtml(it,'pimdb prt'):''}</div>
+        <div class="pyear">${it.status==='watching'?`<span class="pep">${progLabel(it)}</span><span class="dotsep"></span>`:''}<span>${KIND(it)}${it.year?' · '+it.year:''}</span>${showImdb?`<span class="pimdb">★ ${it.imdb}</span>`:''}${rtHtml(it,'pimdb prt')}</div>
       </div>
     </article>`;
 }
@@ -1225,6 +1225,7 @@ function renderSites(){
     `<div class="site-row">
       <span class="site-name" dir="auto">${ic('play','fill sm')}${esc(s.name)}</span>
       <span class="site-url" dir="ltr">${esc(s.url)}</span>
+      ${window.__wlDesktop?`<button class="iconbtn blk" style="width:36px;height:36px;border:none" data-act="siteBlock" data-ix="${ix}" aria-pressed="${!s.noBlock}" title="${s.noBlock?'حظر الإعلانات مقفول للموقع ده — دوس تشغّله':'حظر الإعلانات شغال — دوس تقفله للموقع ده'}">${ic('shield','sm')}</button>`:''}
       <button class="iconbtn btn-danger" style="width:36px;height:36px;border:none" data-act="delSite" data-ix="${ix}" aria-label="امسح ${esc(s.name)}">${ic('x','sm')}</button>
     </div>`).join('')
     :'<div class="sub">مفيش مواقع متسجلة — ضيف واحد تحت</div>';
@@ -1242,6 +1243,12 @@ async function addSite(){
   await sset('watchlist:sites',JSON.stringify(sites));
   $('siteName').value='';$('siteUrl').value='';
   renderSites();render();toast('الموقع اتضاف ✔');
+}
+async function siteBlock(ix){
+  const s=sites[ix];if(!s)return;
+  if(s.noBlock)delete s.noBlock;else s.noBlock=true;
+  await sset('watchlist:sites',JSON.stringify(sites));
+  renderSites();toast(s.noBlock?`حظر الإعلانات اتقفل لـ ${s.name}`:`حظر الإعلانات رجع لـ ${s.name}`);
 }
 async function delSite(ix){
   sites.splice(ix,1);
@@ -2232,6 +2239,7 @@ document.addEventListener('click',(e)=>{
     case 'ackSeason': ackSeason(id); break;
     case 'addSite': addSite(); break;
     case 'delSite': delSite(parseInt(el.dataset.ix)); break;
+    case 'siteBlock': siteBlock(parseInt(el.dataset.ix)); break;
     case 'backup': backup(); break;
     case 'restore': $('restoreFile').click(); break;
     case 'bkSnooze': bkSnooze(); break;
