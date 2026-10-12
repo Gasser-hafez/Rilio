@@ -58,6 +58,12 @@ if (process.isMainFrame && location.origin === 'app://local' && location.pathnam
       check: rel => ipcRenderer.invoke('wl:dl:check', rel),
       subsOnline: (rel, q) => ipcRenderer.invoke('wl:dl:subsOnline', rel, q),
       osCheck: key => ipcRenderer.invoke('wl:os:check', key),
+      osSearch: (rel, q) => ipcRenderer.invoke('wl:os:search', rel, q),
+      osGet: (rel, c) => ipcRenderer.invoke('wl:os:get', rel, c),
+      osLogin: (user, pass) => ipcRenderer.invoke('wl:os:login', user, pass),
+      osLogout: () => ipcRenderer.invoke('wl:os:logout'),
+      osStatus: () => ipcRenderer.invoke('wl:os:status'),
+      subDel: name => ipcRenderer.invoke('wl:dl:subDel', name),
     },
   });
   contextBridge.executeInMainWorld({

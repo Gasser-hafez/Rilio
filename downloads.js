@@ -1,7 +1,7 @@
 // مدير التنزيلات + المكتبة المحلية — جزء الـ main process
 // بيمسك بس التنزيلات اللي بتبدأ من نوافذ المواقع (اللي المستخدم ضايفها). تنزيلات الواجهة نفسها (النسخة الاحتياطية) زي ما هي.
 // الفولدر متخزن في ملف خاص بـ main مش في storage.json: نسخة احتياطية أو ملف إعدادات متلغّم ميقدرش يوجّه التنزيلات لأي فولدر
-const { ipcMain, dialog, shell, Notification } = require('electron');
+const { ipcMain, dialog, shell, Notification, safeStorage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { randomBytes } = require('crypto');
@@ -300,14 +300,28 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
   });
 
   /* ---------- الترجمة: جنب الفيلم ← جوه الملف (MKV) ← أونلاين (OpenSubtitles) ---------- */
+  // بيانات كل ملف ترجمة (جاي منين، لغته، اسم النسخة، نفس نسختك ولا لأ) — ملف خاص بـ main، الواجهة بتقراه بس
+  const META = path.join(path.dirname(settingsPath), 'subsmeta.json');
+  let subMeta = {};
+  try { const m = JSON.parse(fs.readFileSync(META, 'utf8')); if (m && typeof m === 'object') subMeta = m; } catch (e) {}
+  const saveMeta = () => { try { fs.writeFileSync(META, JSON.stringify(subMeta)); } catch (e) {} };
+  const SUB_LANG = /^(ar|en|fr|es|de|it|pt|tr|ru|ja|ko|zh|hi|fa|he|nl)(?![a-z])/i;
+  const clip = (s, n) => String(s || '').replace(/[\x00-\x1f]/g, ' ').slice(0, n);
   // ترجمات جنب ملف (نفس الفولدر، الاسم بيبدأ باسمه) — نفس اللي المكتبة بتعرضه
   async function sidecars(file) {
     const folder = path.dirname(file), base = path.basename(file);
     const rel = path.relative(dir, folder).split(path.sep).filter(Boolean);
     let names = [];
     try { names = await fs.promises.readdir(folder); } catch (e) { return []; }
-    return names.filter(n => SUBS.has(extOf(n)) && stem(n).toLowerCase().startsWith(stem(base).toLowerCase()))
-      .map(n => ({ label: stem(n).slice(stem(base).length).replace(/^[.\s_-]+/, '').slice(0, 20) || 'ترجمة', url: `wlmedia://lib/${token}/${encodeURIComponent([...rel, n].join('/'))}` }));
+    return names.filter(n => SUBS.has(extOf(n)) && stem(n).toLowerCase().startsWith(stem(base).toLowerCase())).map(n => {
+      const m = subMeta[path.join(folder, n)] || {}, suffix = stem(n).slice(stem(base).length).replace(/^[.\s_-]+/, '');
+      return {
+        name: [...rel, n].join('/'), label: suffix.slice(0, 20) || 'ترجمة',
+        lang: m.lang || ((SUB_LANG.exec(suffix) || [])[1] || '').toLowerCase(),
+        src: m.src || 'side', release: clip(m.release, 120), exact: !!m.exact, hi: !!m.hi,
+        url: `wlmedia://lib/${token}/${encodeURIComponent([...rel, n].join('/'))}`,
+      };
+    });
   }
   // اسم ملف ترجمة جديد جنب الفيلم من غير ما نكتب فوق حاجة موجودة: Movie.ar.srt, Movie.ar-2.srt ...
   function subPath(file, label) {
@@ -323,7 +337,12 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     if (!extracting.has(file)) extracting.set(file, (async () => {
       try {
         const tracks = await extractSubs(file);
-        for (const t of tracks) fs.writeFileSync(subPath(file, t.lang), t.srt);
+        for (const t of tracks) {
+          const out = subPath(file, t.lang);
+          fs.writeFileSync(out, t.srt);
+          subMeta[out] = { src: 'file', lang: t.lang, release: clip(t.name, 120) };
+        }
+        if (tracks.length) saveMeta();
         return tracks.length;
       } catch (e) { return 0; } finally { embeddedTried.add(file); extracting.delete(file); }
     })());
@@ -337,17 +356,55 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     const have = await sidecars(file);
     return have.length ? have : embedded(file);
   });
+  // مسح ملف ترجمة (مثلاً نسخة توقيتها غلط)
+  ipcMain.handle('wl:dl:subDel', async (e, name) => {
+    guard(e);
+    const f = libFile(name, x => SUBS.has(x));
+    if (!f) return false;
+    try { fs.rmSync(f, { force: true }); } catch (err) { return false; }
+    delete subMeta[f]; saveMeta();
+    return true;
+  });
 
-  // أونلاين: OpenSubtitles (مفتاح ببلاش من المستخدم، زي TMDB). بالأرقام بس (TMDB + موسم/حلقة) — مفيش نص من الواجهة في الطلب
+  /* ---------- OpenSubtitles ----------
+     مفتاح ببلاش من المستخدم (زي TMDB)، واختياري حسابه (20 تنزيل في اليوم بدل 5). الطلبات بأرقام وكود لغة بس —
+     مفيش نص من الواجهة غير اسم الملف (حروف وأرقام بس) لو مفيش عنوان مربوط */
   const OS_LANGS = ['ar', 'en'];
+  const OS_FILE = path.join(path.dirname(settingsPath), 'opensubs.json'); // اليوزر + الباسورد متشفّر (safeStorage) — مش في storage.json ولا النسخة الاحتياطية
   const osHeaders = key => ({ 'Api-Key': key, 'User-Agent': `rilio v${appVersion}`, Accept: 'application/json', 'Content-Type': 'application/json' });
   const tokens = s => new Set(String(s).toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 1));
+  const int = v => (Number.isInteger(v) && v > 0 && v < 1e9 ? v : null);
+  const osKey = () => { const k = String(getStore()['watchlist:oskey'] || ''); return /^[A-Za-z0-9]{16,64}$/.test(k) ? k : null; };
+  let osToken = null, osTokenAt = 0, osQuota = null; // { remaining, allowed, reset }
   async function osFetch(url, opts) {
     const r = await fetch(url, { ...opts, redirect: 'error', signal: AbortSignal.timeout(20000) });
     if (r.status === 401 || r.status === 403) throw new Error('BAD_KEY');
     if (r.status === 406 || r.status === 429) throw new Error('LIMIT');
     if (!r.ok) throw new Error('HTTP_' + r.status);
     return r;
+  }
+  function osCreds() {
+    try {
+      const c = JSON.parse(fs.readFileSync(OS_FILE, 'utf8'));
+      if (c && typeof c.user === 'string' && typeof c.pass === 'string') return { user: c.user, pass: safeStorage.decryptString(Buffer.from(c.pass, 'base64')) };
+    } catch (e) {}
+    return null;
+  }
+  async function osLogin(key, user, pass) {
+    const j = await (await osFetch(`${osBase}/login`, { method: 'POST', headers: osHeaders(key), body: JSON.stringify({ username: user, password: pass }) })).json();
+    if (!j || typeof j.token !== 'string' || j.token.length > 4000) throw new Error('BAD_LOGIN');
+    osToken = j.token; osTokenAt = Date.now();
+    const u = j.user || {}, allowed = Number(u.allowed_downloads) || null;
+    osQuota = { allowed, remaining: Number.isFinite(Number(u.remaining_downloads)) ? Number(u.remaining_downloads) : allowed, reset: null };
+  }
+  // headers بالتوكن لو المستخدم داخل بحسابه (التوكن بيتجدد لوحده)
+  async function osAuth(key, fresh) {
+    const h = osHeaders(key), c = osCreds();
+    if (c) {
+      if (fresh || !osToken || Date.now() - osTokenAt > 12 * 3600e3) { try { await osLogin(key, c.user, c.pass); } catch (e) { osToken = null; } }
+      if (osToken) h.Authorization = 'Bearer ' + osToken;
+    }
+    return h;
   }
   // بصمة الملف بتاعة OpenSubtitles (moviehash): الحجم + مجموع أول وآخر 64KB كأرقام 64 بت — بتلاقي ترجمة معمولة على نفس النسخة بالظبط
   function osHash(file) {
@@ -364,61 +421,125 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
       return h.toString(16).padStart(16, '0');
     } finally { fs.closeSync(fd); }
   }
-  // q: { tmdbId?, type?, s?, e?, lang? } — أرقام وكود لغة بس. من غير عنوان مربوط: بالبصمة، وبعدين باسم الملف
+  // كل النتايج (البحث ببلاش — التنزيل بس اللي بيتحسب). q: { tmdbId?, type?, s?, e?, langs? }
+  async function osSearch(file, key, q) {
+    const langs = Array.isArray(q.langs) && q.langs.length ? OS_LANGS.filter(l => q.langs.includes(l)) : OS_LANGS;
+    const tmdb = int(q.tmdbId), s = int(q.s), ep = int(q.e), tv = q.type === 'tv';
+    const search = async extra => {
+      const params = new URLSearchParams(extra);
+      params.set('languages', langs.join(','));
+      params.sort(); // OpenSubtitles بيرد 301 لو البارامترات مش بالترتيب الأبجدي (ومش بنتبع redirects بالمفتاح)
+      const res = await (await osFetch(`${osBase}/subtitles?${params}`, { headers: osHeaders(key) })).json();
+      return Array.isArray(res && res.data) ? res.data : [];
+    };
+    const hash = osHash(file);
+    const exact = hash ? (await search({ moviehash: hash })).filter(d => d && d.attributes && d.attributes.moviehash_match) : [];
+    const byId = tmdb && (!tv || (s && ep)) ? (tv ? { parent_tmdb_id: tmdb, season_number: s, episode_number: ep } : { tmdb_id: tmdb }) : null;
+    // اسم الملف من غير الامتداد ولا النقط — بس الحروف والأرقام
+    const more = await search(byId || { query: stem(path.basename(file)).replace(/[^\p{L}\p{N}]+/gu, ' ').trim().slice(0, 120) });
+    // الأحسن: نفس النسخة (البصمة) ← اللغة (عربي قبل إنجليزي) ← اسم الـ release الأقرب لاسم الملف ← الأكتر تنزيلاً
+    const mine = tokens(path.basename(file)), seen = new Set();
+    return [...exact, ...more].map(d => {
+      const a = d && d.attributes || {}, f = Array.isArray(a.files) ? a.files[0] : null;
+      if (!f || !int(f.file_id) || !langs.includes(a.language) || seen.has(f.file_id)) return null;
+      seen.add(f.file_id);
+      const rels = tokens(`${a.release || ''} ${f.file_name || ''}`);
+      let match = 0; for (const t of mine) if (rels.has(t)) match++;
+      return {
+        id: f.file_id, lang: a.language, release: clip(a.release || f.file_name, 160), exact: !!a.moviehash_match, match,
+        dl: Number(a.download_count) || 0, rating: Number(a.ratings) || 0, votes: Number(a.votes) || 0, hi: !!a.hearing_impaired,
+        trusted: !!a.from_trusted, ai: !!(a.ai_translated || a.machine_translated), fps: Number(a.fps) || 0,
+        uploader: clip(a.uploader && a.uploader.name, 40),
+      };
+    }).filter(Boolean).sort((x, y) => y.exact - x.exact || langs.indexOf(x.lang) - langs.indexOf(y.lang) || y.match - x.match || x.ai - y.ai || x.hi - y.hi || y.dl - x.dl);
+  }
+  // تنزيل نسخة بعينها (بيتحسب من الحد اليومي) → ملف جنب الفيلم + بياناته
+  async function osGet(file, key, c) {
+    const body = JSON.stringify({ file_id: c.id, sub_format: 'srt' });
+    let res;
+    try { res = await osFetch(`${osBase}/download`, { method: 'POST', headers: await osAuth(key), body }); }
+    catch (err) { if (err.message !== 'BAD_KEY' || !osCreds()) throw err; res = await osFetch(`${osBase}/download`, { method: 'POST', headers: await osAuth(key, true), body }); } // التوكن خلص
+    const dl = await res.json();
+    if (dl && Number.isFinite(Number(dl.remaining))) osQuota = { ...(osQuota || {}), remaining: Number(dl.remaining), reset: clip(dl.reset_time_utc, 40) || null };
+    if (!dl || typeof dl.link !== 'string' || !/^https?:\/\//.test(dl.link)) throw new Error('NOT_FOUND');
+    const r = await fetch(dl.link, { redirect: 'follow', signal: AbortSignal.timeout(30000) });
+    if (!r.ok) throw new Error('HTTP_' + r.status);
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (!buf.length || buf.length > 5e6) throw new Error('NOT_FOUND');
+    const out = subPath(file, c.lang);
+    fs.writeFileSync(out, buf);
+    subMeta[out] = { src: 'online', lang: c.lang, release: clip(c.release, 160), exact: !!c.exact, hi: !!c.hi };
+    saveMeta();
+    return out;
+  }
+  const osErr = err => (['BAD_KEY', 'LIMIT', 'NOT_FOUND'].includes(err.message) ? err.message : 'NET');
+  const relOf = out => path.relative(dir, out).split(path.sep).join('/');
+  ipcMain.handle('wl:os:search', async (e, rel, q) => {
+    guard(e);
+    const file = libFile(rel, x => !!MEDIA[x]), key = osKey();
+    if (!file || !q || typeof q !== 'object') return { error: 'BAD' };
+    if (!key) return { error: 'NO_KEY' };
+    try { return { list: (await osSearch(file, key, q)).slice(0, 60), quota: osQuota }; }
+    catch (err) { return { error: osErr(err) }; }
+  });
+  ipcMain.handle('wl:os:get', async (e, rel, c) => {
+    guard(e);
+    const file = libFile(rel, x => !!MEDIA[x]), key = osKey();
+    if (!file || !c || !int(c.id) || !OS_LANGS.includes(c.lang)) return { error: 'BAD' };
+    if (!key) return { error: 'NO_KEY' };
+    try { const out = await osGet(file, key, c); return { ok: true, name: relOf(out), subs: await sidecars(file), quota: osQuota }; }
+    catch (err) { return { error: osErr(err), quota: osQuota }; }
+  });
+  // تلقائي: الأحسن (لو الملف مالوش ترجمة، أو "عربي/إنجليزي أونلاين" من القايمة)
   ipcMain.handle('wl:dl:subsOnline', async (e, rel, q) => {
     guard(e);
-    const file = libFile(rel, x => !!MEDIA[x]);
-    const key = String(getStore()['watchlist:oskey'] || '');
-    const int = v => (Number.isInteger(v) && v > 0 && v < 1e9 ? v : null);
+    const file = libFile(rel, x => !!MEDIA[x]), key = osKey();
     if (!file || !q || typeof q !== 'object') return { error: 'BAD' };
-    if (!/^[A-Za-z0-9]{16,64}$/.test(key)) return { error: 'NO_KEY' };
-    const langs = OS_LANGS.includes(q.lang) ? [q.lang] : OS_LANGS;
-    const tmdb = int(q.tmdbId), s = int(q.s), ep = int(q.e), tv = q.type === 'tv';
+    if (!key) return { error: 'NO_KEY' };
     try {
-      const search = async extra => {
-        const params = new URLSearchParams(extra);
-        params.set('languages', langs.join(','));
-        params.sort(); // OpenSubtitles بيرد 301 لو البارامترات مش بالترتيب الأبجدي (ومش بنتبع redirects بالمفتاح)
-        const res = await (await osFetch(`${osBase}/subtitles?${params}`, { headers: osHeaders(key) })).json();
-        return Array.isArray(res && res.data) ? res.data : [];
-      };
-      const hash = osHash(file);
-      let data = hash ? (await search({ moviehash: hash })).filter(d => d && d.attributes && d.attributes.moviehash_match) : [];
-      if (!data.length) {
-        const byId = tmdb && (!tv || (s && ep)) ? (tv ? { parent_tmdb_id: tmdb, season_number: s, episode_number: ep } : { tmdb_id: tmdb }) : null;
-        // اسم الملف من غير الامتداد ولا النقط — بس الحروف والأرقام (مفيش أي حاجة تانية من برا في الطلب)
-        data = await search(byId || { query: stem(path.basename(file)).replace(/[^\p{L}\p{N}]+/gu, ' ').trim().slice(0, 120) });
-      }
-      // الأحسن: نفس النسخة (البصمة) ← اللغة (عربي قبل إنجليزي) ← اسم الـ release الأقرب لاسم الملف ← الأكتر تنزيلاً
-      const mine = tokens(path.basename(file));
-      const cands = data.map(d => {
-        const a = d && d.attributes || {}, f = Array.isArray(a.files) ? a.files[0] : null;
-        if (!f || !int(f.file_id) || !langs.includes(a.language)) return null;
-        const rels = tokens(`${a.release || ''} ${f.file_name || ''}`);
-        let match = 0; for (const t of mine) if (rels.has(t)) match++;
-        return { id: f.file_id, lang: a.language, exact: !!a.moviehash_match, match, dl: Number(a.download_count) || 0, hi: !!a.hearing_impaired };
-      }).filter(Boolean).sort((x, y) => y.exact - x.exact || langs.indexOf(x.lang) - langs.indexOf(y.lang) || y.match - x.match || x.hi - y.hi || y.dl - x.dl);
-      if (!cands.length) return { error: 'NOT_FOUND' };
-      const best = cands[0];
-      const dl = await (await osFetch(`${osBase}/download`, { method: 'POST', headers: osHeaders(key), body: JSON.stringify({ file_id: best.id, sub_format: 'srt' }) })).json();
-      if (!dl || typeof dl.link !== 'string' || !/^https?:\/\//.test(dl.link)) return { error: 'NOT_FOUND' };
-      const r = await fetch(dl.link, { redirect: 'follow', signal: AbortSignal.timeout(30000) });
-      if (!r.ok) throw new Error('HTTP_' + r.status);
-      const buf = Buffer.from(await r.arrayBuffer());
-      if (!buf.length || buf.length > 5e6) return { error: 'NOT_FOUND' };
-      const out = subPath(file, best.lang);
-      fs.writeFileSync(out, buf);
-      const label = stem(path.basename(out)).slice(stem(path.basename(file)).length).replace(/^[.\s_-]+/, '');
-      return { ok: true, lang: best.lang, label, exact: best.exact, subs: await sidecars(file) };
-    } catch (err) {
-      return { error: ['BAD_KEY', 'LIMIT'].includes(err.message) ? err.message : 'NET' };
-    }
-  });  // فحص المفتاح قبل ما يتحفظ (زي TMDB/OMDb)
+      const list = await osSearch(file, key, { ...q, langs: OS_LANGS.includes(q.lang) ? [q.lang] : null });
+      if (!list.length) return { error: 'NOT_FOUND' };
+      const out = await osGet(file, key, list[0]);
+      return { ok: true, name: relOf(out), exact: list[0].exact, subs: await sidecars(file), quota: osQuota };
+    } catch (err) { return { error: osErr(err), quota: osQuota }; }
+  });
+  // فحص المفتاح قبل ما يتحفظ (زي TMDB/OMDb)
   ipcMain.handle('wl:os:check', async (e, key) => {
     guard(e);
     if (typeof key !== 'string' || !/^[A-Za-z0-9]{16,64}$/.test(key)) return { ok: false, error: 'BAD_KEY' };
     try { await osFetch(`${osBase}/infos/formats`, { headers: osHeaders(key) }); return { ok: true }; }
     catch (err) { return { ok: false, error: err.message === 'BAD_KEY' ? 'BAD_KEY' : 'NET' }; }
+  });
+  // الحساب: الباسورد بيروح لـ OpenSubtitles بس، وبيتحفظ متشفّر — عمره ما بيرجع للواجهة
+  ipcMain.handle('wl:os:login', async (e, user, pass) => {
+    guard(e);
+    const key = osKey();
+    if (!key) return { error: 'NO_KEY' };
+    if (typeof user !== 'string' || typeof pass !== 'string' || !user.trim() || !pass || user.length > 100 || pass.length > 200) return { error: 'BAD_LOGIN' };
+    if (!safeStorage.isEncryptionAvailable()) return { error: 'NO_CRYPTO' };
+    try { await osLogin(key, user.trim(), pass); }
+    catch (err) { return { error: err.message === 'BAD_KEY' || err.message === 'BAD_LOGIN' ? 'BAD_LOGIN' : osErr(err) }; }
+    fs.writeFileSync(OS_FILE, JSON.stringify({ user: user.trim(), pass: safeStorage.encryptString(pass).toString('base64') }));
+    return { ok: true, user: user.trim(), quota: osQuota };
+  });
+  ipcMain.handle('wl:os:logout', e => {
+    guard(e);
+    try { fs.rmSync(OS_FILE, { force: true }); } catch (err) {}
+    osToken = null; osQuota = null;
+    return true;
+  });
+  ipcMain.handle('wl:os:status', async e => {
+    guard(e);
+    const c = osCreds(), key = osKey();
+    // داخل بحسابه: الحد الفعلي من OpenSubtitles (فاضل كام النهارده)
+    if (c && key) {
+      try {
+        const j = await (await osFetch(`${osBase}/infos/user`, { headers: await osAuth(key) })).json();
+        const d = j && j.data || {};
+        if (Number.isFinite(Number(d.remaining_downloads))) osQuota = { allowed: Number(d.allowed_downloads) || null, remaining: Number(d.remaining_downloads), reset: (osQuota && osQuota.reset) || null };
+      } catch (err) {}
+    }
+    return { key: !!key, user: c ? c.user : null, quota: osQuota };
   });
 
   ipcMain.handle('wl:dl:reveal', (e, name) => {

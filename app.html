@@ -670,8 +670,68 @@
   #lpVol{width:90px}
   .lp-next{position:absolute;bottom:110px;inset-inline-end:28px;z-index:2;box-shadow:0 10px 30px -8px rgba(0,0,0,.8)}
   .lp-warn{transition:opacity .35s;position:absolute;top:86px;inset-inline:22px;z-index:2;max-width:720px;margin-inline:auto;padding:10px 14px;border-radius:12px;background:rgba(120,30,20,.88);color:#fff;font-size:14px;text-align:center}
-  .lp.idle{cursor:none}
-  .lp.idle .lp-top,.lp.idle .lp-bar,.lp.idle .lp-warn{opacity:0;pointer-events:none}
+  /* الترجمة: إحنا اللي بنرسمها — بتطلع فوق الكنترولز لما يظهروا */
+  .lp-cues{position:absolute;inset-inline:0;bottom:calc(6% + var(--lift,0%));z-index:1;display:flex;flex-direction:column;align-items:center;gap:.25em;pointer-events:none;
+    font:600 calc(clamp(18px,2.5vw,36px) * var(--scale,1))/1.35 'Readex Pro',system-ui,sans-serif;transition:bottom .3s}
+  .lp:not(.idle) .lp-cues{bottom:calc(130px + var(--lift,0%))}
+  .lp-cues .c1,.lp-cues .c2{display:flex;flex-direction:column;align-items:center;gap:.1em}
+  .lp-cues .c2{font-size:.78em;opacity:.95}
+  .lp-cues .cue{max-width:84vw;text-align:center;white-space:pre-line;color:#fff;padding:.04em .45em;border-radius:.22em;text-shadow:0 0 3px #000,0 1px 3px #000,0 0 8px rgba(0,0,0,.6)}
+  .lp-cues[data-color=yellow] .cue{color:#ffe14d}
+  .lp-cues[data-bg=shade] .cue{background:rgba(0,0,0,.55)}
+  .lp-cues[data-bg=solid] .cue{background:#000;text-shadow:none}
+  .lp-cues .cue:empty{display:none}
+  .lp-btn.cc{font-size:13px;letter-spacing:.5px;border:1.5px solid rgba(255,255,255,.75);height:28px;min-width:36px;padding:0 6px;border-radius:7px}
+  .lp.panel .lp-btn.cc{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .lp-warn{display:flex;align-items:center;gap:10px}
+  .lp-warn span{flex:1}
+  .lp-wx{border:0;background:rgba(255,255,255,.15);color:#fff;width:28px;height:28px;border-radius:8px;cursor:pointer;flex-shrink:0}
+  .lp-wx:hover{background:rgba(255,255,255,.3)}
+  /* لوحة الترجمة */
+  .lp-panel{position:absolute;top:0;right:0;bottom:0;width:min(440px,94vw);z-index:4;display:flex;flex-direction:column;background:rgba(16,14,20,.97);backdrop-filter:blur(10px);box-shadow:-20px 0 50px rgba(0,0,0,.5);color:#fff}
+  .lp.panel .lp-cues{inset-inline-end:min(440px,94vw)}
+  .lpp-head{display:flex;align-items:center;gap:8px;padding:14px 14px 10px;border-bottom:1px solid rgba(255,255,255,.08)}
+  .lpp-tabs{flex:1;display:flex;gap:4px;background:rgba(255,255,255,.06);padding:4px;border-radius:12px}
+  .lpp-tabs button{flex:1;border:0;background:transparent;color:rgba(255,255,255,.7);font-weight:600;font-size:13px;height:34px;border-radius:9px;cursor:pointer}
+  .lpp-tabs button[aria-selected=true]{background:var(--accent);color:var(--accent-ink)}
+  .lpp-body{flex:1;overflow-y:auto;padding:12px 14px 18px}
+  .lpp-body h4{margin:16px 0 8px;font-size:14px}
+  .lpp-row,.lpp-res{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;cursor:pointer}
+  .lpp-row:hover,.lpp-res:hover{background:rgba(255,255,255,.06)}
+  .lpp-row.on{background:color-mix(in srgb,var(--accent) 18%,transparent)}
+  .lpp-radio{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.5);flex-shrink:0}
+  .lpp-row.on .lpp-radio{border-color:var(--accent);background:radial-gradient(var(--accent) 45%,transparent 50%)}
+  .lpp-row .grow,.lpp-res .grow{flex:1;min-width:0}
+  .lpp-row .t,.lpp-res .t{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lpp-res .t{text-align:right;font-size:13px}
+  .lpp-row .m,.lpp-res .m{font-size:12px;color:rgba(255,255,255,.6);display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:2px}
+  .lpp-res{cursor:default}
+  .lpp-res.exact{background:rgba(110,231,150,.07)}
+  .lpp-res .lang{color:#fff;font-weight:600}
+  .lpp-res .warn{color:#ffb070}
+  .lpp-row .ok,.lpp-res .ok{color:#6ee796;font-weight:700}
+  .lpp-x{border:0;background:transparent;color:rgba(255,255,255,.5);width:32px;height:32px;border-radius:8px;cursor:pointer}
+  .lpp-x:hover{background:rgba(255,80,80,.18);color:#ff9a9a}
+  .lpp-empty{color:rgba(255,255,255,.65);font-size:13px;padding:14px 4px}
+  .lpp-hint{color:rgba(255,255,255,.55);font-size:12px;margin:6px 2px 10px;line-height:1.7}
+  .lpp-quota{font-size:12.5px;color:rgba(255,255,255,.75);margin-bottom:10px}
+  .lpp-l{display:block;font-size:12.5px;color:rgba(255,255,255,.7);margin:12px 0 6px}
+  .lp-panel select{width:100%;height:38px;border-radius:10px;background-color:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2)}
+  .lp-panel .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+  .lp-panel .chip{border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;height:32px;padding:0 12px;border-radius:999px;cursor:pointer;font-size:13px}
+  .lp-panel .chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+  .lp-panel .linkbtn{color:var(--accent);font-size:12.5px;padding:0}
+  .lpp-more{margin-top:12px}
+  .lpp-off{display:flex;align-items:center;justify-content:center;gap:6px}
+  .lpp-off button{min-width:52px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;font-weight:700;cursor:pointer}
+  .lpp-off button:hover{background:rgba(255,255,255,.14)}
+  .lpp-off b{min-width:80px;text-align:center;font-size:16px}
+  .lpp-sync{display:flex;flex-direction:column;gap:6px}
+  .lpp-sync button{text-align:start;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:#fff;padding:9px 12px;border-radius:10px;cursor:pointer;font-size:13px;line-height:1.5}
+  .lpp-sync button:hover{border-color:var(--accent)}
+  #lpLift{width:100%}
+  .lp.idle:not(.panel){cursor:none}
+  .lp.idle:not(.panel) .lp-top,.lp.idle:not(.panel) .lp-bar,.lp.idle:not(.panel) .lp-warn{opacity:0;pointer-events:none}
   .dlrow .dlfile{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
   .dlmeta{display:flex;flex-wrap:wrap;gap:2px 8px;font-size:12.5px;color:var(--muted)}
   .dlmeta>*+*::before{content:'·';margin-inline-end:8px;color:var(--faint)}
@@ -948,13 +1008,25 @@
   </div>
 </div>
 <!-- بلاير المكتبة (الملفات المحلية): على الشاشة كلها جوه البرنامج — app.js dlPlayFile -->
-<div class="lp" id="lp" hidden>
+<div class="lp" id="lp" dir="ltr" hidden>
   <video id="dlVideo" crossorigin="anonymous" playsinline></video>
   <div class="lp-top">
     <button class="lp-btn" data-act="lpClose" title="رجوع (Esc)" aria-label="رجوع"><i data-ic="x"></i></button>
     <div class="lp-title"><b id="lpTitle" dir="auto"></b><span id="lpSub" dir="auto"></span></div>
   </div>
-  <div class="lp-warn" id="lpWarn" role="alert" hidden>⚠ الملف ده اتنزل بايظ — أجزاء منه متكررة، فالصورة والترجمة هيتكرروا. امسحه ونزّله تاني (ويُفضّل من سيرفر تاني).</div>
+  <div class="lp-cues" id="lpCues" dir="auto"><div class="c2" id="lpCue2"></div><div class="c1" id="lpCue1"></div></div>
+  <div class="lp-warn" id="lpWarn" role="alert" dir="rtl" hidden><span>⚠ الملف ده اتنزل بايظ — أجزاء منه متكررة، فالصورة والترجمة هيتكرروا. امسحه ونزّله تاني (ويُفضّل من سيرفر تاني).</span><button class="lp-wx" data-act="lpWarnClose" title="متظهرش تاني للملف ده" aria-label="إخفاء التنبيه">✕</button></div>
+  <aside class="lp-panel" id="lpPanel" dir="rtl" hidden aria-label="الترجمة">
+    <div class="lpp-head">
+      <div class="lpp-tabs" role="tablist">
+        <button role="tab" data-act="lpTab" data-t="have">عندك</button>
+        <button role="tab" data-act="lpTab" data-t="online">أونلاين</button>
+        <button role="tab" data-act="lpTab" data-t="look">الشكل والتوقيت</button>
+      </div>
+      <button class="lp-btn" data-act="lpPanelClose" title="إغلاق (Esc)" aria-label="إغلاق"><i data-ic="x"></i></button>
+    </div>
+    <div class="lpp-body" id="lpPanelBody"></div>
+  </aside>
   <button class="btn btn-amber lp-next" id="lpNext" data-act="lpNext" hidden><i data-ic="play" class="fill sm"></i>الحلقة الجاية</button>
   <div class="lp-bar">
     <input type="range" id="lpSeek" min="0" max="1000" value="0" aria-label="مكان الفيديو" dir="ltr">
@@ -964,7 +1036,7 @@
       <button class="lp-btn txt" data-act="lpSkip" data-s="10" title="قدّام 10 ثواني (→)" aria-label="قدّام 10 ثواني" dir="ltr">+10</button>
       <span class="lp-time" id="lpTime" dir="ltr"></span>
       <span class="grow"></span>
-      <select id="lpSubs" aria-label="الترجمة" hidden></select>
+      <button class="lp-btn txt cc" data-act="lpCC" id="lpCC" title="الترجمة (C)" aria-label="الترجمة">CC</button>
       <select id="lpRate" aria-label="السرعة" dir="ltr"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
       <button class="lp-btn" data-act="lpMute" id="lpMute" aria-label="الصوت"></button>
       <input type="range" id="lpVol" min="0" max="1" step="0.05" value="1" aria-label="مستوى الصوت" dir="ltr">
@@ -1148,6 +1220,20 @@
             <button class="btn btn-amber" data-act="osSave">احفظ واتأكد</button>
           </div>
           <div class="kstat" id="osStat" role="status" aria-live="polite"></div>
+          <div id="osAccount" class="osacct">
+            <div class="lpp-l" style="color:inherit;margin-top:14px"><b>حسابك على OpenSubtitles</b> <span class="sub">(اختياري — 20 تنزيل في اليوم بدل 5)</span></div>
+            <div class="fieldrow" id="osLoginRow">
+              <input type="text" id="osUser" dir="ltr" autocomplete="off" spellcheck="false" placeholder="اسم المستخدم">
+              <input type="password" id="osPass" dir="ltr" autocomplete="off" placeholder="الباسورد">
+              <button class="btn" data-act="osLogin">دخول</button>
+            </div>
+            <div class="fieldrow" id="osLoggedRow" hidden>
+              <span class="grow" id="osWho"></span>
+              <button class="btn btn-ghost" data-act="osLogout">خروج</button>
+            </div>
+            <div class="kstat" id="osLoginStat" role="status" aria-live="polite"></div>
+            <div class="sub">الباسورد بيروح لـ OpenSubtitles بس، وبيتحفظ متشفّر على جهازك — مبيطلعش في النسخة الاحتياطية ولا بيرجع للواجهة.</div>
+          </div>
           <details class="adv"><summary>إزاي أجيب المفتاح؟</summary>
             <ol class="sub" style="padding-inline-start:20px">
               <li>اعمل حساب ببلاش على OpenSubtitles.com لو معندكش، وادخل بيه.</li>

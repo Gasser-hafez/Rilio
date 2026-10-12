@@ -98,7 +98,7 @@ fs.writeFileSync(path.join(ud2, 'sitewin.json'), JSON.stringify({ width: 900, he
 // OpenSubtitles وهمي: نفس شكل الـ API (بحث → تنزيل → لينك الملف)، والمفتاح الصح بس اللي بيعدّي
 const OS_KEY = 'TestKey1234567890abcd', osHits = [];
 const osSrv = http.createServer((req, res) => {
-  osHits.push({ url: req.url, key: req.headers['api-key'], ua: req.headers['user-agent'] });
+  osHits.push({ url: req.url, key: req.headers['api-key'], ua: req.headers['user-agent'], auth: req.headers.authorization });
   const json = o => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
   const u = new URL(req.url, 'http://x');
   if (u.pathname === '/file/22.srt') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('1\n00:00:01,000 --> 00:00:04,000\nأهلاً\n'); }
@@ -107,6 +107,12 @@ const osSrv = http.createServer((req, res) => {
   // زي السيرفر الحقيقي: بارامترات مش بالترتيب الأبجدي = 301 (البرنامج مبيتبعش redirects بالمفتاح فلازم يبعتها مترتبة)
   { const sorted = new URLSearchParams(u.search); sorted.sort(); if (u.search && sorted.toString() !== u.search.slice(1)) { res.writeHead(301, { Location: u.pathname + '?' + sorted }); return res.end(); } }
   if (u.pathname === '/infos/formats') return json({ data: {} });
+  if (u.pathname === '/login' && req.method === 'POST') {
+    let b = ''; req.on('data', c => b += c);
+    req.on('end', () => { const j = JSON.parse(b); if (j.username === 'rilio' && j.password === 's3cret-pass') json({ token: 'tok-123', user: { allowed_downloads: 20, remaining_downloads: 20 } }); else { res.writeHead(401); res.end('{}'); } });
+    return;
+  }
+  if (u.pathname === '/infos/user') return json({ data: { allowed_downloads: 20, remaining_downloads: 19 } });
   if (u.pathname === '/subtitles') return json({ data: [
     { attributes: { language: 'en', download_count: 9999, release: 'Other.Release', files: [{ file_id: 11, file_name: 'x.srt' }] } },
     { attributes: { language: 'ar', download_count: 5, release: 'ep', files: [{ file_id: 22, file_name: 'ep.srt' }] } }] });
@@ -411,7 +417,7 @@ try {
         await until(() => app.ev(`items.find(i=>i.id==='lib1').curEp===3`), 5000, 'episode marked watched');
         await app.ev(`dlClose();1`);
       });
-      const showingCue = `(t=>t&&t.cues&&t.cues.length?t.cues[0].text:'')([...document.getElementById('dlVideo').textTracks].find(t=>t.mode==='showing'))`;
+      const showingCue = `(s=>s&&s.el.track.cues&&s.el.track.cues.length?s.el.track.cues[0].text:'')(lpSubs[lpMain])`;
       await check('download that came out spliced (file restarted inside) is flagged, with a warning in the player', async () => {
         await siteOpen(base + '/spl.mkv');
         await approve('spl.mkv');
@@ -421,12 +427,18 @@ try {
         await app.ev(`confirmNo.click();1`);
         await app.ev(`dlRefresh().then(()=>dlPlayFile(dl.library.find(f=>f.name==='spl.mkv'))).then(()=>1)`);
         await until(() => app.ev(`!lpWarn.hidden`), 5000, 'player warning');
+        await app.ev(`document.querySelector('[data-act=lpWarnClose]').click();1`);
+        assert.equal(await app.ev(`lpWarn.hidden`), true);
+        await app.ev(`dlPlayFile(dl.library.find(f=>f.name==='spl.mkv'));1`);
+        await sleep(1500);
+        assert.equal(await app.ev(`lpWarn.hidden`), true, 'stays dismissed for this file');
         await app.ev(`dlClose();1`);
       });
       await check('subtitles inside an MKV are pulled out, saved next to it and shown (Arabic first)', async () => {
         fs.copyFileSync(path.join(root, 'test', 'fixtures', 'subs.mkv'), path.join(dlDir, 'Emb Movie.mkv'));
         await app.ev(`dlRefresh().then(()=>dlPlayFile(dl.library.find(f=>f.name==='Emb Movie.mkv'))).then(()=>1)`);
-        await until(() => app.ev(`[...document.querySelectorAll('#lpSubs option')].filter(o=>/^\\d+$/.test(o.value)).length===2`), 10000, 'two tracks in the picker');
+        await until(() => app.ev(`lpSubs.length===2`), 10000, 'two tracks');
+        assert.equal(await app.ev(`lpSubs[lpMain].lang`), 'ar', 'Arabic picked first');
         assert.equal(await until(() => app.ev(showingCue), 8000, 'Arabic cues'), 'مرحبا');
         assert.ok(fs.existsSync(path.join(dlDir, 'Emb Movie.ar.srt')) && fs.existsSync(path.join(dlDir, 'Emb Movie.en.srt')), fs.readdirSync(dlDir).join(','));
         await app.ev(`dlClose();1`);
@@ -442,11 +454,45 @@ try {
         const search = osHits.find(h => h.url.includes('parent_tmdb_id'));
         assert.match(search.url, /parent_tmdb_id=55/); assert.match(search.url, /season_number=1/); assert.match(search.url, /episode_number=3/);
         assert.equal(search.key, OS_KEY); assert.match(search.ua, /^rilio v\d/);
-        // من القايمة: "ترجمة إنجليزي أونلاين" — حتى والملف ليه ترجمة خلاص
-        assert.equal(await app.ev(`[...$('lpSubs').options].some(o=>o.value==='os-en')`), true);
-        await app.ev(`(s=>{s.value='os-en';s.dispatchEvent(new Event('change'))})($('lpSubs'));1`);
+        // اللوحة ← أونلاين: كل النتايج (البحث ببلاش) بتفاصيلها، والتنزيل لنسخة بعينها
+        await app.ev(`document.getElementById('lpCC').click();document.querySelector('#lpPanel [data-t=online]').click();1`);
+        await until(() => app.ev(`!!document.querySelector('#lpPanelBody [data-act=lpOsGet]')`), 10000, 'online results listed');
+        const rows = await app.ev(`[...document.querySelectorAll('#lpPanelBody .lpp-res')].map(r=>r.innerText.replace(/\\s+/g,' '))`);
+        assert.equal(rows.length, 2, JSON.stringify(rows));
+        assert.ok(rows.some(r => /Other\.Release/.test(r) && /إنجليزي/.test(r) && /9,999/.test(r)), JSON.stringify(rows));
+        const enIx = await app.ev(`lpOs.list.findIndex(c=>c.lang==='en')`);
+        await app.ev(`document.querySelector('#lpPanelBody [data-act=lpOsGet][data-i="${enIx}"]').click();1`);
         assert.equal(await until(() => app.ev(showingCue).then(c => c === 'Hello there' && c), 10000, 'English online cues'), 'Hello there');
+        assert.equal(await app.ev(`lpSubs[lpMain].src+'|'+lpSubs[lpMain].release`), 'online|Other.Release', 'metadata kept');
         assert.ok(fs.existsSync(path.join(dlDir, 'ep.en.srt')));
+        // التوقيت: +1.5 ث بيتطبق على الجمل وبيتحفظ للملف ده (بيرجع لوحده المرة الجاية)
+        await app.ev(`lpOff(1.5);1`);
+        assert.equal(await app.ev(`lpSubs[lpMain].el.track.cues[0].startTime`), 2.5);
+        assert.match(await app.ev(`chrome.storage.local.get('watchlist:subOffsets').then(d=>d['watchlist:subOffsets'])`), /"ep\.en\.srt":1\.5/);
+        // ترجمتين مع بعض: العربي فوق الإنجليزي — وبنرسمهم إحنا في وقت الجملة
+        await app.ev(`lpSecond=lpSubs.findIndex(s=>s.lang==='ar');lpApplySub();(v=>{v.pause();v.currentTime=3})(document.getElementById('dlVideo'));1`);
+        await until(() => app.ev(`lpCue1.textContent.includes('Hello there')&&lpCue2.textContent.includes('أهلاً')`), 6000, 'both lines drawn');
+        // الشكل بيتحفظ لكل الأفلام
+        await app.ev(`document.querySelector('#lpPanel [data-t=look]').click();document.querySelector('[data-act=lpStyle][data-k=color][data-v=yellow]').click();1`);
+        assert.equal(await app.ev(`lpCues.dataset.color`), 'yellow');
+        assert.match(await app.ev(`chrome.storage.local.get('watchlist:subStyle').then(d=>d['watchlist:subStyle'])`), /"color":"yellow"/);
+        // مسح ملف ترجمة
+        await app.ev(`document.querySelector('#lpPanel [data-t=have]').click();lpSubDel(lpSubs.findIndex(s=>s.lang==='ar'));1`);
+        await until(() => app.ev(`confirmOverlay.classList.contains('show')`), 4000, 'delete confirm');
+        await app.ev(`confirmYes.click();1`);
+        await until(() => app.ev(`lpSubs.length===1`), 4000, 'deleted');
+        assert.equal(fs.existsSync(path.join(dlDir, 'ep.ar.srt')), false);
+        // حساب OpenSubtitles: باسورد غلط بيترفض، الصح بيتحفظ متشفّر (مش نص)، والتنزيل بيتبعت بالتوكن
+        assert.deepEqual(await app.ev(`__wlDesktop.dl.osLogin('rilio','nope')`), { error: 'BAD_LOGIN' });
+        assert.equal((await app.ev(`__wlDesktop.dl.osLogin('rilio','s3cret-pass')`)).ok, true);
+        const saved = fs.readFileSync(path.join(ud2, 'opensubs.json'), 'utf8');
+        assert.ok(!saved.includes('s3cret-pass') && /"user":"rilio"/.test(saved), 'password stored encrypted');
+        assert.equal((await app.ev(`__wlDesktop.dl.osStatus()`)).user, 'rilio');
+        osHits.length = 0;
+        await app.ev(`__wlDesktop.dl.osGet('ep.wav',{id:22,lang:'ar',release:'ep'})`);
+        assert.ok(osHits.some(h => h.url === '/download' && h.auth === 'Bearer tok-123'), JSON.stringify(osHits));
+        await app.ev(`__wlDesktop.dl.osLogout()`);
+        assert.equal(fs.existsSync(path.join(ud2, 'opensubs.json')), false);
         await app.ev(`dlClose();1`);
       });
     } finally { srv.close(); }

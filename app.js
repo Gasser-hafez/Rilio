@@ -290,7 +290,7 @@ async function refreshKeyStatus(){
   keyBadge($('omdbBadge'),omdb?'checking':'shared');
   const [a,b]=await Promise.all([tmdb?checkTmdbKey(tmdb):null,omdb?checkOmdbKey(omdb):null]);
   if(seq!==keyCheckSeq)return; // اتفتحت تاني في النص
-  if(dlApi){const os=(await sget('watchlist:oskey'))||'';$('osKey').value=os;$('osStat').textContent='';keyBadge($('osBadge'),os?'ok':'none');}
+  if(dlApi){const os=(await sget('watchlist:oskey'))||'';$('osKey').value=os;$('osStat').textContent='';keyBadge($('osBadge'),os?'ok':'none');osAccountUi();}
   if(a)keyBadge($('tmdbBadge'),a);
   if(b)keyBadge($('omdbBadge'),b);
 }
@@ -309,6 +309,22 @@ async function osSave(){
   const s=r.ok?'ok':r.error==='BAD_KEY'?'bad':'offline';
   if(s==='ok')await sset('watchlist:oskey',v);
   keyStat(st,s);if(s!=='offline')keyBadge($('osBadge'),s);
+}
+// حساب OpenSubtitles: الباسورد بيتبعت لـ main مرة واحدة وبيتمسح من الخانة — مبيتخزنش في الواجهة
+async function osLoginUi(){
+  const u=$('osUser').value.trim(), p=$('osPass').value, st=$('osLoginStat');
+  if(!u||!p){st.className='kstat bad';st.textContent='اكتب اسم المستخدم والباسورد';return;}
+  st.className='kstat';st.textContent='بدخل…';
+  const r=await dlApi.osLogin(u,p).catch(()=>({error:'NET'}));
+  $('osPass').value='';
+  if(r.ok){st.className='kstat ok';st.textContent='✓ دخلت'+(r.quota&&r.quota.allowed?' — '+r.quota.allowed+' تنزيل في اليوم':'');osAccountUi();}
+  else{st.className='kstat bad';st.textContent={BAD_LOGIN:'✗ اسم المستخدم أو الباسورد غلط',NO_KEY:'حط مفتاح OpenSubtitles فوق الأول',NO_CRYPTO:'ويندوز مش سامح بالتشفير — مقدرش أحفظ الباسورد بأمان',LIMIT:'OpenSubtitles بيقول جرّب كمان شوية'}[r.error]||'معرفتش أوصل لـ OpenSubtitles';}
+}
+async function osAccountUi(){
+  if(!dlApi)return;
+  const s=await dlApi.osStatus().catch(()=>({}));
+  $('osLoginRow').hidden=!!s.user;$('osLoggedRow').hidden=!s.user;
+  $('osWho').innerHTML=s.user?`داخل باسم <b dir="ltr">${esc(s.user)}</b>${s.quota&&s.quota.remaining!=null?` · فاضلك <bdi>${s.quota.remaining}</bdi>${s.quota.allowed?` من <bdi>${s.quota.allowed}</bdi>`:''} النهارده`:''}`:'';
 }
 async function keyShared(){
   await sset('watchlist:omdbkey','');
@@ -1060,7 +1076,7 @@ $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal(
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
   if(confirmResolve){confirmDone(false);return;}
-  if(!$('lp').hidden){if(!document.fullscreenElement)lpClose();return;} // في ملء الشاشة Escape بيخرج منها الأول
+  if(!$('lp').hidden){if(!$('lpPanel').hidden){lpPanelClose();return;}if(!document.fullscreenElement)lpClose();return;} // في ملء الشاشة Escape بيخرج منها الأول
   // أول تشغيل: الشروط لازم الموافقة عليها — Escape بيقفل بس وضع الشرح من الإعدادات
   if($('welcomeOverlay').classList.contains('show')){if(wGuide)wFinish();return;}
   if($('importOverlay').classList.contains('show'))importClose();
@@ -2326,7 +2342,8 @@ function dlPlayFile(f){
   const sig={signal:lpAbort.signal};
   $('lpTitle').textContent=it?it.title:stemOf(base);
   $('lpSub').textContent=[l&&l.s&&l.e?`S${pad(l.s)}E${pad(l.e)}`:'',it?base:''].filter(Boolean).join(' · ');
-  lpSetSubs(f.subs||[]);
+  lpOsReset();lpSecond=-1;lpPanelClose();
+  lpLoadSubs(f.subs||[]);
   $('lpRate').value='1';v.playbackRate=1;
   v.src=f.url;
   $('lp').hidden=false;
@@ -2337,7 +2354,7 @@ function dlPlayFile(f){
   lpUi();
   $('lpWarn').hidden=true;
   // ملف متلزّق (اتنزل من سيرفر بيبعت من الأول وهو بيكمّل): نقول بدل ما المستخدم يستغرب التكرار
-  dlApi.check(f.name).then(bad=>{if(bad&&lpFile===f)$('lpWarn').hidden=false;}).catch(()=>{});
+  dlApi.check(f.name).then(bad=>{if(bad&&lpFile===f&&!warnOff.has(f.name))$('lpWarn').hidden=false;}).catch(()=>{});
   lpEnsureSubs(f,l);
   if(!it||it._party)return;
   const tv=it.type==='tv', s=l.s, e=l.e;
@@ -2356,57 +2373,231 @@ function dlPlayFile(f){
   };
   v.addEventListener('timeupdate',onTime,sig);v.addEventListener('pause',onTime,sig);
 }
-// الترجمة في البلاير: العربي الأول لو موجود
-// الترجمة اللي المستخدم اختارها — Chromium بيختار ترجمة لوحده لما تراكات جديدة تتضاف (حسب اللغة) فبنرجّع اختيارنا
-let lpSubPick=-1;
-function lpApplySub(){const t=$('dlVideo').textTracks;for(let i=0;i<t.length;i++){const m=i===lpSubPick?'showing':'disabled';if(t[i].mode!==m)t[i].mode=m;}}
-$('dlVideo').textTracks.addEventListener('change',lpApplySub);
-$('dlVideo').textTracks.addEventListener('addtrack',()=>setTimeout(lpApplySub));
-function lpSetSubs(list,want){
+// تنبيه "الملف بايظ" اللي المستخدم قفله — ميظهرش تاني للملف ده
+const WARN_OFF_KEY='watchlist:warnOff';
+let warnOff=new Set();
+sget(WARN_OFF_KEY).then(r=>{try{const a=JSON.parse(r||'[]');if(Array.isArray(a))warnOff=new Set(a.filter(x=>typeof x==='string'&&x.length<=500).slice(-300));}catch(e){}});
+/* ================= الترجمة في بلاير المكتبة =================
+   بنرسمها إحنا مش كروم: التوقيت بيتظبط لكل ملف ترجمة، ترجمتين مع بعض، بتطلع فوق الكنترولز لما يظهروا، والشكل كله بيتحكم فيه.
+   التراكات بتتحمّل كـ <track> مخفية (hidden) وبنرسم الجمل الشغالة (getCueAsHTML — آمنة، عناصر VTT بس) */
+const SUB_STYLE_KEY='watchlist:subStyle', SUB_OFF_KEY='watchlist:subOffsets';
+const SUB_SIZES={s:.75,m:1,l:1.3,xl:1.65};
+let subStyle={size:'m',color:'white',bg:'shade',lift:0}, subOffsets={};
+sget(SUB_STYLE_KEY).then(r=>{
+  try{const o=JSON.parse(r||'{}');
+    if(SUB_SIZES[o.size])subStyle.size=o.size;
+    if(['white','yellow'].includes(o.color))subStyle.color=o.color;
+    if(['none','shade','solid'].includes(o.bg))subStyle.bg=o.bg;
+    if(Number.isFinite(o.lift))subStyle.lift=Math.max(0,Math.min(30,o.lift));
+  }catch(e){}
+  lpStyleSubs();
+});
+sget(SUB_OFF_KEY).then(r=>{try{const o=JSON.parse(r||'{}');for(const [k,v] of Object.entries(o).slice(0,3000))if(k.length<=500&&Number.isFinite(v)&&Math.abs(v)<=600)subOffsets[k]=v;}catch(e){}});
+let lpSubs=[], lpMain=-1, lpSecond=-1, lpTab='have';
+const LANG_NAME={ar:'عربي',en:'إنجليزي',fr:'فرنسي',es:'إسباني',de:'ألماني',it:'إيطالي',tr:'تركي',pt:'برتغالي',ru:'روسي'};
+const SRC_NAME={file:'من جوه الملف',online:'أونلاين',side:'ملف جنب الفيلم'};
+const subTitle=s=>(LANG_NAME[s.lang]||s.label||'ترجمة')+(s.release?' · '+s.release:'');
+const fmtOff=v=>(v>0?'+':v<0?'−':'')+Math.abs(v).toFixed(1)+' ث';
+function lpStyleSubs(){
+  const c=$('lpCues');
+  c.dataset.color=subStyle.color;c.dataset.bg=subStyle.bg;
+  c.style.setProperty('--scale',SUB_SIZES[subStyle.size]);c.style.setProperty('--lift',subStyle.lift+'%');
+}
+function lpSaveStyle(){sset(SUB_STYLE_KEY,JSON.stringify(subStyle));lpStyleSubs();}
+// list = ملفات الترجمة من main: {name,label,lang,src,release,exact,hi,url}. want = اسم الملف اللي يتختار
+function lpLoadSubs(list,want){
   const v=$('dlVideo');
   v.querySelectorAll('track').forEach(t=>t.remove());
-  for(const s of list){const t=document.createElement('track');t.kind='subtitles';t.src=s.url;t.label=s.label;if(/^[a-z]{2,3}$/i.test(s.label))t.srclang=s.label;v.appendChild(t);}
-  const pick=!list.length?-1:want!=null&&list.some(s=>s.label===want)?list.findIndex(s=>s.label===want):Math.max(0,list.findIndex(s=>/^ar\b/i.test(s.label)));
-  lpSubPick=pick;lpApplySub();
-  // + اختيار ترجمة أونلاين دايماً (حتى لو الملف ليه ترجمة — ممكن تكون مش متظبطة أو لغة تانية)
-  $('lpSubs').innerHTML='<option value="-1">بدون ترجمة</option>'+list.map((s,i)=>`<option value="${i}"${i===pick?' selected':''}>${esc(s.label)}</option>`).join('')
-    +(dlApi?'<option disabled>──────</option><option value="os-ar">🔎 ترجمة عربي أونلاين</option><option value="os-en">🔎 ترجمة إنجليزي أونلاين</option>':'');
-  $('lpSubs').hidden=!list.length&&!dlApi;
+  lpSubs=list.map(s=>{
+    const el=document.createElement('track');
+    el.kind='subtitles';el.src=s.url;el.label=s.label;
+    v.appendChild(el);
+    const sub={...s,el};
+    el.addEventListener('load',()=>lpShift(sub),{once:true});
+    el.track.addEventListener('cuechange',lpRenderCues);
+    return sub;
+  });
+  const ix=n=>lpSubs.findIndex(s=>s.name===n);
+  lpMain=!lpSubs.length?-1:want!=null&&ix(want)>=0?ix(want):Math.max(0,lpSubs.findIndex(s=>s.lang==='ar'));
+  if(lpSecond>=lpSubs.length||lpSecond===lpMain)lpSecond=-1;
+  lpApplySub();
+  if(!$('lpPanel').hidden)lpPanelRender();
 }
-// مفيش ملف ترجمة جنب الفيلم: نطلّع اللي جوه الملف (MKV) — ولو مفيش، أونلاين من OpenSubtitles (لو فيه مفتاح)
-const OS_ERR={NOT_FOUND:'ملقتش ترجمة عربي ولا إنجليزي ليه على OpenSubtitles',LIMIT:'خلص حد التنزيل اليومي في OpenSubtitles — جرّب بكرة',
-  BAD_KEY:'مفتاح OpenSubtitles مش شغال — راجعه في الإعدادات',NET:'معرفتش أوصل لـ OpenSubtitles — اتأكد من النت'};
+// المختارة "hidden" (بنقرا جملها ونرسمها) والباقي مقفول. Chromium بيختار تراك لوحده لما يتضاف (حسب اللغة) — بنرجّع اختيارنا
+function lpApplySub(){
+  lpSubs.forEach((s,i)=>{const m=i===lpMain||i===lpSecond?'hidden':'disabled';if(s.el.track.mode!==m)s.el.track.mode=m;});
+  lpRenderCues();
+}
+$('dlVideo').textTracks.addEventListener('change',()=>{if([...$('dlVideo').textTracks].some(t=>t.mode==='showing'))lpApplySub();});
+$('dlVideo').textTracks.addEventListener('addtrack',()=>setTimeout(lpApplySub));
+// التوقيت: كل جمل الملف بتتزق بنفس الفرق (محفوظ لكل ملف ترجمة — بيرجع لوحده المرة الجاية)
+function lpShift(s){
+  const cues=s.el.track.cues;if(!cues)return;
+  const off=subOffsets[s.name]||0;
+  for(const c of cues){if(c._s0==null){c._s0=c.startTime;c._e0=c.endTime;}c.startTime=Math.max(0,c._s0+off);c.endTime=Math.max(0,c._e0+off);}
+  lpRenderCues();
+}
+function lpSetOffset(s,off){
+  off=Math.round(Math.max(-600,Math.min(600,off))*10)/10;
+  if(off)subOffsets[s.name]=off;else delete subOffsets[s.name];
+  sset(SUB_OFF_KEY,JSON.stringify(subOffsets));
+  lpShift(s);
+  if(!$('lpPanel').hidden)lpPanelRender();
+}
+function lpRenderCues(){
+  for(const [id,ix] of [['lpCue1',lpMain],['lpCue2',lpSecond]]){
+    const el=$(id);el.textContent='';
+    const s=ix>=0&&lpSubs[ix], cues=s&&s.el.track.activeCues;
+    if(!cues)continue;
+    for(const c of cues){const d=document.createElement('div');d.className='cue';d.dir='auto';d.appendChild(c.getCueAsHTML());el.appendChild(d);}
+  }
+}
+// مفيش ملف ترجمة جنب الفيلم: نطلّع اللي جوه الملف (MKV) — ولو مفيش، أحسن ترجمة أونلاين لوحدها (لو فيه مفتاح)
+const OS_ERR={NOT_FOUND:'ملقتش ترجمة عربي ولا إنجليزي ليه على OpenSubtitles',LIMIT:'خلص حد التنزيل اليومي في OpenSubtitles — سجّل دخول بحسابك عشان 20 في اليوم، أو استنى لبكرة',
+  BAD_KEY:'مفتاح OpenSubtitles مش شغال — راجعه في الإعدادات',NET:'معرفتش أوصل لـ OpenSubtitles — اتأكد من النت',NO_KEY:'محتاج مفتاح OpenSubtitles (ببلاش) من الإعدادات'};
 async function lpEnsureSubs(f,l){
   if((f.subs||[]).length||!dlApi)return;
   const mkv=/\.(mkv|webm)$/i.test(f.name);
   if(mkv)toast('بدوّر على ترجمة جوه الفيلم…');
-  let list=await dlApi.subs(f.name).catch(()=>[]);
+  const list=await dlApi.subs(f.name).catch(()=>[]);
   if(lpFile!==f)return;
+  if(list.length){f.subs=list;lpLoadSubs(list);toast('الترجمة جاهزة ✔');return;}
+  if(!(await sget('watchlist:oskey'))){toast('مفيش ترجمة للملف ده — دوس "ترجمة" تحت ودوّر أونلاين');return;}
   const it=l&&l.it;
-  if(!list.length){
-    if(!(await sget('watchlist:oskey'))){toast('مفيش ترجمة للملف ده — اختار "ترجمة أونلاين" من قايمة الترجمة تحت');return;}
-    return lpOnlineSubs(f,l);
-  }
-  f.subs=list;lpSetSubs(list);toast('الترجمة جاهزة ✔');
-}
-// ترجمة أونلاين (تلقائي لو الملف مالوش ترجمة، أو من القايمة باللغة اللي تختارها)
-async function lpOnlineSubs(f,l,lang){
-  if(!(await sget('watchlist:oskey'))){
-    if(await uiConfirm('الترجمة الأونلاين بتيجي من OpenSubtitles ومحتاجة مفتاح ببلاش (دقيقتين). تفتح صفحة المفاتيح وفيها الخطوات؟',{yes:'افتح الإعدادات',no:'بعدين'})){lpClose();openSettings('pgKeys');}
-    return;
-  }
-  const it=l&&l.it;
-  toast(lang==='en'?'بدوّر على ترجمة إنجليزي…':lang==='ar'?'بدوّر على ترجمة عربي…':'بجيب ترجمة أونلاين…');
-  const r=await dlApi.subsOnline(f.name,{...(it&&it.tmdbId?{tmdbId:it.tmdbId,type:it.type,s:l.s||null,e:l.e||null}:{}),...(lang?{lang}:{})}).catch(()=>({error:'NET'}));
+  toast('بجيب ترجمة أونلاين…');
+  const r=await dlApi.subsOnline(f.name,lpOsQuery(l)).catch(()=>({error:'NET'}));
   if(lpFile!==f)return;
-  if(r.error){toast(OS_ERR[r.error]||'معرفتش أجيب ترجمة');lpSetSubs(f.subs||[]);return;}
-  f.subs=Array.isArray(r.subs)?r.subs:[];lpSetSubs(f.subs,r.label);
-  toast(r.exact?'الترجمة جاهزة ✔ (متعملة على نفس نسخة الفيلم بالظبط)':'الترجمة جاهزة ✔ — لو التوقيت مش مظبوط جرّب لغة تانية أو نسخة تانية');
+  if(r.quota)lpOs.quota=r.quota;
+  if(r.error){toast(OS_ERR[r.error]||'معرفتش أجيب ترجمة');return;}
+  f.subs=Array.isArray(r.subs)?r.subs:[];lpLoadSubs(f.subs,r.name);
+  toast(r.exact?'الترجمة جاهزة ✔ (متعملة على نفس نسخة الفيلم بالظبط)':'الترجمة جاهزة ✔ — لو مش مظبوطة دوس "ترجمة" تحت واختار غيرها');
 }
+// أرقام بس للبحث: TMDB + موسم/حلقة لو الملف مربوط بعنوان (وإلا main بيدوّر بالبصمة واسم الملف)
+const lpOsQuery=l=>{const it=l&&l.it;return it&&it.tmdbId?{tmdbId:it.tmdbId,type:it.type,s:l.s||null,e:l.e||null}:{};};
+
+/* ---- لوحة الترجمة ---- */
+let lpOs={};
+const lpOsReset=()=>{lpOs={langs:['ar','en'],list:null,loading:false,err:null,quota:lpOs.quota||null,user:null,key:false,ready:false};};
+lpOsReset();
+function lpPanelOpen(tab){
+  if(tab)lpTab=tab;
+  $('lpPanel').hidden=false;$('lp').classList.add('panel');
+  if(lpTab==='online'&&!lpOs.ready)lpOsStart();
+  lpPanelRender();lpWake();
+}
+function lpPanelClose(){$('lpPanel').hidden=true;$('lp').classList.remove('panel');}
+async function lpOsStart(){
+  lpOs.ready=true;lpOs.loading=true;lpPanelRender();
+  const st=await dlApi.osStatus().catch(()=>({}));
+  lpOs.key=!!st.key;lpOs.user=st.user||null;if(st.quota)lpOs.quota=st.quota;
+  if(lpOs.key)return lpOsSearch();
+  lpOs.loading=false;lpPanelRender();
+}
+async function lpOsSearch(){
+  const f=lpFile;if(!f)return;
+  lpOs.loading=true;lpOs.err=null;lpPanelRender();
+  const r=await dlApi.osSearch(f.name,{...lpOsQuery(libInfo(f)),langs:lpOs.langs}).catch(()=>({error:'NET'}));
+  if(lpFile!==f)return;
+  lpOs.loading=false;
+  if(r.error)lpOs.err=r.error;else{lpOs.list=Array.isArray(r.list)?r.list:[];if(r.quota)lpOs.quota=r.quota;}
+  lpPanelRender();
+}
+async function lpOsGet(i){
+  const f=lpFile, c=lpOs.list&&lpOs.list[i];if(!f||!c||c.busy)return;
+  c.busy=true;lpPanelRender();
+  const r=await dlApi.osGet(f.name,{id:c.id,lang:c.lang,release:c.release,exact:c.exact,hi:c.hi}).catch(()=>({error:'NET'}));
+  c.busy=false;if(r.quota)lpOs.quota=r.quota;
+  if(lpFile!==f)return;
+  if(r.error){toast(OS_ERR[r.error]||'معرفتش أنزّلها');lpPanelRender();return;}
+  c.got=true;f.subs=Array.isArray(r.subs)?r.subs:[];
+  lpLoadSubs(f.subs,r.name);lpTab='have';lpPanelRender();
+  toast('اتحمّلت واشتغلت ✔ — لو التوقيت مش مظبوط ظبطه من "الشكل والتوقيت"');
+}
+async function lpSubDel(i){
+  const s=lpSubs[i];if(!s)return;
+  if(!(await uiConfirm('تمسح ملف الترجمة ده؟ ('+subTitle(s)+')',{yes:'امسح',no:'لأ',danger:true})))return;
+  if(!(await dlApi.subDel(s.name)))return toast('معرفتش أمسحه');
+  delete subOffsets[s.name];sset(SUB_OFF_KEY,JSON.stringify(subOffsets));
+  const f=lpFile, keep=lpMain>=0&&lpMain!==i?lpSubs[lpMain].name:null;
+  f.subs=(f.subs||[]).filter(x=>x.name!==s.name);
+  if(lpSecond===i)lpSecond=-1;else if(lpSecond>i)lpSecond--;
+  lpLoadSubs(f.subs,keep);
+}
+// الجمل اللي حوالين الوقت ده (للمزامنة على جملة): من الملف الأصلي، قبلها بشوية وبعدها
+function lpNearCues(){
+  const s=lpSubs[lpMain], cues=s&&s.el.track.cues;if(!cues||!cues.length)return [];
+  const now=$('dlVideo').currentTime, all=[...cues];
+  let k=all.findIndex(c=>c.startTime>=now-4);if(k<0)k=all.length-1;
+  return all.slice(Math.max(0,k-1),k+4).map(c=>({c,i:all.indexOf(c),t:c.text.replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim().slice(0,90)}));
+}
+function lpPanelRender(){
+  if($('lpPanel').hidden)return;
+  document.querySelectorAll('#lpPanel [data-act=lpTab]').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===lpTab));
+  const box=$('lpPanelBody');
+  if(lpTab==='have'){
+    const rows=lpSubs.map((s,i)=>`<div class="lpp-row${i===lpMain?' on':''}" data-act="lpPick" data-i="${i}" role="button" tabindex="0">
+        <span class="lpp-radio"></span>
+        <div class="grow"><div class="t" dir="auto">${esc(subTitle(s))}</div>
+          <div class="m">${esc(SRC_NAME[s.src]||'')}${s.exact?' · <b class="ok">✓ نفس نسختك</b>':''}${s.hi?' · للصم':''}${subOffsets[s.name]?` · التوقيت <bdi dir="ltr">${fmtOff(subOffsets[s.name])}</bdi>`:''}</div></div>
+        <button class="lpp-x" data-act="lpSubDel" data-i="${i}" title="امسح ملف الترجمة ده" aria-label="امسح">${ic('trash','sm')}</button></div>`).join('');
+    box.innerHTML=`${rows||'<div class="lpp-empty">مفيش ترجمة للملف ده لسه — دوّر عليها في "أونلاين"</div>'}
+      <div class="lpp-row${lpMain<0?' on':''}" data-act="lpPick" data-i="-1" role="button" tabindex="0"><span class="lpp-radio"></span><div class="grow"><div class="t">بدون ترجمة</div></div></div>
+      ${lpSubs.length>1?`<label class="lpp-l" for="lpSecond">ترجمة تانية فوقها (لغتين مع بعض)</label>
+        <select id="lpSecond"><option value="-1">مفيش</option>${lpSubs.map((s,i)=>i===lpMain?'':`<option value="${i}"${i===lpSecond?' selected':''}>${esc(subTitle(s))}</option>`).join('')}</select>`:''}
+      <button class="btn btn-sm lpp-more" data-act="lpTab" data-t="online">${ic('search','sm')}دوّر على ترجمات تانية أونلاين</button>`;
+  }else if(lpTab==='online'){
+    if(!lpOs.ready||(lpOs.loading&&!lpOs.list)){box.innerHTML='<div class="lpp-empty">بدوّر…</div>';return;}
+    if(!lpOs.key){box.innerHTML=`<div class="lpp-empty">الترجمة الأونلاين بتيجي من OpenSubtitles ومحتاجة مفتاح ببلاش (دقيقتين).</div><button class="btn btn-amber" data-act="lpOsSettings">افتح الإعدادات — فيها الخطوات</button>`;return;}
+    const q=lpOs.quota, quota=q&&q.remaining!=null?` · فاضلك <bdi>${q.remaining}</bdi>${q.allowed?` من <bdi>${q.allowed}</bdi>`:''} تنزيل النهارده`:'';
+    const chips=[['both','الاتنين'],['ar','عربي'],['en','إنجليزي']].map(([v,t])=>{const on=v==='both'?lpOs.langs.length===2:lpOs.langs.length===1&&lpOs.langs[0]===v;return `<button class="chip${on?' on':''}" data-act="lpOsLang" data-v="${v}">${t}</button>`;}).join('');
+    const res=lpOs.err?`<div class="lpp-empty">${esc(OS_ERR[lpOs.err]||'حصلت مشكلة')}</div>`
+      :!lpOs.list.length?'<div class="lpp-empty">مفيش نتايج — جرّب اللغة التانية</div>'
+      :lpOs.list.map((c,i)=>`<div class="lpp-res${c.exact?' exact':''}">
+        <div class="grow"><div class="t" dir="ltr" title="${esc(c.release)}">${esc(c.release||'—')}</div>
+          <div class="m"><span class="lang">${LANG_NAME[c.lang]||c.lang}</span>${c.exact?'<b class="ok">✓ نفس نسختك</b>':''}${c.trusted?'<span>★ رافع موثوق</span>':''}${c.hi?'<span>للصم</span>':''}${c.ai?'<span class="warn">ترجمة آلية</span>':''}<span>⬇ <bdi>${c.dl.toLocaleString('en')}</bdi></span>${c.rating?`<span>تقييم <bdi>${c.rating.toFixed(1)}</bdi></span>`:''}</div></div>
+        <button class="btn btn-sm${c.got?'':' btn-amber'}" data-act="lpOsGet" data-i="${i}"${c.busy||c.got?' disabled':''}>${c.got?'✓ اتحمّلت':c.busy?'بتتحمّل…':'حمّل'}</button></div>`).join('');
+    box.innerHTML=`<div class="lpp-quota">${lpOs.user?`داخل باسم <b dir="ltr">${esc(lpOs.user)}</b>`:'من غير حساب · <button class="linkbtn" data-act="lpOsSettings">سجّل دخول عشان 20 في اليوم</button>'}${quota}</div>
+      <div class="chips">${chips}</div>
+      <div class="lpp-hint">البحث ببلاش — التنزيل بس اللي بيتحسب. "✓ نفس نسختك" = متعملة على ملفك بالظبط فتوقيتها مظبوط</div>
+      ${res}`;
+  }else{
+    const s=lpSubs[lpMain], off=s?subOffsets[s.name]||0:0;
+    const st=(k,opts)=>opts.map(([v,t])=>`<button class="chip${subStyle[k]===v?' on':''}" data-act="lpStyle" data-k="${k}" data-v="${v}">${t}</button>`).join('');
+    box.innerHTML=`<h4>التوقيت${s?` — <span dir="auto">${esc(subTitle(s))}</span>`:''}</h4>
+      ${!s?'<div class="lpp-empty">اختار ترجمة الأول</div>':`
+      <div class="lpp-off" dir="ltr">
+        <button data-act="lpOff" data-d="-0.5">−0.5</button><button data-act="lpOff" data-d="-0.1">−0.1</button>
+        <b id="lpOffVal">${fmtOff(off)}</b>
+        <button data-act="lpOff" data-d="0.1">+0.1</button><button data-act="lpOff" data-d="0.5">+0.5</button>
+      </div>
+      <div class="lpp-hint">الترجمة بتيجي <b>بعد</b> الكلام؟ دوس − · بتيجي <b>قبله</b>؟ دوس + · من الكيبورد: <b dir="ltr">G</b> و <b dir="ltr">H</b> (مع Shift = نص ثانية)${off?' · <button class="linkbtn" data-act="lpOffReset">رجّع للأصل</button>':''}</div>
+      <h4>أو زامن على جملة</h4>
+      <div class="lpp-hint">أول ما تسمع جملة من دول في الفيلم، دوس عليها — التوقيت هيتظبط عليها</div>
+      <div class="lpp-sync">${lpNearCues().map(x=>`<button data-act="lpSyncCue" data-i="${x.i}" dir="auto">${esc(x.t)}</button>`).join('')||'<div class="lpp-empty">شغّل الفيلم شوية الأول</div>'}</div>`}
+      <h4>الشكل</h4>
+      <div class="lpp-l">الحجم</div><div class="chips">${st('size',[['s','صغير'],['m','عادي'],['l','كبير'],['xl','كبير جداً']])}</div>
+      <div class="lpp-l">اللون</div><div class="chips">${st('color',[['white','أبيض'],['yellow','أصفر']])}</div>
+      <div class="lpp-l">الخلفية</div><div class="chips">${st('bg',[['none','من غير'],['shade','شفافة'],['solid','سودا']])}</div>
+      <label class="lpp-l" for="lpLift">المكان (ارفعها لفوق)</label><input type="range" id="lpLift" min="0" max="30" value="${subStyle.lift}" dir="ltr">`;
+  }
+}
+function lpPick(i){lpMain=i;if(lpSecond===i)lpSecond=-1;lpApplySub();lpPanelRender();}
+function lpOff(d){const s=lpSubs[lpMain];if(!s)return toast('اختار ترجمة الأول');lpSetOffset(s,(subOffsets[s.name]||0)+d);toast('توقيت الترجمة: '+fmtOff(subOffsets[s.name]||0));}
+function lpSyncCue(i){
+  const s=lpSubs[lpMain], c=s&&s.el.track.cues&&s.el.track.cues[i];if(!c)return;
+  lpSetOffset(s,$('dlVideo').currentTime-(c._s0??c.startTime));
+  toast('اتزامنت ✔ — '+fmtOff(subOffsets[s.name]||0));
+}
+document.addEventListener('change',e=>{
+  if(e.target.id==='lpSecond'){lpSecond=+e.target.value;lpApplySub();}
+  else if(e.target.id==='lpLift'){subStyle.lift=+e.target.value;lpSaveStyle();}
+});
+document.addEventListener('input',e=>{if(e.target.id==='lpLift'){subStyle.lift=+e.target.value;lpStyleSubs();}});
 function lpClose(keepOpen){
   const v=$('dlVideo');
   if(lpAbort){lpAbort.abort();lpAbort=null;}
   v.pause();v.removeAttribute('src');v.innerHTML='';v.load();
+  lpSubs=[];lpMain=-1;lpRenderCues();
   lpFile=null;lpNextFile=null;clearTimeout(lpIdleT);
   if(!keepOpen){
     $('lp').hidden=true;
@@ -2420,11 +2611,6 @@ function lpFs(){const p=$('lp');if(document.fullscreenElement)document.exitFulls
 $('lpSeek').addEventListener('input',e=>{const v=$('dlVideo');$('lp').classList.add('seeking');if(v.duration)v.currentTime=e.target.value/1000*v.duration;});
 $('lpSeek').addEventListener('change',()=>$('lp').classList.remove('seeking'));
 $('lpVol').addEventListener('input',e=>{const v=$('dlVideo');v.volume=+e.target.value;v.muted=v.volume===0;});
-$('lpSubs').addEventListener('change',e=>{
-  const v=e.target.value;
-  if(/^os-/.test(v)){if(lpFile)lpOnlineSubs(lpFile,libInfo(lpFile),v.slice(3));return;}
-  lpSubPick=+v;lpApplySub();
-});
 $('lpRate').addEventListener('change',e=>{$('dlVideo').playbackRate=+e.target.value||1;});
 $('lp').addEventListener('mousemove',lpWake);
 // دوسة على الصورة نفسها = تشغيل/إيقاف، ودوستين = ملء الشاشة
@@ -2440,6 +2626,10 @@ document.addEventListener('keydown',e=>{
   else if(k==='ArrowDown'){v.volume=Math.max(0,v.volume-0.1);$('lpVol').value=v.volume;}
   else if(k==='f'||k==='F')lpFs();
   else if(k==='m'||k==='M')v.muted=!v.muted;
+  // الترجمة: G أبدر / H أتأخر (زي VLC) — Shift = نص ثانية. C = لوحة الترجمة
+  else if(k==='g'||k==='G')lpOff(e.shiftKey?-0.5:-0.1);
+  else if(k==='h'||k==='H')lpOff(e.shiftKey?0.5:0.1);
+  else if(k==='c'||k==='C'){if($('lpPanel').hidden)lpPanelOpen();else lpPanelClose();}
   else return;
   e.preventDefault();lpWake();
 },true);
@@ -2643,6 +2833,19 @@ document.addEventListener('click',(e)=>{
     case 'lpMute': $('dlVideo').muted=!$('dlVideo').muted; break;
     case 'lpFs': lpFs(); break;
     case 'lpNext': if(lpNextFile)dlPlayFile(lpNextFile); break;
+    case 'lpWarnClose': $('lpWarn').hidden=true; if(lpFile){warnOff.add(lpFile.name);sset(WARN_OFF_KEY,JSON.stringify([...warnOff].slice(-300)));} break;
+    case 'lpCC': if($('lpPanel').hidden)lpPanelOpen();else lpPanelClose(); break;
+    case 'lpPanelClose': lpPanelClose(); break;
+    case 'lpTab': lpPanelOpen(el.dataset.t); break;
+    case 'lpPick': lpPick(parseInt(el.dataset.i)); break;
+    case 'lpSubDel': e.stopPropagation(); lpSubDel(parseInt(el.dataset.i)); break;
+    case 'lpOsLang': lpOs.langs=el.dataset.v==='both'?['ar','en']:[el.dataset.v]; lpOsSearch(); break;
+    case 'lpOsGet': lpOsGet(parseInt(el.dataset.i)); break;
+    case 'lpOsSettings': lpClose(); openSettings('pgKeys'); break;
+    case 'lpOff': lpOff(parseFloat(el.dataset.d)); break;
+    case 'lpOffReset': if(lpSubs[lpMain])lpSetOffset(lpSubs[lpMain],0); break;
+    case 'lpSyncCue': lpSyncCue(parseInt(el.dataset.i)); break;
+    case 'lpStyle': subStyle[el.dataset.k]=el.dataset.v; lpSaveStyle(); lpPanelRender(); break;
     case 'dlReveal': {const f=dl.library[parseInt(el.dataset.ix)];if(f)dlApi.reveal(f.name);} break;
     case 'dlPickDir': dlApi.pickDir().then(()=>dlRefresh()); break;
     case 'backup': backup(); break;
@@ -2699,6 +2902,8 @@ document.addEventListener('click',(e)=>{
     case 'wTmdbSave': wKeySave('tmdb'); break;
     case 'wOmdbSave': wKeySave('omdb'); break;
     case 'osSave': osSave(); break;
+    case 'osLogin': osLoginUi(); break;
+    case 'osLogout': dlApi.osLogout().then(()=>{$('osLoginStat').textContent='خرجت';osAccountUi();}); break;
     case 'osOpen': window.__wlDesktop.openExternal('https://www.opensubtitles.com/en/consumers'); break;
     case 'wDone': case 'wClose': wFinish(); break;
     case 'updInstall': updInstall(); break;
