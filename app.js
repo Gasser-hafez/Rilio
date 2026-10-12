@@ -215,6 +215,7 @@ async function load(){
   checkSeasons();
   checkBackupDue();
   setTimeout(rtBackfill,20000);
+  startOnboarding();
 }
 async function checkBackupDue(){
   const now=Date.now(), day=24*3600*1000;
@@ -909,6 +910,8 @@ $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal(
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
   if(confirmResolve){confirmDone(false);return;}
+  // أول تشغيل: الشروط لازم الموافقة عليها — Escape بيقفل بس وضع الشرح من الإعدادات
+  if($('welcomeOverlay').classList.contains('show')){if(wGuide)wFinish();return;}
   if($('importOverlay').classList.contains('show'))importClose();
   else if($('settingsOverlay').classList.contains('show'))closeSettings();
   else if($('partyOverlay').classList.contains('show'))partyClose();
@@ -2020,6 +2023,98 @@ if(updApi){
   updApi.onState(st=>{upd=st;renderUpd();});
 }
 
+/* ================= لينكات برا البرنامج ================= */
+// الديسكتوب: main بيفتحها في المتصفح (قايمة ثابتة هناك). الاكستنشن: تاب جديد
+function openLink(url){
+  if(window.__wlDesktop&&window.__wlDesktop.openExternal)window.__wlDesktop.openExternal(url).catch(()=>{});
+  else window.open(url,'_blank','noopener');
+}
+
+/* ================= فحص المفاتيح ================= */
+// بيتأكد إن المفتاح شغال قبل ما يتحفظ: 'ok' | 'bad' | 'limit' | 'offline' | 'empty'
+async function checkTmdbKey(tok){
+  tok=str(tok).trim();
+  if(!tok)return 'empty';
+  if(!/^[\x21-\x7e]{16,1000}$/.test(tok))return 'bad';
+  const v4=tok.startsWith('eyJ');
+  try{
+    const res=await fetch('https://api.themoviedb.org/3/configuration'+(v4?'':'?api_key='+encodeURIComponent(tok)),
+      {headers:v4?{Authorization:'Bearer '+tok}:{},signal:AbortSignal.timeout(15000)});
+    if(res.status===401)return 'bad';
+    return res.ok?'ok':'offline';
+  }catch(e){return 'offline';}
+}
+async function checkOmdbKey(k){
+  k=str(k).trim();
+  if(!k)return 'empty';
+  if(!/^[A-Za-z0-9]{6,20}$/.test(k))return 'bad';
+  try{
+    // The Shawshank Redemption — موجود دايماً
+    const m=await(await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(k)}&i=tt0111161`,{signal:AbortSignal.timeout(15000)})).json();
+    if(m.Response==='True')return 'ok';
+    return /limit/i.test(str(m.Error))?'limit':'bad';
+  }catch(e){return 'offline';}
+}
+const KEY_MSG={
+  ok:['ok','✓ المفتاح شغال واتحفظ'],
+  limit:['warn','المفتاح صحيح واتحفظ، بس خلص حده النهارده — هيرجع يشتغل بكرة'],
+  bad:['bad','✗ المفتاح ده مش شغال — اتأكد إنك نسخته كامل (ولو OMDb: دوست على لينك التفعيل في الإيميل؟)'],
+  offline:['warn','معرفتش أتأكد دلوقتي — اتأكد من النت وجرّب تاني'],
+  empty:['bad','حط المفتاح الأول'],
+  checking:['','بتأكد...'],
+};
+function keyStat(el,st){const [cls,msg]=KEY_MSG[st];el.className='kstat'+(cls?' '+cls:'');el.textContent=msg;}
+// بيحفظ المفتاح بس لو شغال (أو صحيح وخلص حده) — مفتاح غلط مبيتحفظش
+async function saveCheckedKey(kind,val,statEl){
+  keyStat(statEl,'checking');
+  const st=kind==='tmdb'?await checkTmdbKey(val):await checkOmdbKey(val);
+  if(st==='ok'||st==='limit')await sset(kind==='tmdb'?'watchlist:tmdbkey':'watchlist:omdbkey',str(val).trim());
+  keyStat(statEl,st);
+  return st;
+}
+
+/* ================= أول تشغيل: الشروط + شرح المفاتيح =================
+   الشروط بتظهر لأي حد موافقش على النسخة دي. خطوات المفاتيح بس لأول تشغيل من غير مفتاح TMDB.
+   وزرار "إزاي أجيبه؟" في الإعدادات بيفتح خطوة واحدة (wGuide) */
+const TERMS_VERSION='1';
+let wsteps=[], wix=0, wGuide=false;
+function wShow(){
+  const step=wsteps[wix];
+  document.querySelectorAll('#welcomeOverlay .wstep').forEach(s=>{s.hidden=s.dataset.step!==step;});
+  $('wDots').innerHTML=wsteps.length>1?wsteps.map((s,i)=>`<b class="${i===wix?'on':i<wix?'done':''}"></b>`).join(''):'';
+  $('wClose').hidden=!wGuide;
+  $('wTmdbLater').hidden=wGuide;$('wOmdbSkip').hidden=wGuide;
+  $('welcomeOverlay').classList.add('show');
+}
+function wNext(){if(wix<wsteps.length-1){wix++;wShow();}else wFinish();}
+async function wFinish(){
+  $('welcomeOverlay').classList.remove('show');
+  if(!wGuide)await sset('watchlist:onboarded','1');
+  wGuide=false;
+  if(typeof refreshKeyStatus==='function')refreshKeyStatus();
+}
+async function startOnboarding(){
+  const steps=[];
+  if((await sget('watchlist:termsAccepted'))!==TERMS_VERSION)steps.push('terms');
+  if(!(await sget('watchlist:onboarded'))&&!(await sget('watchlist:tmdbkey')))steps.push('choice','tmdb','omdb','done');
+  if(!steps.length)return;
+  wsteps=steps;wix=0;wGuide=false;
+  $('wAgree').checked=false;$('wAgreeBtn').disabled=true;
+  wShow();
+}
+function showGuide(step){wsteps=[step];wix=0;wGuide=true;wShow();}
+$('wAgree').addEventListener('change',e=>{$('wAgreeBtn').disabled=!e.target.checked;});
+async function wAgree(){
+  if(!$('wAgree').checked)return;
+  await sset('watchlist:termsAccepted',TERMS_VERSION);
+  wNext();
+}
+async function wKeySave(kind){
+  const input=$(kind==='tmdb'?'wTmdb':'wOmdb'), stat=$(kind==='tmdb'?'wTmdbStat':'wOmdbStat');
+  const st=await saveCheckedKey(kind,input.value,stat);
+  if(st==='ok'||st==='limit')setTimeout(wNext,900);
+}
+
 /* ================= توجيه الأحداث (MV3 CSP يمنع inline onclick) ================= */
 document.addEventListener('click',(e)=>{
   const el=e.target.closest('[data-act]');
@@ -2084,6 +2179,13 @@ document.addEventListener('click',(e)=>{
     case 'partyCopy': partyCopy(); break;
     case 'partyCopyLink': partyCopyLink(); break;
     case 'updCheck': updCheck(); break;
+    case 'wAgree': wAgree(); break;
+    case 'wHaveFile': $('setFile').click(); break; // الاستيراد بيعمل reload، وأول ما يفتح هيلاقي المفتاح فمش هيعرض الخطوات
+    case 'wFresh': case 'wNext': wNext(); break;
+    case 'wOpen': openLink(el.dataset.url); break;
+    case 'wTmdbSave': wKeySave('tmdb'); break;
+    case 'wOmdbSave': wKeySave('omdb'); break;
+    case 'wDone': case 'wClose': wFinish(); break;
     case 'updInstall': updInstall(); break;
     case 'partyWatch': partyClose(); partyOpenMedia(party.media); break;
     case 'aiSave': aiSave(); break;

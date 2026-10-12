@@ -285,7 +285,13 @@ function guardPopups(wc, allowChildren) {
 
 /* ================= لينكات تفتح في المتصفح برا ================= */
 // قايمة ثابتة بس — shell.openExternal بيفتح أي بروتوكول (ملفات، برامج...) فمينفعش يقبل لينك من الواجهة على بعضه
-const EXTERNAL_OK = [/^https:\/\/github\.com\/Gasser-hafez(\/[\w.\-\/]*)?$/];
+const EXTERNAL_OK = [
+  /^https:\/\/github\.com\/Gasser-hafez(\/[\w.\-\/]*)?$/,
+  // صفحات شرح المفاتيح في أول تشغيل — لينكات بالظبط مش دومين كامل
+  /^https:\/\/www\.themoviedb\.org\/signup$/,
+  /^https:\/\/www\.themoviedb\.org\/settings\/api$/,
+  /^https:\/\/www\.omdbapi\.com\/apikey\.aspx$/,
+];
 ipcMain.handle('wl:openExternal', (e, url) => {
   if (!fromApp(e)) throw new Error('forbidden');
   if (typeof url !== 'string' || url.length > 300 || !EXTERNAL_OK.some(re => re.test(url))) return false;

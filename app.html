@@ -380,6 +380,36 @@
     display:none;align-items:flex-start;justify-content:center;z-index:60;overflow-y:auto;padding:5vh 16px 40px;
   }
   .overlay.show{display:flex}
+  /* ============ أول تشغيل: الشروط + شرح المفاتيح ============ */
+  #welcomeOverlay{z-index:1500}
+  .welcome{max-width:640px;width:calc(100% - 32px);padding:28px 28px 22px;position:relative}
+  .welcome h2{font-family:var(--display);font-weight:800;font-size:26px;margin:4px 0 6px;display:flex;align-items:center;gap:10px}
+  .welcome .mclose{position:absolute;top:14px;inset-inline-end:14px}
+  .wdots{display:flex;gap:6px;margin-bottom:14px}
+  .wdots b{width:22px;height:5px;border-radius:3px;background:var(--line)}
+  .wdots b.on{background:var(--accent)}
+  .wdots b.done{background:color-mix(in srgb,var(--accent) 45%,var(--line))}
+  .terms{max-height:min(46vh,380px);overflow-y:auto;border:1px solid var(--line);border-radius:16px;padding:14px 18px;background:var(--surface-2);margin:12px 0;line-height:1.75;font-size:14.5px}
+  .terms h4{margin:0 0 8px;font-family:var(--display);font-size:17px}
+  .terms ol{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:8px}
+  .wagree{display:flex;align-items:center;gap:10px;margin:6px 0 4px;font-weight:600;cursor:pointer}
+  .wagree input{width:18px;height:18px;accent-color:var(--accent)}
+  .wfoot{display:flex;justify-content:flex-start;gap:10px;margin-top:16px}
+  .wchoices{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+  @media(max-width:560px){.wchoices{grid-template-columns:1fr}}
+  .wchoice{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:18px;border-radius:18px;border:1.5px solid var(--line-2);background:var(--surface-2);color:var(--ink);text-align:start;cursor:pointer}
+  .wchoice:hover{border-color:var(--accent)}
+  .wchoice b{font-size:16px}
+  .wchoice small{color:var(--muted);font-size:13px}
+  .wsteps{margin:12px 0;padding-inline-start:20px;display:flex;flex-direction:column;gap:12px;line-height:1.75}
+  .wsteps .btn{margin-top:6px}
+  .wtag{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}
+  .wtag.soft{background:var(--hover);color:var(--muted)}
+  .wtips{margin:12px 0;padding-inline-start:20px;display:flex;flex-direction:column;gap:8px;line-height:1.7}
+  .kstat{min-height:1.6em;margin-top:8px;font-size:14px;font-weight:600}
+  .kstat.ok{color:var(--watching)}
+  .kstat.bad{color:#FF7A7A}
+  .kstat.warn{color:var(--queue)}
   /* نافذة التأكيد فوق أي نافذة تانية (الإعدادات، التفاصيل...) */
   #confirmOverlay{z-index:2000}
   .confirm-box{max-width:420px;width:calc(100% - 32px);padding:26px 24px 20px}
@@ -802,6 +832,89 @@
       <button class="mclose plain" data-act="partyClose" title="إغلاق" aria-label="إغلاق"><i data-ic="x"></i></button>
     </div>
     <div id="partyBody" class="partybody"></div>
+  </div>
+</div>
+
+<div class="overlay" id="welcomeOverlay" role="dialog" aria-modal="true" aria-label="أهلاً بيك في rilio">
+  <div class="modal welcome">
+    <button class="mclose plain" id="wClose" data-act="wClose" title="إغلاق" aria-label="إغلاق" hidden><i data-ic="x"></i></button>
+    <div class="wdots" id="wDots" aria-hidden="true"></div>
+
+    <section class="wstep" data-step="terms" hidden>
+      <h2>أهلاً بيك في rilio 👋</h2>
+      <p class="sub">قبل ما تبدأ، اقرا الشروط دي ووافق عليها — مرة واحدة بس.</p>
+      <div class="terms" tabindex="0" aria-label="شروط الاستخدام">
+        <h4>شروط استخدام rilio</h4>
+        <ol>
+          <li><b>rilio بيرتّب قايمتك بس.</b> البرنامج مبيستضيفش ولا بيرفع ولا بيبيع أي فيلم أو مسلسل.</li>
+          <li><b>المشغّلات والمواقع خارجية.</b> البلايرز المدمجة والمواقع اللي بتضيفها خدمات مش تابعة لـ rilio. إنت مسؤول إن استخدامك ليها يكون متوافق مع القوانين في بلدك، وشروط المواقع دي، وحقوق أصحاب المحتوى.</li>
+          <li><b>الإعلانات.</b> المواقع الخارجية ممكن يبقى فيها إعلانات أو محتوى مش مناسب. rilio بيحاول يمنع الـ popups بس مش بيضمن ده.</li>
+          <li><b>بياناتك على جهازك.</b> القايمة والتقييمات والملاحظات والمفاتيح متخزنة عندك بس، ومفتاح الـ AI متشفّر بتشفير ويندوز. لو استخدمت ترشيحات الـ AI، ليستتك وملاحظاتك بتتبعت للخدمة اللي إنت اخترتها.</li>
+          <li><b>Watch Party.</b> سيرفر الأوضة بيشوف عنوان الـ IP بتاعك ورقم الفيلم أو الحلقة اللي بتتفرجوا عليها، ومش بيسجل حاجة، وبيانات الأوضة بتتمسح بعد 6 ساعات من آخر استخدام. أي حد معاه كود أو لينك الأوضة يقدر يدخل ويتحكم في التشغيل.</li>
+          <li><b>المفاتيح.</b> مفاتيح TMDB وOMDb بتاعتك، واستخدامها خاضع لشروطهم. البرنامج بيستخدم TMDB API بس مش معتمد من TMDB.</li>
+          <li><b>التحديثات.</b> البرنامج بيتحدّث تلقائي من صفحته على GitHub.</li>
+          <li><b>من غير ضمان.</b> البرنامج متاح "زي ما هو" من غير أي ضمان، وصاحبه مش مسؤول عن أي ضرر من استخدامه أو من المواقع الخارجية.</li>
+          <li><b>لو الشروط اتغيرت</b> هتظهرلك تاني عشان توافق عليها.</li>
+        </ol>
+      </div>
+      <label class="wagree"><input type="checkbox" id="wAgree"> قريت الشروط وموافق عليها</label>
+      <div class="wfoot"><button class="btn btn-amber" id="wAgreeBtn" data-act="wAgree" disabled>موافق — يلا نبدأ</button></div>
+    </section>
+
+    <section class="wstep" data-step="choice" hidden>
+      <h2>عندك ملف إعدادات؟</h2>
+      <p class="sub">لو صاحبك بعتلك ملف إعدادات (فيه المفاتيح والمواقع)، اختاره وخلاص — مش هتحتاج الخطوات الجاية.</p>
+      <div class="wchoices">
+        <button class="wchoice" data-act="wHaveFile"><i data-ic="upload"></i><b>أيوه، عندي ملف</b><small>هختاره وهتخلص على طول</small></button>
+        <button class="wchoice" data-act="wFresh"><i data-ic="spark"></i><b>لأ، هبدأ من الأول</b><small>هوريك تجيب المفاتيح خطوة بخطوة (5 دقايق)</small></button>
+      </div>
+    </section>
+
+    <section class="wstep" data-step="tmdb" hidden>
+      <h2>مفتاح TMDB <span class="wtag">مهم</span></h2>
+      <p class="sub">TMDB بيجيب البوسترات والخلفيات وبيشغّل البلاير وتنبيهات المواسم. المفتاح مجاني.</p>
+      <ol class="wsteps">
+        <li>اعمل حساب مجاني على TMDB، وأكّد الإيميل من الرسالة اللي هتوصلك.
+          <button class="btn btn-sm" data-act="wOpen" data-url="https://www.themoviedb.org/signup"><i data-ic="ext"></i>افتح صفحة التسجيل</button></li>
+        <li>افتح صفحة الـ API، ودوس <b dir="ltr">Create</b> أو <b dir="ltr">Request an API key</b>، واختار <b dir="ltr">Developer</b>، ووافق على الشروط، واملا الفورم (نوع الاستخدام <b dir="ltr">Personal</b>، وفي خانة الموقع اكتب أي لينك).
+          <button class="btn btn-sm" data-act="wOpen" data-url="https://www.themoviedb.org/settings/api"><i data-ic="ext"></i>افتح صفحة الـ API</button></li>
+        <li>انسخ <b dir="ltr">API Key</b> (كود 32 حرف ورقم) أو <b dir="ltr">API Read Access Token</b> (الطويل اللي بيبدأ بـ <span dir="ltr">eyJ</span>) وحطه هنا:</li>
+      </ol>
+      <div class="fieldrow">
+        <input type="text" id="wTmdb" dir="ltr" autocomplete="off" spellcheck="false" placeholder="API Key أو eyJhbGci...">
+        <button class="btn btn-amber" data-act="wTmdbSave">احفظ واتأكد</button>
+      </div>
+      <div class="kstat" id="wTmdbStat" role="status" aria-live="polite"></div>
+      <div class="wfoot"><button class="btn btn-ghost" data-act="wNext" id="wTmdbLater">بعدين</button></div>
+    </section>
+
+    <section class="wstep" data-step="omdb" hidden>
+      <h2>مفتاح OMDb <span class="wtag soft">اختياري</span></h2>
+      <p class="sub">OMDb بيجيب تقييم IMDb وRotten Tomatoes. البرنامج فيه مفتاح مشترك شغال، بس كل الناس بتستخدمه فممكن يخلص حده في نص اليوم — مفتاحك الخاص أضمن.</p>
+      <ol class="wsteps">
+        <li>افتح صفحة OMDb، واختار <b dir="ltr">FREE (1,000 daily limit)</b>، واكتب إيميلك.
+          <button class="btn btn-sm" data-act="wOpen" data-url="https://www.omdbapi.com/apikey.aspx"><i data-ic="ext"></i>افتح صفحة OMDb</button></li>
+        <li>هيوصلك إيميل فيه المفتاح ولينك تفعيل — <b>دوس على لينك التفعيل الأول</b>، من غيره المفتاح مش هيشتغل.</li>
+        <li>انسخ المفتاح (8 حروف وأرقام) وحطه هنا:</li>
+      </ol>
+      <div class="fieldrow">
+        <input type="text" id="wOmdb" dir="ltr" autocomplete="off" spellcheck="false" placeholder="مثال: a1b2c3d4">
+        <button class="btn btn-amber" data-act="wOmdbSave">احفظ واتأكد</button>
+      </div>
+      <div class="kstat" id="wOmdbStat" role="status" aria-live="polite"></div>
+      <div class="wfoot"><button class="btn btn-ghost" data-act="wNext" id="wOmdbSkip">تخطي — هستخدم المشترك</button></div>
+    </section>
+
+    <section class="wstep" data-step="done" hidden>
+      <h2>جاهز 🎬</h2>
+      <ul class="wtips">
+        <li>دوس <b>ضيف</b> فوق وابحث عن أي فيلم أو مسلسل.</li>
+        <li>افتح أي حاجة ودوس <b>شغّل</b> عشان تتفرج جوه البرنامج.</li>
+        <li>زرار 👥 بيعملك <b>Watch Party</b> مع صحابك.</li>
+        <li>المفاتيح وكل حاجة تانية تقدر تغيّرها من <b>الإعدادات</b> في أي وقت.</li>
+      </ul>
+      <div class="wfoot"><button class="btn btn-amber" data-act="wDone">يلا</button></div>
+    </section>
   </div>
 </div>
 
