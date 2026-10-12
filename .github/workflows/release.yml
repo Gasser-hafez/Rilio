@@ -53,7 +53,7 @@ jobs:
           [ "$n" = "1" ] || { echo "expected 1 release for $GITHUB_REF_NAME, found $n"; exit 1; }
           assets=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
           echo "$assets"
-          for f in latest.yml "Watchlist-Setup-$v.exe" "Watchlist-Setup-$v.exe.blockmap"; do
+          for f in latest.yml "rilio-Setup-$v.exe" "rilio-Setup-$v.exe.blockmap"; do
             echo "$assets" | grep -qxF "$f" || { echo "missing $f"; exit 1; }
           done
         env:

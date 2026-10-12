@@ -1,9 +1,10 @@
 {
   "name": "watchlist",
-  "productName": "Watchlist",
+  "productName": "rilio",
   "version": "4.6.1",
-  "description": "قائمة المشاهدة — نسخة الديسكتوب",
+  "description": "rilio — قائمة المشاهدة، نسخة الديسكتوب",
   "main": "main.js",
+  "repository": "github:Gasser-hafez/Rilio",
   "partyServer": "wss://watchlist-party.gaser-7afez.workers.dev",
   "scripts": {
     "start": "electron .",
@@ -27,7 +28,7 @@
       "perMachine": false,
       "allowElevation": false,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "Watchlist-Setup-${version}.${ext}"
+      "artifactName": "rilio-Setup-${version}.${ext}"
     },
     "electronFuses": {
       "runAsNode": false,
