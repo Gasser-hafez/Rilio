@@ -1,5 +1,5 @@
 // نسخة الديسكتوب — نفس app.html/app.js بتاعة الاكستنشن، والـ chrome.storage بيتعمله shim في preload.js
-const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, protocol, net, session } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, protocol, net, session, safeStorage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -37,11 +37,15 @@ function saveStore(next) {
 // الواجهة الرئيسية بس هي اللي ليها تكلّم التخزين — مش أي فريم أو موقع خارجي
 const fromApp = e => !!e.senderFrame && e.senderFrame.parent === null && e.senderFrame.url.startsWith(APP_ORIGIN);
 
+// إعدادات الـ AI (فيها المفتاح متشفّر) مقفولة على الواجهة: مبتطلعش في النسخة الاحتياطية،
+// ونسخة احتياطية/إعدادات من حد تاني متقدرش تغيّر الـ endpoint وتسحب المفتاح لسيرفرها
+const AI_KEY = 'watchlist:ai';
+
 ipcMain.handle('wl:get', (e, keys) => {
   if (!fromApp(e)) throw new Error('forbidden');
-  if (keys == null) return store;
+  if (keys == null) { const { [AI_KEY]: _, ...rest } = store; return rest; }
   const out = {};
-  for (const k of [].concat(keys)) if (typeof k === 'string' && Object.hasOwn(store, k)) out[k] = store[k];
+  for (const k of [].concat(keys)) if (typeof k === 'string' && k !== AI_KEY && Object.hasOwn(store, k)) out[k] = store[k];
   return out;
 });
 
@@ -51,6 +55,7 @@ ipcMain.handle('wl:set', (e, obj) => {
   const changes = {};
   const next = { ...store };
   for (const [k, v] of Object.entries(obj)) {
+    if (k === AI_KEY) continue;
     // زي كروم: مفيش event لو القيمة متغيرتش (app.js بيعد كتاباته بـ selfWrites)
     if (JSON.stringify(store[k]) === JSON.stringify(v)) continue;
     changes[k] = { oldValue: store[k], newValue: v };
@@ -61,6 +66,168 @@ ipcMain.handle('wl:set', (e, obj) => {
   store = next;
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send('wl:changed', changes);
   if (changes['watchlist:data']) updateBadge();
+});
+
+/* ================= ترشيحات الـ AI ================= */
+// الطلب بيتعمل هنا مش في الواجهة: الـ CSP بتاعة الواجهة مقفولة على TMDB/OMDb، والسيرفرات المحلية
+// (Ollama/LM Studio) فيها مشاكل CORS، والواجهة ممنوعة من الشبكة المحلية
+const AI_KINDS = ['openai', 'anthropic'];
+const AI_MAX_BYTES = 8 * 1024 * 1024; // قايمة موديلات OpenRouter لوحدها بتعدّي 1MB
+// http مسموح بس للجهاز نفسه أو الشبكة المحلية — غير كده المفتاح هيتبعت مكشوف
+const LOCAL_HOST = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|[\w-]+\.local)$/i;
+function aiUrlOk(u) {
+  try {
+    const x = new URL(u);
+    if (x.username || x.password) return false;
+    return x.protocol === 'https:' || (x.protocol === 'http:' && LOCAL_HOST.test(x.hostname));
+  } catch (e) { return false; }
+}
+const originOf = u => { try { return new URL(u).origin; } catch (e) { return null; } };
+const aiCfg = () => (store[AI_KEY] && typeof store[AI_KEY] === 'object' ? store[AI_KEY] : {});
+function aiSecret(c) {
+  if (typeof c.key !== 'string' || !c.key) return '';
+  try { return safeStorage.decryptString(Buffer.from(c.key, 'base64')); } catch (e) { return ''; }
+}
+function writeAi(cfg) {
+  const next = { ...store };
+  if (cfg) next[AI_KEY] = cfg; else delete next[AI_KEY];
+  saveStore(next);
+  store = next;
+}
+
+// الواجهة بتعرف إذا كان فيه مفتاح بس — المفتاح نفسه مبيرجعلهاش أبداً
+ipcMain.handle('wl:aiGet', e => {
+  if (!fromApp(e)) throw new Error('forbidden');
+  const c = aiCfg();
+  return { kind: AI_KINDS.includes(c.kind) ? c.kind : 'openai', url: typeof c.url === 'string' ? c.url : '', model: typeof c.model === 'string' ? c.model : '', hasKey: !!c.key };
+});
+
+// تنضيف وفحص اللي جاي من الواجهة (حفظ أو جلب موديلات). الرابط بيتخزن base من غير /chat/completions أو /messages
+function aiInput(cfg) {
+  const s = v => (typeof v === 'string' ? v.trim() : '');
+  const kind = s(cfg && cfg.kind), model = s(cfg && cfg.model), key = s(cfg && cfg.key);
+  const url = s(cfg && cfg.url).replace(/\/+$/, '').replace(/\/(chat\/completions|messages)$/, '');
+  if (!AI_KINDS.includes(kind)) return { ok: false, error: 'BAD_KIND' };
+  if (url.length > 500 || !aiUrlOk(url)) return { ok: false, error: 'BAD_URL' };
+  if (model.length > 200) return { ok: false, error: 'BAD_MODEL' };
+  if (key.length > 1000 || !/^[\x21-\x7e]*$/.test(key)) return { ok: false, error: 'BAD_KEY' };
+  return { ok: true, kind, url, model, key };
+}
+// المفتاح المحفوظ بيتستخدم بس مع نفس السيرفر اللي اتحفظ عليه — عمره ما يتبعت لـ origin تاني
+const storedKeyFor = url => { const old = aiCfg(); return typeof old.key === 'string' && originOf(old.url) === originOf(url) ? old.key : ''; };
+
+ipcMain.handle('wl:aiSet', (e, cfg) => {
+  if (!fromApp(e)) throw new Error('forbidden');
+  if (!(cfg && typeof cfg.url === 'string' && cfg.url.trim())) { writeAi(null); return { ok: true, hasKey: false }; } // رابط فاضي = اقفل الـ AI وامسح المفتاح
+  const v = aiInput(cfg);
+  if (!v.ok) return v;
+  if (!v.model) return { ok: false, error: 'BAD_MODEL' };
+  let enc = storedKeyFor(v.url);
+  if (v.key) {
+    if (!safeStorage.isEncryptionAvailable()) return { ok: false, error: 'NO_CRYPTO' };
+    enc = safeStorage.encryptString(v.key).toString('base64');
+  }
+  writeAi({ kind: v.kind, url: v.url, model: v.model, key: enc });
+  return { ok: true, hasKey: !!enc };
+});
+
+async function readCapped(res) {
+  const chunks = [];
+  let n = 0;
+  for await (const ch of res.body || []) {
+    n += ch.length;
+    if (n > AI_MAX_BYTES) throw new Error('TOO_BIG');
+    chunks.push(ch);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+// طلب واحد للسيرفر (GET لو مفيش body). بيرجع { ok, j } أو { ok:false, error, status, detail } — عمره ما بيرمي
+async function aiCall(kind, url, key, endpoint, body) {
+  const headers = { 'content-type': 'application/json' };
+  if (kind === 'anthropic') { headers['anthropic-version'] = '2023-06-01'; if (key) headers['x-api-key'] = key; }
+  else if (key) headers.authorization = 'Bearer ' + key;
+  try {
+    let res;
+    try {
+      // redirect: 'error' — مفيش API محترم بيعمل redirect، ولو حصل المفتاح ميروحش لدومين تاني
+      res = await fetch(url + endpoint, { method: body ? 'POST' : 'GET', headers, body: body && JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(body ? 180000 : 20000) });
+    } catch (err) {
+      return { ok: false, error: err.name === 'TimeoutError' ? 'TIMEOUT' : 'UNREACHABLE' };
+    }
+    const raw = await readCapped(res);
+    let j = null;
+    try { j = JSON.parse(raw); } catch (err) {}
+    if (!res.ok) {
+      let detail = String((j && ((j.error && j.error.message) || (typeof j.error === 'string' && j.error))) || '').slice(0, 300);
+      if (key) detail = detail.split(key).join('***');
+      return { ok: false, error: res.status === 401 || res.status === 403 ? 'BAD_KEY' : 'HTTP', status: res.status, detail };
+    }
+    return { ok: true, j };
+  } catch (err) {
+    return { ok: false, error: err.name === 'TimeoutError' ? 'TIMEOUT' : 'BAD_RESPONSE' };
+  }
+}
+
+// قايمة الموديلات — الاتنين (OpenAI-compatible وAnthropic) بيرجعوا { data: [{ id }] }
+ipcMain.handle('wl:aiModels', async (e, cfg) => {
+  if (!fromApp(e)) throw new Error('forbidden');
+  const v = aiInput(cfg);
+  if (!v.ok) return v;
+  const key = v.key || aiSecret({ key: storedKeyFor(v.url) });
+  const r = await aiCall(v.kind, v.url, key, v.kind === 'anthropic' ? '/models?limit=1000' : '/models');
+  if (!r.ok) return r;
+  const data = r.j && Array.isArray(r.j.data) ? r.j.data : null;
+  if (!data) return { ok: false, error: 'BAD_RESPONSE' };
+  const ids = [...new Set(data.map(m => m && m.id).filter(id => typeof id === 'string' && id && id.length <= 200))];
+  return { ok: true, models: ids.sort().slice(0, 3000) };
+});
+
+// رسالة واحدة للموديل وإرجاع النص — مستخدمة في الترشيح وفي اختبار الاتصال
+async function aiChat(kind, url, key, model, prompt) {
+  const anth = kind === 'anthropic';
+  const messages = [{ role: 'user', content: prompt }];
+  const r = await aiCall(kind, url, key, anth ? '/messages' : '/chat/completions',
+    anth ? { model, max_tokens: 16000, messages } : { model, messages });
+  if (!r.ok) return r;
+  const j = r.j;
+  if (anth && j && j.stop_reason === 'refusal') return { ok: false, error: 'REFUSED' };
+  const text = anth
+    ? (j && Array.isArray(j.content) ? j.content.filter(b => b && b.type === 'text' && typeof b.text === 'string').map(b => b.text).join('\n') : '')
+    : j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+  if (typeof text !== 'string' || !text.trim()) return { ok: false, error: 'EMPTY' };
+  // موديلات التفكير المحلية (deepseek-r1 وغيره) بترجع تفكيرها جوه <think>
+  return { ok: true, text: text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim() };
+}
+
+// طلب واحد في نفس الوقت (ترشيح أو اختبار) — الضغط المتكرر ميصرفش من رصيد المفتاح
+let aiBusy = false;
+async function aiOnce(fn) {
+  if (aiBusy) return { ok: false, error: 'BUSY' };
+  aiBusy = true;
+  try { return await fn(); } finally { aiBusy = false; }
+}
+
+ipcMain.handle('wl:aiRun', (e, prompt) => {
+  if (!fromApp(e)) throw new Error('forbidden');
+  if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 200000) return { ok: false, error: 'BAD_PROMPT' };
+  const c = aiCfg();
+  if (!aiUrlOk(c.url) || !AI_KINDS.includes(c.kind) || typeof c.model !== 'string' || !c.model) return { ok: false, error: 'NOT_CONFIGURED' };
+  return aiOnce(() => aiChat(c.kind, c.url, aiSecret(c), c.model, prompt));
+});
+
+// اختبار الاتصال بالقيم اللي في الفورم (قبل الحفظ) — رسالة صغيرة حقيقية للموديل
+ipcMain.handle('wl:aiTest', (e, cfg) => {
+  if (!fromApp(e)) throw new Error('forbidden');
+  const v = aiInput(cfg);
+  if (!v.ok) return v;
+  if (!v.model) return { ok: false, error: 'BAD_MODEL' };
+  const key = v.key || aiSecret({ key: storedKeyFor(v.url) });
+  return aiOnce(async () => {
+    const t = Date.now();
+    const r = await aiChat(v.kind, v.url, key, v.model, 'Reply with just the word: OK');
+    return r.ok ? { ok: true, ms: Date.now() - t, reply: r.text.slice(0, 80) } : r;
+  });
 });
 
 // السكريبتات اللي بتتحقن في فريمات البلاير (preload مقفول في sandbox فمبيقدرش يقرا ملفات)

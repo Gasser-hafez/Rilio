@@ -63,6 +63,10 @@ function cleanItem(it){
   // backdrop مسار TMDB زي /abc.jpg، و'' معناها "جربنا وملقيناش"
   out.backdrop=it.backdrop===''?'':/^\/[\w.-]+$/.test(str(it.backdrop))?it.backdrop:null;
   out.newSeason=it.newSeason===true;
+  // سبب الترشيح (لو جه من الـ AI) — undefined بيتشال من الـ JSON فالعناصر العادية متكبرش
+  out.recWhy=str(it.recWhy).slice(0,300)||undefined;
+  out.recFrom=Array.isArray(it.recFrom)?it.recFrom.filter(t=>typeof t==='string'&&t).slice(0,5).map(t=>t.slice(0,120)):[];
+  if(!out.recFrom.length)out.recFrom=undefined;
   if(it.seasonEps&&typeof it.seasonEps==='object'){
     out.seasonEps={};
     for(const [s,n] of Object.entries(it.seasonEps))if(/^\d+$/.test(s)&&num(n)!=null)out.seasonEps[s]=num(n);
@@ -118,6 +122,7 @@ async function load(){
   statsOpen=(await sget('watchlist:statsOpen'))==='1';
   renderSites();
   render();
+  aiLoad();
   checkSeasons();
   checkBackupDue();
 }
@@ -747,6 +752,7 @@ function renderModal(){
     <div class="mbody">
       ${it.newSeason?`<div style="margin-bottom:12px"><button class="bell" style="position:static;box-shadow:none" data-act="ackSeason" data-id="${it.id}">🔔 موسم جديد نزل — اضغط لما تشوفه</button></div>`:''}
       ${it.desc?`<div class="mdesc" dir="auto">${esc(it.desc)}</div>`:''}
+      ${it.recWhy||it.recFrom?`<div class="msec"><div class="sh">🤖 اترشحلك ليه</div><div class="rw">${recWhyHtml(it.recWhy,it.recFrom)}</div></div>`:''}
       ${progSec}
       ${rateSec}
       <div class="msec">
@@ -1210,6 +1216,17 @@ $('tasteBtn').onclick=()=>{
   $('importOverlay').classList.add('show');
 };
 function importClose(){$('importOverlay').classList.remove('show');}
+// اختيار "شفته" بيعلّم العنوان تلقائياً — انت عايزه يتضاف، بس في "شفتها"
+$('impList').addEventListener('change',e=>{
+  if(!e.target.classList.contains('impSeen'))return;
+  const row=e.target.closest('.impRow'), cb=row.querySelector('input');
+  row.classList.toggle('seen',!!e.target.value);
+  if(e.target.value)cb.checked=true;
+  // شفته = فرصة تكتب رأيك؛ بيتحفظ كملاحظة وبيدخل ملف الذوق
+  const note=document.querySelector(`.impNoteRow[data-ix="${cb.dataset.ix}"]`);
+  note.hidden=!e.target.value;
+  if(e.target.value)note.querySelector('input').focus();
+});
 $('importOverlay').addEventListener('click',e=>{if(e.target===$('importOverlay'))importClose();});
 
 function parseRecs(text){
@@ -1218,14 +1235,19 @@ function parseRecs(text){
     const m=line.match(/^\s*(?:\d+\s*[\).:\-–—]\s*|[-*•]\s+)(.+)$/);
     if(!m)return;
     let s=m[1].replace(/\*\*|__|\*/g,'').trim();
+    // [because: A; B] = العناوين من ذوقك اللي الترشيح مبني عليها — بتتشال قبل أي حاجة عشان سنينها متلخبطش سنة العنوان
+    let from=[];
+    s=s.replace(/\[\s*because\s*:([^\]]*)\]/i,(_,l)=>{from=l.split(/[;؛]/).map(t=>t.trim()).filter(Boolean).slice(0,5).map(t=>t.slice(0,120));return '';}).trim();
     let year=null;const ym=s.match(/\((?:[^)]*?)?(\d{4})(?:[^)]*)?\)/);
     if(ym)year=parseInt(ym[1]);
-    s=s.split(/\s+[—–:|]\s+/)[0].split(' - ')[0];
+    const parts=s.split(/\s+[—–:|]\s+| - /);
+    s=parts[0];
+    const why=parts.slice(1).join(' — ').trim().slice(0,300);
     s=s.replace(/\([^)]*\)/g,'').replace(/["“”«»]/g,'').trim().replace(/[.,؛;]+$/,'');
     if(s.length<2||s.length>80)return;
     if(!/[A-Za-z\u0600-\u06FF]/.test(s))return;
     const k=s.toLowerCase();if(seen.has(k))return;seen.add(k);
-    out.push({title:s,year});
+    out.push({title:s,year,why,from});
   });
   return out;
 }
@@ -1242,16 +1264,25 @@ function importParse(){
     const dup=have.has(c.title.toLowerCase());
     return `<label class="impRow" style="${dup?'opacity:.45':''}">
       <input type="checkbox" data-ix="${ix}" ${dup?'':'checked'} ${dup?'disabled':''}>
-      <span dir="auto">${esc(c.title)}</span>
+      <span class="impP">⏳</span>
+      <span dir="auto">${esc(c.title)}${c.why?`<span class="iwhy" dir="auto">${esc(c.why)}</span>`:''}</span>
       ${c.year?`<span class="iy">${c.year}</span>`:''}
-      ${dup?'<span class="iy">موجود بالفعل</span>':''}
-    </label>`;
+      ${c.why||c.from.length?`<button type="button" class="impWhyBtn" data-act="impWhy" data-ix="${ix}" title="اترشح ليه؟">💡</button>`:''}
+      ${dup?'<span class="iy">موجود بالفعل</span>':`<select class="impSeen" title="شفته قبل كده؟ قيّمه ويتضاف لـ'شفتها' — كده الترشيحات الجاية بتبقى أدق">
+        <option value="">＋ هشوفه</option>
+        ${[10,9,8,7,6,5,4,3,2,1].map(n=>`<option value="${n}">👁 شفته ★${n}</option>`).join('')}
+        <option value="w">👁 شفته (من غير تقييم)</option>
+      </select>`}
+    </label><div class="impWhyBox" data-ix="${ix}" hidden></div>
+    <div class="impNoteRow" data-ix="${ix}" hidden><input type="text" class="impNote" dir="auto" maxlength="300" placeholder="رأيك فيه في سطر (اختياري) — عجبك ليه / معجبكش ليه؟ ده بيحسّن الترشيحات الجاية"></div>`;
   }).join('');
-  $('impStatus').textContent=`لقيت ${impCands.length} عنوان — شيل علامة اللي مش عايزه`;
+  $('impStatus').textContent=`لقيت ${impCands.length} عنوان — شيل علامة اللي مش عايزه، واضغط 💡 عشان تعرف اترشح ليه`;
   $('impAddBtn').style.display='';
+  return importPosters();
 }
 
-async function importFetchOne(c){
+// أحسن نتيجة في TMDB للعنوان (الأقرب للسنة لو معروفة) — للبوستر في قايمة الاختيار وللإضافة نفسها
+async function tmdbBest(c){
   const d=await tmdbFetch(`/search/multi?query=${encodeURIComponent(c.title)}`);
   let r=(d.results||[]).filter(x=>x.media_type==='movie'||x.media_type==='tv');
   if(!r.length)return null;
@@ -1260,7 +1291,37 @@ async function importFetchOne(c){
     const yb=parseInt((b.release_date||b.first_air_date||'').slice(0,4))||9999;
     return Math.abs(ya-c.year)-Math.abs(yb-c.year);
   });
-  const best=r[0];
+  return r[0];
+}
+
+// بوسترات قايمة الاختيار: كل العناوين بالتوازي، ولو العمل عندك بالفعل (نفس رقم TMDB) بيتعلّم "موجود بالفعل"
+let impGen=0;
+async function importPosters(){
+  const gen=++impGen, cands=impCands;
+  const boxes=[...document.querySelectorAll('#impList .impP')];
+  if(!(await sget('watchlist:tmdbkey'))){boxes.forEach(b=>b.textContent='🎞');return;}
+  await Promise.all(cands.map(async(c,ix)=>{
+    try{c.tm=await tmdbBest(c);}catch(e){c.tm=undefined;} // undefined = الإضافة تجرب تاني
+    const box=boxes[ix];
+    if(gen!==impGen||!box)return; // اتعمل استخراج جديد في النص
+    box.textContent='';
+    const p=c.tm&&c.tm.poster_path;
+    if(typeof p==='string'&&/^\/[\w.-]+$/.test(p)){
+      const img=document.createElement('img');img.alt='';img.src='https://image.tmdb.org/t/p/w92'+p;box.appendChild(img);
+    }else box.textContent='🎞';
+    const row=box.closest('.impRow'), cb=row.querySelector('input');
+    if(c.tm&&!cb.disabled&&items.some(i=>i.tmdbId===c.tm.id&&(i.type==='tv')===(c.tm.media_type==='tv'))){
+      cb.checked=false;cb.disabled=true;row.style.opacity='.45';
+      row.querySelector('.impSeen')?.remove();
+      document.querySelector(`.impNoteRow[data-ix="${ix}"]`).hidden=true;
+      row.insertAdjacentHTML('beforeend','<span class="iy">موجود بالفعل</span>');
+    }
+  }));
+}
+
+async function importFetchOne(c){
+  const best=c.tm!==undefined?c.tm:await tmdbBest(c);
+  if(!best)return null;
   const type=best.media_type==='tv'?'tv':'film';
   const item={id:uid(),title:best.title||best.name||c.title,type,genre:'',status:'queue',rating:null,note:'',added:Date.now(),
     year:parseInt((best.release_date||best.first_air_date||'').slice(0,4))||c.year||null,
@@ -1286,14 +1347,24 @@ async function importFetchOne(c){
 async function importAdd(){
   const tok=(await sget('watchlist:tmdbkey'))||'';
   if(!tok){$('impStatus').textContent='محتاج مفتاح TMDB الأول — سجّله في الإعدادات تحت';return;}
-  const checked=[...document.querySelectorAll('#impList input:checked')].map(i=>impCands[parseInt(i.dataset.ix)]);
+  const boxes=[...document.querySelectorAll('#impList input:checked')];
+  const checked=boxes.map(i=>impCands[parseInt(i.dataset.ix)]);
+  // "شفته" = يتضاف لـ"شفتها" بتقييمه — بيدخل ملف الذوق في المرة الجاية فالترشيحات تبقى أدق
+  const seenSel=boxes.map(i=>i.closest('.impRow').querySelector('.impSeen')?.value||'');
+  const notes=boxes.map(i=>(document.querySelector(`.impNoteRow[data-ix="${i.dataset.ix}"] .impNote`)?.value||'').trim().slice(0,300));
   if(!checked.length){$('impStatus').textContent='اختار عنوان واحد على الأقل';return;}
   $('impAddBtn').disabled=true;
-  let ok=0,fail=[];
+  let ok=0,seen=0,fail=[];
   for(let i=0;i<checked.length;i++){
     $('impStatus').textContent=`بجيب البيانات ${i+1}/${checked.length}: ${checked[i].title}...`;
     try{
       const item=await importFetchOne(checked[i]);
+      const s=seenSel[i];
+      if(item){
+        if(checked[i].why)item.recWhy=checked[i].why;
+        if(checked[i].from.length)item.recFrom=checked[i].from;
+      }
+      if(item&&s){item.status='watched';item.watchedAt=Date.now();item.rating=s==='w'?null:parseInt(s);item.note=notes[i];seen++;}
       if(item){items.unshift(item);ok++;}
       else fail.push(checked[i].title);
     }catch(e){
@@ -1302,10 +1373,126 @@ async function importAdd(){
     }
   }
   await persist();
-  tab='queue';render();
+  tab=ok>seen?'queue':'watched';render();
   $('impAddBtn').disabled=false;
   importClose();
-  toast(`اتضاف ${ok} لـ"هشوفهم" ✔${fail.length?' — فشل: '+fail.join('، '):''}`);
+  toast(`اتضاف ${ok-seen} لـ"هشوفهم"${seen?` و${seen} لـ"شفتها"`:''} ✔${fail.length?' — فشل: '+fail.join('، '):''}`);
+}
+
+/* ================= ترشيحات الـ AI (نسخة الديسكتوب بس) =================
+   الطلب نفسه والمفتاح في main.js — الواجهة بتبعت ملف الذوق وتاخد نص الرد بس */
+// want = موديلات بنختارها افتراضياً لو طلعت في القايمة اللي رجعت من السيرفر (لو مش موجودة اليوزر بيختار)
+const AI_PRESETS={
+  ollama:{kind:'openai',url:'http://localhost:11434/v1',local:true},
+  lmstudio:{kind:'openai',url:'http://localhost:1234/v1',local:true},
+  openai:{kind:'openai',url:'https://api.openai.com/v1',want:['gpt-5-mini','gpt-4o-mini']},
+  gemini:{kind:'openai',url:'https://generativelanguage.googleapis.com/v1beta/openai',want:['models/gemini-2.5-flash','gemini-2.5-flash']},
+  openrouter:{kind:'openai',url:'https://openrouter.ai/api/v1',want:['openai/gpt-5-mini','openai/gpt-4o-mini']},
+  groq:{kind:'openai',url:'https://api.groq.com/openai/v1',want:['llama-3.3-70b-versatile']},
+  anthropic:{kind:'anthropic',url:'https://api.anthropic.com/v1',want:['claude-opus-5-5']}
+};
+// موديلات مش شات (صوت/صور/embeddings) — بتتشال من القايمة عشان متتختارش بالغلط
+const AI_NOT_CHAT=/embed|whisper|tts|dall-e|moderation|transcri|realtime|audio|image|imagen|veo|aqa|rerank/i;
+let aiWant=[], aiModelsReq=0, aiModelList=[];
+const AI_ERR={
+  NOT_CONFIGURED:'ظبط الـ AI من الإعدادات الأول (⚙ ← 🤖 الذكاء الاصطناعي)',
+  BUSY:'فيه طلب شغال بالفعل — استنى يخلص',
+  TIMEOUT:'الـ AI اتأخر أكتر من 3 دقايق — جرب موديل أسرع',
+  UNREACHABLE:'مقدرتش أوصل للسيرفر — اتأكد من الرابط وإن السيرفر المحلي شغال',
+  BAD_KEY:'المفتاح غلط أو ملوش صلاحية',
+  EMPTY:'الـ AI رجّع رد فاضي',
+  REFUSED:'الـ AI رفض الطلب — جرب تاني',
+  BAD_RESPONSE:'رد مش مفهوم من السيرفر — اتأكد من نوع الـ API',
+  BAD_PROMPT:'مفيش بيانات كفاية تتبعت',
+  BAD_URL:'الرابط لازم يبقى https (أو http لجهازك/شبكتك المحلية بس)',
+  BAD_MODEL:'اكتب اسم الموديل',
+  BAD_KIND:'نوع الـ API غلط',
+  NO_CRYPTO:'تشفير المفتاح مش متاح على الجهاز ده'
+};
+const aiErrText=r=>r.error==='HTTP'?`السيرفر رجّع خطأ ${r.status}${r.detail?': '+r.detail:''}`:(AI_ERR[r.error]||'حصل خطأ');
+
+const aiForm=()=>({kind:$('aiKind').value,url:$('aiUrl').value,model:$('aiModel').value,key:$('aiKey').value});
+function aiFillModels(list,selected){
+  aiModelList=list;$('aiModelQ').value='';
+  aiRenderModels(selected);
+}
+// البحث بيفلتر القايمة؛ كل كلمة لازم تكون موجودة ("gpt mini" تلاقي gpt-4o-mini)، وأول نتيجة بتتختار لو اختيارك اتفلتر
+function aiRenderModels(selected){
+  const terms=$('aiModelQ').value.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown=aiModelList.filter(m=>terms.every(t=>m.toLowerCase().includes(t)));
+  const sel=$('aiModel');
+  sel.innerHTML=`<option value="">${terms.length?`— ${shown.length} نتيجة —`:'— اختار موديل —'}</option>`
+    +shown.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  sel.value=shown.includes(selected)?selected:(terms.length&&shown[0])||'';
+}
+$('aiModelQ').addEventListener('input',()=>aiRenderModels($('aiModel').value));
+async function aiLoad(){
+  if(!window.__wlAi)return; // الاكستنشن: يفضل النسخ واللصق اليدوي بس
+  $('aiSec').style.display='';$('aiRunBtn').style.display='';
+  const c=await window.__wlAi.get();
+  $('aiKind').value=c.kind;$('aiUrl').value=c.url;$('aiKey').value='';
+  aiFillModels(c.model?[c.model]:[],c.model); // القايمة الكاملة بتتجاب لما تفتح القسم
+  $('aiKey').placeholder=c.hasKey?'محفوظ ●●●● — سيبه فاضي عشان يفضل زي ما هو':'sk-...';
+  $('aiNote').textContent=c.url?`متظبط: ${c.model} — ${c.hasKey?'بمفتاح':'من غير مفتاح'}`:'لسه مش متظبط — اختار من "اختيار سريع"';
+}
+async function aiFetchModels(){
+  if(!window.__wlAi||!$('aiUrl').value.trim())return;
+  const n=++aiModelsReq, keep=$('aiModel').value;
+  $('aiNote').textContent='⏳ بجيب الموديلات من السيرفر...';
+  const r=await window.__wlAi.models(aiForm());
+  if(n!==aiModelsReq)return; // اتغيّر الرابط/المفتاح والطلب ده بقى قديم
+  if(!r.ok){$('aiNote').textContent='⚠ '+aiErrText(r);return;}
+  const chat=r.models.filter(m=>!AI_NOT_CHAT.test(m)), list=chat.length?chat:r.models;
+  if(!list.length){$('aiNote').textContent='⚠ السيرفر مرجّعش أي موديل — لو محلي، نزّل موديل الأول';return;}
+  const pick=[keep,...aiWant].find(m=>m&&list.includes(m))||(list.length===1?list[0]:'');
+  aiFillModels(list,pick);
+  $('aiNote').textContent=`✔ لقيت ${list.length} موديل`+(pick?` — اخترتلك ${pick}، غيّره لو حابب`:' — اختار واحد')+' واضغط "اختبر" أو "حفظ"';
+}
+async function aiTest(){
+  if(!$('aiModel').value){toast('اختار موديل الأول');return;}
+  $('aiNote').textContent='🧪 ببعت رسالة تجربة للموديل...';
+  const r=await window.__wlAi.test(aiForm());
+  $('aiNote').textContent=r.ok?`✔ شغال! الموديل رد في ${(r.ms/1000).toFixed(1)} ثانية: "${r.reply}"`:'✖ '+aiErrText(r);
+  return r.ok;
+}
+async function aiSave(){
+  if(!$('aiUrl').value.trim())return aiClear();
+  const r=await window.__wlAi.set(aiForm());
+  if(!r.ok){toast(r.error==='BAD_MODEL'?'اختار موديل الأول':aiErrText(r));return;}
+  const model=$('aiModel').value, opts=aiModelList;
+  await aiLoad();
+  aiFillModels(opts,model); // متضيّعش القايمة اللي اتجابت
+  toast('إعدادات الـ AI اتحفظت ✔ — بجرّب الاتصال...');
+  aiTest();
+}
+async function aiClear(){
+  if(!confirm('تمسح إعدادات الـ AI والمفتاح؟'))return;
+  await window.__wlAi.set({url:''});
+  await aiLoad();toast('إعدادات الـ AI اتمسحت');
+}
+$('aiPreset').addEventListener('change',e=>{
+  const p=AI_PRESETS[e.target.value];
+  if(!p)return;
+  $('aiKind').value=p.kind;$('aiUrl').value=p.url;aiWant=p.want||[];
+  aiFillModels([],'');
+  e.target.value='';
+  if(p.local||$('aiKey').value.trim())aiFetchModels();
+  else{$('aiNote').textContent='🔑 حط المفتاح وهجيب الموديلات لوحدي';$('aiKey').focus();}
+});
+// أي تغيير في الرابط/النوع/المفتاح = هات القايمة تاني. وأول ما تفتح القسم بنجيبها لو فيه إعدادات محفوظة
+['aiUrl','aiKind','aiKey'].forEach(id=>$(id).addEventListener('change',aiFetchModels));
+$('aiSec').addEventListener('toggle',e=>{if(e.target.open&&aiModelList.length<=1)aiFetchModels();});
+async function aiRun(){
+  const btn=$('aiRunBtn');
+  btn.disabled=true;
+  $('impStatus').textContent='✨ الـ AI بيفكر في ذوقك... (الموديلات المحلية ممكن تاخد دقيقة)';
+  try{
+    const r=await window.__wlAi.run(tasteProfile());
+    if(!r.ok){$('impStatus').textContent='⚠ '+aiErrText(r);return;}
+    $('impText').value=r.text;
+    importParse(); // نفس مسار اللصق اليدوي: استخراج العناوين وانت تختار
+  }catch(e){$('impStatus').textContent='⚠ حصل خطأ غير متوقع';}
+  finally{btn.disabled=false;}
 }
 
 /* ================= تصدير/استيراد الإعدادات ================= */
@@ -1341,24 +1528,53 @@ $('setFile').addEventListener('change',async e=>{
 });
 
 /* ================= ملف الذوق ================= */
-$('exportBtn').onclick=async()=>{
+// نفس النص بيتنسخ للـ AI يدوي وبيتبعت أوتوماتيك من زرار "رشّحلي" — وآخر سطر بيحدد شكل الرد عشان parseRecs تقراه
+function tasteProfile(){
   const w=items.filter(i=>i.status==='watched'&&i.rating);
+  const unrated=items.filter(i=>i.status==='watched'&&!i.rating);
   const dropped=items.filter(i=>i.status==='dropped');
   const liked=w.filter(i=>i.rating>=7), mixed=w.filter(i=>i.rating>=5&&i.rating<7), disliked=w.filter(i=>i.rating<5);
   const queue=items.filter(i=>i.status==='queue');
   const watching=items.filter(i=>i.status==='watching');
-  const line=i=>`- ${i.title} (${i.type==='tv'?'TV':'Film'}${i.year?', '+i.year:''}${i.genre?', '+i.genre:''}) — my rating ${i.rating}/10${i.note?' — '+i.note:''}`;
-  const qline=i=>`- ${i.title} (${i.type==='tv'?'TV':'Film'}${i.year?', '+i.year:''}${i.genre?', '+i.genre:''})`;
+  // سطر واحد لكل عنوان: عنوان/ملاحظة فيها newlines (من نسخة احتياطية حد بعتها) متقدرش تكتب تعليمات جديدة للـ AI
+  const one=s=>String(s).replace(/\s+/g,' ').trim();
+  const line=i=>`- ${one(i.title)} (${i.type==='tv'?'TV':'Film'}${i.year?', '+i.year:''}${i.genre?', '+one(i.genre):''}) — my rating ${i.rating}/10${i.note?' — '+one(i.note):''}`;
+  const qline=i=>`- ${one(i.title)} (${i.type==='tv'?'TV':'Film'}${i.year?', '+i.year:''}${i.genre?', '+one(i.genre):''})`;
 
   let txt='My taste profile:\n\n';
   txt+='LIKED (7-10):\n'+(liked.length?liked.map(line).join('\n'):'- (none yet)')+'\n\n';
   if(mixed.length)txt+='MIXED (5-6):\n'+mixed.map(line).join('\n')+'\n\n';
   txt+='DISLIKED (1-4):\n'+(disliked.length?disliked.map(line).join('\n'):'- (none yet)')+'\n\n';
-  if(dropped.length)txt+='DROPPED (started but quit — strong negative signal):\n'+dropped.map(i=>qline(i)+(i.note?' — quit because: '+i.note:'')).join('\n')+'\n\n';
+  if(dropped.length)txt+='DROPPED (started but quit — strong negative signal):\n'+dropped.map(i=>qline(i)+(i.note?' — quit because: '+one(i.note):'')).join('\n')+'\n\n';
+  if(unrated.length)txt+='ALSO WATCHED, NOT RATED (don\'t recommend these):\n'+unrated.map(qline).join('\n')+'\n\n';
   if(watching.length)txt+='CURRENTLY WATCHING (don\'t recommend these):\n'+watching.map(i=>qline(i)+` — at ${progLabel(i)}`).join('\n')+'\n\n';
   if(queue.length)txt+='CURRENTLY IN MY QUEUE (don\'t recommend these):\n'+queue.map(qline).join('\n')+'\n\n';
-  txt+='Based on this taste profile, recommend 10 films or TV shows I haven\'t listed above, with a one-line reason for each based on my likes and dislikes.';
+  txt+='Based on this taste profile, recommend 10 films or TV shows I haven\'t listed above.\n'
+    +'Reply with ONLY a numbered list, one per line, exactly in this format:\n'
+    +'1. Original English Title (Year) — one-line reason in Arabic, based on my likes and dislikes [because: Title A; Title B]\n'
+    +'Inside [because: ...] put 1-3 titles copied exactly from my lists above that this pick is mainly based on, separated by ";".\n'
+    +'No intro, no headings, no closing text.';
+  return txt;
+}
 
+// "اترشح ليه": السبب + العناوين من قايمتك اللي الـ AI قال إنه بنى عليها (ببوسترها وتقييمك لو لقيناها عندك)
+// المطابقة متسامحة: من غير حالة حروف ولا رموز ولا سنة بين قوسين، عشان الـ AI ساعات بيكتب العنوان بشكل مختلف شوية
+const titleKey=t=>String(t).replace(/\([^)]*\)/g,'').toLowerCase().replace(/[^a-z0-9؀-ۿ]/g,'');
+function recWhyHtml(why,from){
+  const mine=(from||[]).map(t=>items.find(i=>titleKey(i.title)===titleKey(t))||{title:t});
+  return (why?`<div dir="auto">${esc(why)}</div>`:'')
+    +(mine.length?`<div class="rw-l">اترشح بناءً على ذوقك في:</div><div class="rw-chips">${mine.map(i=>
+      `<span class="rw-chip">${i.poster?`<img src="${esc(i.poster)}" alt="">`:''}<span dir="auto">${esc(i.title)}</span>${i.rating?`<b>★${i.rating}</b>`:i.status==='dropped'?'<b>سبته</b>':''}</span>`).join('')}</div>`:'');
+}
+function impWhyToggle(ix){
+  const box=document.querySelector(`.impWhyBox[data-ix="${ix}"]`), c=impCands[ix];
+  if(!box||!c)return;
+  box.hidden=!box.hidden;
+  if(!box.hidden)box.innerHTML=recWhyHtml(c.why,c.from);
+}
+
+$('exportBtn').onclick=async()=>{
+  const txt=tasteProfile();
   try{
     await navigator.clipboard.writeText(txt);
     toast('اتنسخ ✔ الصقه لأي AI وهيرشحلك');
@@ -1555,6 +1771,12 @@ document.addEventListener('click',(e)=>{
     case 'partyLeave': partyLeave(); break;
     case 'partyCopy': partyCopy(); break;
     case 'partyWatch': partyClose(); partyOpenMedia(party.media); break;
+    case 'aiSave': aiSave(); break;
+    case 'aiClear': aiClear(); break;
+    case 'aiRun': aiRun(); break;
+    case 'aiModels': aiFetchModels(); break;
+    case 'aiTest': aiTest(); break;
+    case 'impWhy': e.preventDefault(); impWhyToggle(parseInt(el.dataset.ix)); break;
   }
 });
 // "/" يوصلك للبحث فوراً

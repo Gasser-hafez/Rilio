@@ -68,7 +68,7 @@
   .grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
   @media(max-width:640px){.grid{grid-template-columns:1fr}}
   label{display:block;font-size:.74rem;color:var(--muted);margin-bottom:5px;font-weight:600}
-  input[type=text],select{
+  input[type=text],input[type=password],input[type=search],select{
     width:100%;background:var(--bg);border:1px solid var(--line);border-radius:9px;
     color:var(--ink);font-family:'Cairo',sans-serif;font-size:.92rem;padding:10px 12px;
   }
@@ -269,6 +269,25 @@
   .impRow:hover{border-color:var(--amber-deep)}
   .impRow input{accent-color:var(--amber)}
   .impRow .iy{color:var(--muted);font-size:.75rem}
+  .impRow .iwhy{display:block;color:var(--muted);font-size:.74rem;margin-top:2px}
+  .impP{flex:none;width:40px;height:60px;border-radius:5px;background:var(--line);overflow:hidden;
+    display:flex;align-items:center;justify-content:center;font-size:.9rem}
+  .impP img{width:100%;height:100%;object-fit:cover;display:block}
+  .impRow>span[dir]{flex:1;min-width:0}
+  .impRow .impSeen{width:auto;flex:none;padding:5px 8px;font-size:.75rem;border-radius:7px}
+  .impRow.seen{border-color:var(--amber-deep)}
+  .impNoteRow{margin:-1px 0 4px;padding:7px 10px;border:1px solid var(--amber-deep);border-top:none;border-radius:0 0 8px 8px}
+  .impNoteRow input{font-size:.82rem;padding:7px 10px}
+  .impWhyBtn{flex:none;background:none;border:1px solid var(--line);border-radius:7px;padding:3px 7px;cursor:pointer;font-size:.85rem}
+  .impWhyBtn:hover{border-color:var(--amber-deep)}
+  .impWhyBox{margin:-1px 0 4px;padding:9px 12px;border:1px dashed var(--amber-deep);border-top:none;border-radius:0 0 8px 8px;font-size:.8rem;color:var(--ink)}
+  .rw{font-size:.85rem;color:var(--ink)}
+  .rw-l{color:var(--muted);font-size:.72rem;margin:8px 0 5px}
+  .rw-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .rw-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:7px;padding:3px 8px;font-size:.78rem}
+  .rw-chip img{width:22px;height:33px;object-fit:cover;border-radius:3px}
+  .rw-chip b{color:var(--amber);font-weight:600}
+  .impRow.seen .impSeen{color:var(--amber)}
 
   /* ================= متابعة الحلقات ================= */
   .prog{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -702,6 +721,42 @@
     </div>
     </div></details>
 
+    <details class="setsec" id="aiSec" style="display:none"><summary>🤖 الذكاء الاصطناعي (للترشيحات)</summary><div class="ssin">
+    <div class="sub" style="margin-bottom:10px">ضيف أي AI — سيرفر محلي زي Ollama أو LM Studio (مجاني ومن غير مفتاح) أو خدمة زي OpenAI/Gemini/OpenRouter/Claude بمفتاحك. بعدها زرار "✨ رشّحلي" في نافذة الذوق بيشتغل لوحده. المفتاح بيتحفظ متشفّر ومبيدخلش في النسخة الاحتياطية</div>
+    <label for="aiPreset">اختيار سريع</label>
+    <select id="aiPreset">
+      <option value="">— اختار عشان يملالك الرابط —</option>
+      <option value="ollama">Ollama (محلي)</option>
+      <option value="lmstudio">LM Studio (محلي)</option>
+      <option value="openai">OpenAI</option>
+      <option value="gemini">Google Gemini</option>
+      <option value="openrouter">OpenRouter</option>
+      <option value="groq">Groq</option>
+      <option value="anthropic">Anthropic (Claude)</option>
+    </select>
+    <label for="aiKind" style="margin-top:10px">نوع الـ API</label>
+    <select id="aiKind">
+      <option value="openai">OpenAI-compatible (/chat/completions)</option>
+      <option value="anthropic">Anthropic (/messages)</option>
+    </select>
+    <label for="aiUrl" style="margin-top:10px">الرابط (Base URL) — https، أو http للجهاز/الشبكة المحلية بس</label>
+    <input type="text" id="aiUrl" dir="ltr" placeholder="http://localhost:11434/v1">
+    <label for="aiKey" style="margin-top:10px">المفتاح (API Key) — سيبه فاضي للسيرفرات المحلية</label>
+    <input type="password" id="aiKey" dir="ltr" autocomplete="off" placeholder="sk-...">
+    <label for="aiModel" style="margin-top:10px">الموديل — بيتجاب لوحده من السيرفر</label>
+    <input type="search" id="aiModelQ" dir="ltr" placeholder="🔍 دوّر على موديل… (مثلاً: flash أو gpt mini)" style="margin-bottom:6px">
+    <div style="display:flex;gap:8px">
+      <select id="aiModel" dir="ltr" style="flex:1;min-width:0"></select>
+      <button class="btn" data-act="aiModels" title="هات الموديلات تاني">🔄</button>
+    </div>
+    <div class="form-row">
+      <button class="btn" data-act="aiTest">🧪 اختبر الاتصال</button>
+      <button class="btn btn-amber" data-act="aiSave">حفظ</button>
+      <button class="btn" data-act="aiClear">امسح إعدادات الـ AI</button>
+    </div>
+    <div class="sub" id="aiNote" style="margin-top:6px"></div>
+    </div></details>
+
     <details class="setsec"><summary>📺 البلاير والتحميل</summary><div class="ssin">
     <div class="sub" style="margin-bottom:10px">زرار "▶ شغّل هنا" في بانل التفاصيل بيشغّل من القالب ده جوه التطبيق. لو الدومين وقع، بدّله بواحد من: vidsrc-embed.ru • vidsrc-embed.su • vidsrcme.su • vsrc.su</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -758,12 +813,15 @@
 </div>
 
 <div class="overlay" id="importOverlay">
-  <div class="modal" style="max-width:580px">
+  <div class="modal" style="max-width:820px">
     <button class="mclose" data-act="importClose" title="إغلاق">✕</button>
     <div class="mbody" style="padding-top:20px">
       <h2 style="font-family:'Changa',sans-serif;color:var(--amber);font-size:1.15rem;margin-bottom:6px">🤖 الذوق والترشيحات</h2>
       <div class="sub" style="margin-bottom:10px">الدورة كاملة من هنا: انسخ ذوقك وادّيه لأي AI، وبعدين الصق رده تحت وهنضيف الترشيحات لقايمتك</div>
-      <button class="btn btn-amber" id="exportBtn" style="margin-bottom:14px">📋 ١) انسخ ملف الذوق للـ AI</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="btn btn-amber" data-act="aiRun" id="aiRunBtn" style="display:none">✨ رشّحلي دلوقتي بالـ AI</button>
+        <button class="btn btn-amber" id="exportBtn">📋 ١) انسخ ملف الذوق للـ AI</button>
+      </div>
       <div style="border-top:1px dashed var(--line);margin-bottom:12px"></div>
       <div class="sub" style="margin-bottom:8px"><b style="color:var(--ink)">٢) الصق رد الـ AI هنا</b> (قايمة مرقمة أو bullets) — هنستخرج العناوين وانت تختار اللي يدخل "هشوفهم"</div>
       <textarea id="impText" dir="auto" placeholder="1. Dark (TV, 2017) — mind-bending German sci-fi...&#10;2. Sicario (2015) — ..."></textarea>
