@@ -1,7 +1,7 @@
 // مدير التنزيلات + المكتبة المحلية — جزء الـ main process
 // بيمسك بس التنزيلات اللي بتبدأ من نوافذ المواقع (اللي المستخدم ضايفها). تنزيلات الواجهة نفسها (النسخة الاحتياطية) زي ما هي.
 // الفولدر متخزن في ملف خاص بـ main مش في storage.json: نسخة احتياطية أو ملف إعدادات متلغّم ميقدرش يوجّه التنزيلات لأي فولدر
-const { ipcMain, dialog, shell } = require('electron');
+const { ipcMain, dialog, shell, Notification } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { randomBytes } = require('crypto');
@@ -13,6 +13,16 @@ const MEDIA = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm',
 // اللي مسموح يتنزل: ميديا + ترجمة + أرشيف. أي حاجة تانية (exe, msi, bat, scr, lnk, js...) بتتلغي — المواقع دي مليانة برامج ضارة
 const ALLOWED = new Set([...Object.keys(MEDIA), '.avi', '.ts', '.srt', '.vtt', '.ass', '.ssa', '.sub', '.zip', '.rar', '.7z']);
 const extOf = n => path.extname(n).toLowerCase();
+// ترجمة جنب الفيلم بنفس الاسم: Movie.mkv ← Movie.srt / Movie.ar.srt / Movie.en.vtt
+const SUBS = new Set(['.srt', '.vtt']);
+const stem = n => n.slice(0, n.length - extOf(n).length);
+// srt → WebVTT (الـ <track> بيفهم vtt بس). ملفات الترجمة العربي كتير منها Windows-1256 مش UTF-8
+function toVtt(buf, ext) {
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (e) { text = new TextDecoder('windows-1256').decode(buf); }
+  text = text.replace(/^﻿/, '').replace(/\r/g, '');
+  return ext === '.vtt' ? text : 'WEBVTT\n\n' + text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+}
 // ملف تشغيل متنكر (movie.mp4 بس السيرفر بيقول إنه برنامج) — بيتمنع حتى لو الامتداد مسموح
 const EXE_MIME = /^application\/(x-msdownload|x-msdos-program|x-dosexec|vnd\.microsoft\.portable-executable|x-ms-installer|x-msi)\b/i;
 
@@ -28,6 +38,7 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
   const token = randomBytes(16).toString('hex'); // لينكات المكتبة: إعلان في iframe مايقدرش يخمّنها
   const dls = new Map(); // id → { id, name, file, item, state }
   let seq = 0, pushTimer = null;
+  const liveNotes = new Set(); // لازم مرجع للإشعار — لو الـ GC شاله، الضغط عليه مبيعملش حاجة
 
   let dir = defaultDir;
   try { const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); if (typeof s.dir === 'string' && path.isAbsolute(s.dir)) dir = s.dir; } catch (e) {}
@@ -36,6 +47,7 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
   const view = d => ({
     id: d.id, name: d.name, received: d.item.getReceivedBytes(), total: d.item.getTotalBytes(),
     state: d.asking ? 'confirm' : d.state === 'progressing' && d.item.isPaused() ? 'paused' : d.state,
+    speed: d.state === 'progressing' && !d.asking && !d.item.isPaused() ? Math.round(d.speed || 0) : 0, // بايت/ثانية
   });
   const list = () => [...dls.values()].reverse().map(view);
   const push = () => { if (!pushTimer) pushTimer = setTimeout(() => { pushTimer = null; toApp('wl:dl:list', list()); }, 300); };
@@ -66,10 +78,31 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     item.pause();
     const d = { id: ++seq, name: path.basename(file), file, item, state: 'progressing', asking: true };
     dls.set(d.id, d);
-    item.on('updated', (ev, st) => { d.state = st; push(); });
+    item.on('updated', (ev, st) => {
+      d.state = st;
+      // السرعة: متوسط متحرك كل ثانية (عشان الرقم ميرقصش)
+      const now = Date.now(), got = item.getReceivedBytes();
+      if (!d.t0 || item.isPaused()) { d.t0 = now; d.b0 = got; }
+      else if (now - d.t0 >= 1000) {
+        const inst = (got - d.b0) / ((now - d.t0) / 1000);
+        d.speed = d.speed == null ? inst : d.speed * 0.7 + inst * 0.3;
+        d.t0 = now; d.b0 = got;
+      }
+      push();
+    });
     item.once('done', (ev, st) => {
       d.state = st; push();
-      if (st === 'completed') toApp('wl:dl:event', { kind: 'done', name: d.name });
+      if (st !== 'completed') return;
+      toApp('wl:dl:event', { kind: 'done', name: d.name });
+      // البرنامج مش قدامك (في الـ tray أو بتتفرج على حاجة تانية) → إشعار ويندوز؛ الضغط عليه بيفتح تنزيلاتي
+      const w = getWindow();
+      if (Notification.isSupported() && !(w && !w.isDestroyed() && w.isVisible() && w.isFocused())) {
+        const n = new Notification({ title: '✔ خلص التنزيل', body: d.name.slice(0, 200) });
+        liveNotes.add(n);
+        n.on('click', () => { liveNotes.delete(n); if (w && !w.isDestroyed()) { w.show(); w.focus(); } toApp('wl:dl:event', { kind: 'open' }); });
+        n.on('close', () => liveNotes.delete(n));
+        n.show();
+      }
     });
     let host = '';
     try { host = new URL(item.getURL()).hostname; } catch (err) {}
@@ -89,7 +122,10 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
       if (!MEDIA[extOf(name)]) continue;
       try {
         const st = await fs.promises.stat(path.join(dir, name));
-        if (st.isFile()) out.push({ name, size: st.size, mtime: st.mtimeMs, url: `wlmedia://lib/${token}/${encodeURIComponent(name)}` });
+        if (!st.isFile()) continue;
+        const subs = names.filter(n => SUBS.has(extOf(n)) && stem(n).toLowerCase().startsWith(stem(name).toLowerCase()))
+          .map(n => ({ label: stem(n).slice(stem(name).length).replace(/^[.\s_-]+/, '').slice(0, 20) || 'ترجمة', url: `wlmedia://lib/${token}/${encodeURIComponent(n)}` }));
+        out.push({ name, size: st.size, mtime: st.mtimeMs, url: `wlmedia://lib/${token}/${encodeURIComponent(name)}`, subs });
       } catch (e) {}
     }
     return out.sort((a, b) => b.mtime - a.mtime);
@@ -102,12 +138,18 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     const [tok, enc, extra] = u.pathname.slice(1).split('/');
     let name = '';
     try { name = decodeURIComponent(enc || ''); } catch (e) { return notFound(); }
-    if (u.host !== 'lib' || tok !== token || extra !== undefined || !name || name !== path.basename(name) || !MEDIA[extOf(name)]) return notFound();
+    if (u.host !== 'lib' || tok !== token || extra !== undefined || !name || name !== path.basename(name) || !(MEDIA[extOf(name)] || SUBS.has(extOf(name)))) return notFound();
+    // الواجهة (app://local) بتحمّل الفيديو والترجمة بـ crossorigin عشان الـ <track> يشتغل
+    const cors = { 'Access-Control-Allow-Origin': 'app://local' };
     const file = path.join(dir, name);
     let st;
     try { st = await fs.promises.stat(file); } catch (e) { return notFound(); }
     if (!st.isFile()) return notFound();
-    const headers = { 'Content-Type': MEDIA[extOf(name)], 'Accept-Ranges': 'bytes' };
+    if (SUBS.has(extOf(name))) {
+      if (st.size > 5e6) return notFound();
+      return new Response(toVtt(await fs.promises.readFile(file), extOf(name)), { headers: { ...cors, 'Content-Type': 'text/vtt; charset=utf-8' } });
+    }
+    const headers = { ...cors, 'Content-Type': MEDIA[extOf(name)], 'Accept-Ranges': 'bytes' };
     const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('range') || '');
     let start = 0, end = st.size - 1;
     if (m) {
@@ -130,7 +172,7 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     if (!d) return false;
     if (act === 'start' && d.asking) { d.asking = false; d.item.resume(); toApp('wl:dl:event', { kind: 'started', name: d.name }); }
     else if (d.asking && act !== 'cancel') return false; // لازم موافقة الأول
-    else if (act === 'pause' && d.state === 'progressing' && !d.item.isPaused()) d.item.pause();
+    else if (act === 'pause' && d.state === 'progressing' && !d.item.isPaused()) { d.item.pause(); d.speed = null; }
     else if (act === 'resume' && (d.item.isPaused() || d.state === 'interrupted') && d.item.canResume()) d.item.resume();
     else if (act === 'cancel' && d.state === 'progressing') { d.asking = false; d.item.cancel(); }
     else if (act === 'show' && d.state === 'completed') shell.showItemInFolder(d.file);

@@ -19,7 +19,7 @@ const APP_ORIGIN = 'app://local/';
 const APP_FILES = new Set(['app.html', 'app.js', 'progress.js', 'icon16.png', 'icon48.png', 'icon128.png']);
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true } },
-  { scheme: 'wlmedia', privileges: { standard: true, secure: true, stream: true } }, // تشغيل ملفات المكتبة (downloads.js)
+  { scheme: 'wlmedia', privileges: { standard: true, secure: true, stream: true, corsEnabled: true } }, // تشغيل ملفات المكتبة (downloads.js)
 ]);
 
 /* ================= التخزين ================= */
@@ -286,12 +286,40 @@ function guardPopups(wc, isAppWindow) {
     } else if (!/^https?:/.test(url) || !adblock || adblock.isAdPopup(url, wc.getURL())) return { action: 'deny' };
     return {
       action: 'allow',
-      overrideBrowserWindowOptions: { width: 1280, height: 800, autoHideMenuBar: true, icon: path.join(__dirname, 'icon128.png'), webPreferences },
+      overrideBrowserWindowOptions: { ...siteWinSize(), autoHideMenuBar: true, icon: path.join(__dirname, 'icon128.png'), webPreferences },
     };
   });
-  wc.on('did-create-window', child => { siteWindows.add(child.webContents); guardPopups(child.webContents, false); });
+  wc.on('did-create-window', child => { siteWindows.add(child.webContents); siteWindowChrome(child); guardPopups(child.webContents, false); });
 }
 const siteWindows = new WeakSet(); // نوافذ المواقع — حظر الإعلانات شغال فيها بس
+
+// نوافذ المواقع: شريط رجوع/تقدّم/تحديث (+ Alt+الأسهم وF5 وزراير الماوس الجانبية)، وبتفتكر آخر مقاس سبتها عليه
+const SITE_WIN = () => path.join(app.getPath('userData'), 'sitewin.json');
+function siteWinSize() {
+  try {
+    const s = JSON.parse(fs.readFileSync(SITE_WIN(), 'utf8'));
+    const ok = n => Number.isInteger(n) && n >= 500 && n <= 8000;
+    if (ok(s.width) && ok(s.height)) return { width: s.width, height: s.height };
+  } catch (e) {}
+  return { width: 1280, height: 800 };
+}
+function siteWindowChrome(win) {
+  const h = win.webContents.navigationHistory;
+  const back = () => { if (h.canGoBack()) h.goBack(); }, fwd = () => { if (h.canGoForward()) h.goForward(); };
+  win.setMenu(Menu.buildFromTemplate([
+    { label: '← رجوع', accelerator: 'Alt+Left', click: back },
+    { label: 'تقدّم →', accelerator: 'Alt+Right', click: fwd },
+    { label: '⟳ تحديث', accelerator: 'F5', click: () => win.webContents.reload() },
+  ]));
+  win.setAutoHideMenuBar(false);
+  win.setMenuBarVisibility(true);
+  win.on('app-command', (e, cmd) => { if (cmd === 'browser-backward') back(); else if (cmd === 'browser-forward') fwd(); });
+  win.on('close', () => {
+    if (win.isMaximized() || win.isMinimized() || win.isFullScreen()) return;
+    const [width, height] = win.getSize();
+    try { fs.writeFileSync(SITE_WIN(), JSON.stringify({ width, height })); } catch (e) {}
+  });
+}
 
 // المواقع اللي المستخدم قفل حظر الإعلانات ليها من الإعدادات (noBlock) — بالـ hostname
 const hostOf = u => { try { return new URL(String(u).replace(/\{[^}]+\}/g, 'x')).hostname; } catch (e) { return ''; } };

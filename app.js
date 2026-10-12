@@ -617,7 +617,7 @@ $('sortBtn').onclick=()=>{
 
 /* ================= لوحة الإحصائيات والرؤى ================= */
 function openStats(){buildStats();$('statsOverlay').classList.add('show');}
-function closeStats(){$('statsOverlay').classList.remove('show');}
+function closeStats(){flushWatch();$('statsOverlay').classList.remove('show');}
 $('statsOverlay').addEventListener('click',e=>{if(e.target===$('statsOverlay'))closeStats();});
 
 function buildStats(){
@@ -696,6 +696,19 @@ function buildStats(){
     html+=`<div class="stat-sec w2"><h3>نشاطك آخر ٦ شهور</h3><div class="month-grid">`;
     months.forEach(x=>{html+=`<div class="mo"><span class="mo-c">${x.c||''}</span><div class="mo-fill" style="height:${Math.round(x.c/maxM*100)}%"></div><div class="mo-x">${monthNames[x.m]}</div></div>`;});
     html+=`</div></div>`;
+  }
+
+  // وقت المشاهدة الفعلي (من التتبع — بيتحسب بس لما الفيديو شغال)
+  const wtTotal=wt?Object.values(wt.months).reduce((a,b)=>a+b,0):0;
+  if(wtTotal>=60){
+    const hrs=s=>s>=3600?(s/3600).toFixed(1)+' س':Math.round(s/60)+' د';
+    const thisM=wt.months[new Date().toISOString().slice(0,7)]||0;
+    const top=Object.entries(wt.items).map(([id,s])=>[items.find(i=>i.id===id),s]).filter(x=>x[0]).sort((a,b)=>b[1]-a[1]).slice(0,4);
+    const maxT=top.length?top[0][1]:1;
+    html+=`<div class="stat-sec w3" id="wtSec"><h3>وقت المشاهدة الفعلي</h3>
+      <div class="sub" style="margin-bottom:10px">الشهر ده <b>${hrs(thisM)}</b> · من أول ما بدأ التتبع <b>${hrs(wtTotal)}</b></div>`;
+    top.forEach(([it,s])=>{html+=`<div class="gbar"><span class="gname" dir="auto">${esc(it.title)}</span><div class="gbar-track"><div class="gbar-fill" style="width:${Math.round(s/maxT*100)}%;background:var(--watching)"></div></div><span class="gcount">${hrs(s)}</span></div>`;});
+    html+=`</div>`;
   }
   html+='</div>';
 
@@ -1505,10 +1518,34 @@ addEventListener('message',e=>{
   if(ev.tmdb!=null&&ev.tmdb!==it.tmdbId)return; // البلاير بيقول إنه شغال عنوان تاني
   // الحلقة: اللي البلاير بيقول عليها (لو اختارتها من جواه)، وإلا اللي البرنامج فتحها
   const tv=it.type==='tv', s=tv?(ev.s??track.s):0, ep=tv?(ev.e??track.e):0;
+  addWatch(track,it.id,ev.pos,ev.paused);
   const r=WlProgress.step(track,ev,s+'x'+ep);
   if(r==='save'){saveResume(it,tv?s:null,tv?ep:null,ev.pos,ev.dur);persist();}
   else if(r==='done')autoDone(it,s,ep);
 });
+/* وقت المشاهدة: من أحداث البلاير (الفيديو شغال فعلاً، مش وقت البلاير مفتوح). { months:{"YYYY-MM":ثواني}, items:{id:ثواني} } */
+const WT_KEY='watchlist:watchtime';
+let wt=null, wtDirty=false;
+function parseWt(raw){
+  const o={months:{},items:{}};
+  try{const j=JSON.parse(raw||'{}');
+    for(const k of ['months','items'])if(j&&j[k]&&typeof j[k]==='object')
+      for(const [a,b] of Object.entries(j[k]).slice(0,5000))
+        if(num(b)!=null&&num(b)>=0&&(k==='months'?/^\d{4}-\d{2}$/:/^[\w-]{1,40}$/).test(a))o[k][a]=num(b);
+  }catch(e){}
+  return o;
+}
+// sess = حالة البلاير (track أو بلاير المكتبة): الفرق بين حدثين ورا بعض والفيديو شغال (أكبر من 30 ث = تقديم، مش مشاهدة)
+function addWatch(sess,id,pos,paused){
+  const prev=sess.wtPos;sess.wtPos=pos;
+  const d=pos-prev;
+  if(paused||prev==null||!wt||!(d>0&&d<=30))return;
+  const m=new Date().toISOString().slice(0,7);
+  wt.months[m]=(wt.months[m]||0)+d;wt.items[id]=(wt.items[id]||0)+d;wtDirty=true;
+}
+const flushWatch=()=>{if(wtDirty){wtDirty=false;sset(WT_KEY,JSON.stringify(wt));}};
+setInterval(flushWatch,60000);
+sget(WT_KEY).then(r=>{wt=parseWt(r);});
 const saveResume=(it,s,e,pos,dur)=>{it.resume={...(s&&e?{s,e}:{}),pos:Math.floor(pos),dur:Math.floor(dur),at:Date.now()};};
 async function autoDone(it,s,e){
   it.resume=undefined;
@@ -2182,6 +2219,8 @@ function libFileFor(it){
   return dl.library.find(f=>{const l=libInfo(f);return l&&l.it===it&&(it.type!=='tv'||(l.s===s&&l.e===e));});
 }
 const fmtSize=b=>!(b>0)?'':b>=1e9?(b/1e9).toFixed(2)+' GB':(b/1e6).toFixed(1)+' MB';
+// الوقت الفاضل: ثواني → "45 ث" / "12 د" / "1 س 20 د"
+const fmtEta=s=>s<60?Math.ceil(s)+' ث':s<3600?Math.ceil(s/60)+' د':Math.floor(s/3600)+' س '+Math.round(s%3600/60)+' د';
 const DL_STATE={confirm:'مستني موافقتك',progressing:'بيتنزّل',paused:'متوقف',interrupted:'اتقطع',completed:'خلص',cancelled:'اتلغى'};
 function dlActs(d){
   const b=(a,t)=>`<button class="srv" data-act="dlAct" data-id="${Number(d.id)}" data-a="${a}">${t}</button>`;
@@ -2196,13 +2235,13 @@ function renderDl(){
   const box=$('dlBody');
   if(dlPlaying){
     box.innerHTML=`<div style="display:flex;gap:8px;align-items:center"><button class="srv" data-act="dlBack">${ic('x','sm')}رجوع</button><b dir="auto" class="dlname">${esc(dlPlaying.name)}</b></div>
-      <video id="dlVideo" controls autoplay src="${esc(dlPlaying.url)}"></video>`;
+      <video id="dlVideo" controls autoplay crossorigin="anonymous" src="${esc(dlPlaying.url)}">${(dlPlaying.subs||[]).map((s,i)=>`<track kind="subtitles" src="${esc(s.url)}" label="${esc(s.label)}"${/^[a-z]{2,3}$/i.test(s.label)?` srclang="${esc(s.label)}"`:''}${i===0?' default':''}>`).join('')}</video>`;
     return;
   }
   const rows=dl.items.map(d=>{
     const pct=d.total>0?Math.min(100,Math.round(d.received/d.total*100)):null, live=d.state!=='completed'&&d.state!=='cancelled';
     return `<div class="dlrow"><div class="grow"><div class="dlname" dir="auto">${esc(d.name)}</div>
-      <div class="sub">${DL_STATE[d.state]||''}${live&&pct!=null?' · '+pct+'%':''} ${fmtSize(d.total)}</div>
+      <div class="sub">${DL_STATE[d.state]||''}${live&&pct!=null?' · '+pct+'%':''} ${fmtSize(d.total)}${d.speed>0?' · '+fmtSize(d.speed)+'/ث'+(d.total>d.received?' · فاضل '+fmtEta((d.total-d.received)/d.speed):''):''}</div>
       ${live&&pct!=null?`<progress max="100" value="${pct}"></progress>`:''}</div>${dlActs(d)}</div>`;
   }).join('');
   const lib=dl.library.map((f,ix)=>{const l=libInfo(f), it=l&&l.it;
@@ -2233,6 +2272,7 @@ function dlPlayFile(f){
   },{once:true});
   const onTime=()=>{
     if(dlPlaying!==f||!Number.isFinite(v.duration))return;
+    addWatch(sess,it.id,v.currentTime,v.paused);
     const ev={pos:v.currentTime,dur:v.duration,paused:v.paused}, r=WlProgress.step(sess,ev,key);
     if(r==='save'){saveResume(it,s,e,ev.pos,ev.dur);persist();render();}
     else if(r==='done')autoDone(it,tv?s:0,tv?e:0);
@@ -2273,6 +2313,7 @@ if(dlApi){
     if(ev.kind==='started')toast('بدأ تنزيل '+n+' — تابعه من تنزيلاتي');
     else if(ev.kind==='blocked')toast('اتمنع تنزيل '+n+' — نوع الملف ده ممكن يكون برنامج ضار');
     else if(ev.kind==='done'){toast('خلص تنزيل '+n+' ✔');dlRefresh();}
+    else if(ev.kind==='open')dlOpen();
   });
 }
 

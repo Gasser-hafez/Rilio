@@ -90,6 +90,7 @@ fs.writeFileSync(path.join(ud2, 'storage.json'), JSON.stringify({
   'watchlist:playerTpl': 'javascript:parent.document.title="pwned"',
 }));
 const dlDir = path.join(ud2, 'dl-test');
+fs.writeFileSync(path.join(ud2, 'sitewin.json'), JSON.stringify({ width: 900, height: 650 }));
 proc = await launch(ud2, { env: { WL_ADBLOCK_FILTERS: '/wl-ad.gif\n/wl-adpop', WL_DL_DIR: dlDir } });
 try {
   console.log('run 2: malicious backup + hostile iframe');
@@ -226,7 +227,7 @@ try {
     const srv = http.createServer((req, res) => {
       const att = name => ({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${name}"` });
       if (req.url === '/con.wav') { res.writeHead(200, { ...att('CON.wav'), 'Content-Length': wav.length }); return res.end(wav); }
-      if (req.url === '/dlpage') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end('<a id=file href="/popfile.wav" target=_blank>Download</a><a id=ad href="/wl-adpop" target=_blank>AD</a>'); }
+      if (req.url.split('?')[0] === '/dlpage') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end('<a id=file href="/popfile.wav" target=_blank>Download</a><a id=ad href="/wl-adpop" target=_blank>AD</a>'); }
       if (req.url === '/wl-adpop') { adpop++; res.writeHead(200); return res.end('ad'); }
       if (req.url === '/popfile.wav') { res.writeHead(200, { ...att('popfile.wav'), 'Content-Length': 44 }); return res.end(wav.subarray(0, 44)); }
       if (req.url === '/evil.exe') { res.writeHead(200, { ...att('evil.exe'), 'Content-Length': 2 }); return res.end('MZ'); }
@@ -289,12 +290,18 @@ try {
         await click('file');
         await approve('popfile.wav');
         await until(async () => (await item('popfile.wav'))?.state === 'completed', 8000, 'download from a new-window link');
+        // نوافذ المواقع بتفتح بآخر مقاس اتساب عليه (sitewin.json اتحط قبل التشغيل — Electron مبيدعمش تغيير المقاس من CDP)
+        assert.equal(await page.ev(`outerWidth+'x'+outerHeight`), '900x650');
         page.close();
       });
       await check('downloads: pause stops progress, resume finishes', async () => {
         await siteOpen(base + '/slow.mp4');
         await approve('slow.mp4');
         await until(async () => (await item('slow.mp4'))?.received > 0, 8000, 'slow started');
+        await until(async () => (await item('slow.mp4'))?.speed > 0, 5000, 'speed measured');
+        await app.ev(`dlOpen();1`);
+        await until(() => app.ev(`document.getElementById('dlBody').innerText.includes('/ث · فاضل')`), 4000, 'speed + time left shown');
+        await app.ev(`dlClose();1`);
         const id = (await item('slow.mp4')).id;
         assert.equal(await app.ev(`__wlDesktop.dl.act(${id},'pause')`), true);
         await until(async () => (await item('slow.mp4')).state === 'paused', 3000, 'paused');
@@ -320,6 +327,18 @@ try {
         }
         await app.ev(`dlClose();1`);
         assert.equal(await app.ev(`!!document.getElementById('dlVideo')`), false, 'closing stops the video');
+      });
+      await check('library: a subtitle file next to the video loads (srt → vtt, Windows-1256 Arabic)', async () => {
+        fs.writeFileSync(path.join(dlDir, 'Sub Movie.wav'), wav);
+        const ar = Buffer.from([0xE3, 0xD1, 0xCD, 0xC8, 0xC7]); // "مرحبا" بـ Windows-1256
+        fs.writeFileSync(path.join(dlDir, 'Sub Movie.ar.srt'), Buffer.concat([Buffer.from('1\r\n00:00:01,000 --> 00:00:05,000\r\n'), ar, Buffer.from('\r\n\r\n')]));
+        await app.ev(`dlOpen();dlRefresh().then(()=>1)`);
+        const f = await app.ev(`JSON.stringify(dl.library.find(f=>f.name==='Sub Movie.wav'))`).then(JSON.parse);
+        assert.deepEqual(f.subs.map(s => s.label), ['ar']);
+        await app.ev(`dlPlayFile(dl.library.find(f=>f.name==='Sub Movie.wav'));document.querySelector('#dlVideo track').track.mode='showing';1`);
+        const cue = await until(() => app.ev(`(t=>t&&t.cues&&t.cues.length?t.cues[0].text:'')(document.querySelector('#dlVideo track').track)`), 8000, 'subtitle cues');
+        assert.equal(cue, 'مرحبا');
+        await app.ev(`dlClose();1`);
       });
       await check('library: a download from a title page is linked to it; local playback tracks the episode and really resumes', async () => {
         await app.ev(`items.push(cleanItem({id:'lib1',title:'Lib Show',type:'tv',status:'watching',tmdbId:55,curSeason:1,curEp:2}));
@@ -525,7 +544,7 @@ try {
   });
   // تتبع الحلقات: البلاير المزيف على vsembed.ru بيبعت مكانه ومدته
   const frame = `document.querySelector('.playerbox iframe')`;
-  const fakeEv = (status, pos) => app.ev(`${frame}.contentWindow.postMessage({fake:${JSON.stringify(status)},pos:${pos}},'*');1`);
+  const fakeEv = (status, pos) => app.ev(`${frame}?.contentWindow.postMessage({fake:${JSON.stringify(status)},pos:${pos}},'*');1`);
   const itemOf = id => app.ev(`JSON.stringify(items.find(i=>i.id==='${id}'))`).then(JSON.parse);
   const openFake = async (it) => {
     await app.ev(`items.push(cleanItem(${JSON.stringify(it)}));playerSrv=0;openPlayer('${it.id}').then(()=>1)`);
@@ -587,6 +606,19 @@ try {
     assert.equal((await itemOf('s650')).curEp, 5, 'rewatching an old episode does not move the counter back');
     await app.ev(`playerSrv=0;$('playerTpl').value='';closeModal();1`);
   });
+  await check('watch time: counted only while the video plays (seeks ignored), shown in stats', async () => {
+    await app.ev(`items.push(cleanItem({id:'s660',title:'Show Timer',type:'tv',status:'watching',tmdbId:660,imdbID:'tt660',curSeason:1,curEp:0}));playerSrv=0;openPlayer('s660').then(()=>1)`);
+    await until(async () => { await fakeEv('playing', 100); return (await itemOf('s660')).resume?.pos === 100; }, 8000, 'fake player answers');
+    for (const p of [125, 150, 175, 1000, 1010]) { await fakeEv('playing', p); await sleep(150); } // 1000 = تقديم، مش مشاهدة
+    await fakeEv('paused', 1010); await sleep(300);
+    const secs = await app.ev(`Math.round(wt.items.s660)`);
+    assert.equal(secs, 85, 'three 25s steps + 10s; the jump to 1000 not counted');
+    await app.ev(`closeModal();closeStats();openStats();1`);
+    const sec = await app.ev(`document.getElementById('wtSec').innerText.replace(/\\s+/g,' ')`);
+    assert.match(sec, /Show Timer/); assert.match(sec, /1 د|2 د/);
+    assert.match(await app.ev(`chrome.storage.local.get('watchlist:watchtime').then(d=>d['watchlist:watchtime']||'')`), /"s660":85/);
+    await app.ev(`closeStats();1`);
+  });
   await check('auto-track: Watch Party temporary item is never changed', async () => {
     await app.ev(`items.push({id:'party-800',title:'P',type:'tv',status:'party',_party:true,tmdbId:800,imdbID:'tt800',curSeason:1,curEp:0});playerSrv=0;openPlayer('party-800').then(()=>1)`);
     await app.ev(`window.__pe=0;addEventListener('message',e=>{if(e.data&&e.data.type==='PLAYER_EVENT')__pe++});1`);
@@ -600,8 +632,8 @@ try {
     await app.ev(`items.push(cleanItem({id:'cw1',title:'Half Film',type:'film',status:'queue',tmdbId:901,imdbID:'tt901',resume:{pos:1500,dur:6000,at:Date.now()}}),
       cleanItem({id:'cw2',title:'Half Show',type:'tv',status:'watching',tmdbId:902,imdbID:'tt902',curSeason:2,curEp:3,resume:{s:2,e:4,pos:610,dur:2700,at:Date.now()-1000}}));render();1`);
     const rows = await app.ev(`[...document.querySelectorAll('#cwList .cwrow')].map(r=>r.innerText.replace(/\\s+/g,' '))`);
-    assert.match(rows[0], /Half Film.*وقفت عند 25:00/, JSON.stringify(rows));
-    assert.match(rows[1], /Half Show.*S02E04 · وقفت عند 10:10/, JSON.stringify(rows));
+    const film = rows.findIndex(r => /Half Film.*وقفت عند 25:00/.test(r)), show = rows.findIndex(r => /Half Show.*S02E04 · وقفت عند 10:10/.test(r));
+    assert.ok(film === 0 && show > film, 'newest first: ' + JSON.stringify(rows));
     await app.ev(`document.querySelector('#cwList [data-act=cwPlay][data-id=cw2]').click();1`);
     await until(() => app.ev(`playerOpen&&modalId==='cw2'&&!!document.querySelector('.playerbox iframe')`), 4000, 'player opened');
     await app.ev(`closeModal();1`);
