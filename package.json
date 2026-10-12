@@ -1,7 +1,7 @@
 {
   "name": "watchlist",
   "productName": "rilio",
-  "version": "4.8.1",
+  "version": "4.9.0",
   "description": "rilio — قائمة المشاهدة، نسخة الديسكتوب",
   "main": "main.js",
   "repository": "github:Gasser-hafez/Rilio",
@@ -53,6 +53,7 @@
       "icon.ico",
       "party.js",
       "adblock.js",
+      "downloads.js",
       "party-server/public/protocol.mjs"
     ]
   },

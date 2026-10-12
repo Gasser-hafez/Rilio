@@ -40,6 +40,14 @@ if (process.isMainFrame && location.origin === 'app://local') {
       onStatus: fn => ipcRenderer.on('wl:party:status', (e, st) => fn(st)),
       onMedia: fn => ipcRenderer.on('wl:party:media', (e, m) => fn(m)),
     },
+    dl: {
+      state: () => ipcRenderer.invoke('wl:dl:state'),
+      act: (id, a) => ipcRenderer.invoke('wl:dl:act', id, a),
+      reveal: name => ipcRenderer.invoke('wl:dl:reveal', name),
+      pickDir: () => ipcRenderer.invoke('wl:dl:pickDir'),
+      onList: fn => ipcRenderer.on('wl:dl:list', (e, l) => fn(l)),
+      onEvent: fn => ipcRenderer.on('wl:dl:event', (e, ev) => fn(ev)),
+    },
   });
   contextBridge.executeInMainWorld({
     func: () => {

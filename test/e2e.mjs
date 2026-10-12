@@ -89,7 +89,8 @@ fs.writeFileSync(path.join(ud2, 'storage.json'), JSON.stringify({
   'watchlist:sites': JSON.stringify([{ name: 'bad', url: 'javascript:alert(1)' }, { name: 'good', url: 'https://example.org/{q}' }]),
   'watchlist:playerTpl': 'javascript:parent.document.title="pwned"',
 }));
-proc = await launch(ud2, { env: { WL_ADBLOCK_FILTERS: '/wl-ad.gif' } });
+const dlDir = path.join(ud2, 'dl-test');
+proc = await launch(ud2, { env: { WL_ADBLOCK_FILTERS: '/wl-ad.gif', WL_DL_DIR: dlDir } });
 try {
   console.log('run 2: malicious backup + hostile iframe');
   const app = await conn('app://local/');
@@ -208,6 +209,69 @@ try {
       await until(() => hits['/wl-ad.gif'] === 1, 3000, 'ad allowed once the site is excluded');
     } finally { srv.close(); }
   });
+  {
+    // سيرفر تنزيلات محلي: WAV صامت 15 دقيقة (بيتشغّل في <video>)، exe، وملف بطيء للإيقاف/الاستكمال
+    const sr = 8000, secs = 900, n = sr * secs, wav = Buffer.alloc(44 + n * 2);
+    wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(sr, 24); wav.writeUInt32LE(sr * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
+    const SLOW = 40 * 65536;
+    const srv = http.createServer((req, res) => {
+      const att = name => ({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${name}"` });
+      if (req.url === '/con.wav') { res.writeHead(200, { ...att('CON.wav'), 'Content-Length': wav.length }); return res.end(wav); }
+      if (req.url === '/evil.exe') { res.writeHead(200, { ...att('evil.exe'), 'Content-Length': 2 }); return res.end('MZ'); }
+      if (req.url === '/slow.mp4') {
+        res.writeHead(200, { ...att('slow.mp4'), 'Content-Length': SLOW });
+        let i = 0; const t = setInterval(() => { res.write(Buffer.alloc(65536)); if (++i === 40) { clearInterval(t); res.end(); } }, 150);
+        res.on('close', () => clearInterval(t)); return;
+      }
+      res.writeHead(404); res.end();
+    });
+    await new Promise(r => srv.listen(0, '127.0.0.1', r));
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    const st = () => app.ev(`__wlDesktop.dl.state()`);
+    const siteOpen = url => app.ev(`(()=>{const w=window.open('about:blank','_blank');w.location=${JSON.stringify(url)};return 1})()`);
+    const item = async name => (await st()).items.find(i => i.name === name);
+    try {
+      await check('downloads: site-window download saved to the folder (reserved name made safe); .exe blocked', async () => {
+        await siteOpen(base + '/con.wav');
+        await until(async () => (await item('_CON.wav'))?.state === 'completed', 15000, 'wav downloaded');
+        assert.equal(fs.statSync(path.join(dlDir, '_CON.wav')).size, wav.length);
+        await siteOpen(base + '/evil.exe');
+        await sleep(2000);
+        assert.equal(fs.existsSync(path.join(dlDir, 'evil.exe')), false);
+        assert.equal(await item('evil.exe'), undefined);
+      });
+      await check('downloads: pause stops progress, resume finishes', async () => {
+        await siteOpen(base + '/slow.mp4');
+        await until(async () => (await item('slow.mp4'))?.received > 0, 8000, 'slow started');
+        const id = (await item('slow.mp4')).id;
+        assert.equal(await app.ev(`__wlDesktop.dl.act(${id},'pause')`), true);
+        await until(async () => (await item('slow.mp4')).state === 'paused', 3000, 'paused');
+        const r1 = (await item('slow.mp4')).received; await sleep(1000);
+        assert.equal((await item('slow.mp4')).received, r1, 'no progress while paused');
+        assert.equal(await app.ev(`__wlDesktop.dl.act(${id},'resume')`), true);
+        await until(async () => (await item('slow.mp4')).state === 'completed', 15000, 'slow completed');
+        assert.equal(fs.statSync(path.join(dlDir, 'slow.mp4')).size, SLOW);
+      });
+      await check('library: plays in-app with seeking (range requests); tampered links refused', async () => {
+        await app.ev(`dlOpen();1`);
+        await until(() => app.ev(`!!document.querySelector('#dlBody [data-act=dlPlay]')`), 4000, 'library listed');
+        const names = await app.ev(`dl.library.map(f=>f.name).join(',')`);
+        assert.match(names, /_CON\.wav/); assert.match(names, /slow\.mp4/);
+        await app.ev(`document.querySelectorAll('#dlBody [data-act=dlPlay]')[dl.library.findIndex(f=>f.name==='_CON.wav')].click();1`);
+        await until(() => app.ev(`(v=>v&&v.duration>800)(document.getElementById('dlVideo'))`), 8000, 'video metadata');
+        await app.ev(`(v=>{v.pause();v.currentTime=600})(document.getElementById('dlVideo'));1`);
+        await until(() => app.ev(`(v=>!v.seeking&&Math.abs(v.currentTime-600)<1)(document.getElementById('dlVideo'))`), 5000, 'seeked to 10:00');
+        const url = await app.ev(`document.getElementById('dlVideo').src`);
+        for (const bad of [url.replace(/lib\/[0-9a-f]+\//, 'lib/' + '0'.repeat(32) + '/'), url.replace(/[^/]+$/, '..%2Fstorage.json'), url.replace(/[^/]+$/, 'x.exe')]) {
+          const err = await app.ev(`new Promise(r=>{const v=document.createElement('video');v.onerror=()=>r('refused');v.onloadedmetadata=()=>r('loaded');v.src=${JSON.stringify(bad)};setTimeout(()=>r('timeout'),4000)})`);
+          assert.equal(err, 'refused', bad);
+        }
+        await app.ev(`dlClose();1`);
+        assert.equal(await app.ev(`!!document.getElementById('dlVideo')`), false, 'closing stops the video');
+      });
+    } finally { srv.close(); }
+  }
   await check('in-app confirm instead of Windows dialogs: cancel keeps, confirm deletes', async () => {
     await app.ev(`items.push(cleanItem({id:'tmpdel',title:'Temp',type:'film',status:'queue'}));1`);
     const p1 = app.ev(`del('tmpdel').then(()=>1)`);

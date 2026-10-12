@@ -6,6 +6,7 @@ const { pathToFileURL } = require('url');
 const { initUpdater } = require('./updater');
 const { initParty } = require('./party');
 const { initAdblock } = require('./adblock');
+const { initDownloads } = require('./downloads');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 // لازم يطابق appId في package.json عشان إشعارات ويندوز تظهر
@@ -16,7 +17,10 @@ app.setAppUserModelId('com.watchlist.desktop');
 // الواجهة بتتحمل من app://local بدل file:// — صفحة file:// تقدر تقرا أي ملف على الجهاز لو حصل فيها injection
 const APP_ORIGIN = 'app://local/';
 const APP_FILES = new Set(['app.html', 'app.js', 'progress.js', 'icon16.png', 'icon48.png', 'icon128.png']);
-protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true } }]);
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true } },
+  { scheme: 'wlmedia', privileges: { standard: true, secure: true, stream: true } }, // تشغيل ملفات المكتبة (downloads.js)
+]);
 
 /* ================= التخزين ================= */
 const DB = path.join(app.getPath('userData'), 'storage.json');
@@ -415,6 +419,11 @@ app.whenReady().then(() => {
     session: session.defaultSession, cachePath: path.join(app.getPath('userData'), 'adblock.bin'),
     devFilters: !app.isPackaged && process.env.WL_ADBLOCK_FILTERS, // التست بس
     isSiteWindow: wc => siteWindows.has(wc), isAllowed: siteAllowed,
+  });
+  initDownloads({
+    session: session.defaultSession, protocol, getWindow: () => win, fromApp, isSiteWindow: wc => siteWindows.has(wc),
+    settingsPath: path.join(app.getPath('userData'), 'downloads.json'),
+    defaultDir: (!app.isPackaged && process.env.WL_DL_DIR) || path.join(app.getPath('downloads'), 'rilio'), // الـ env للتست بس
   });
 
   createWindow();

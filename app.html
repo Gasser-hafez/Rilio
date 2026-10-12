@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- مفيش inline scripts ولا javascript: URLs، والـ fetch مسموح بس لـ OMDb/TMDB — يقفل تسريب البيانات لو حصل HTML injection -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src https://www.omdbapi.com https://api.themoviedb.org; frame-src https:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src https://www.omdbapi.com https://api.themoviedb.org; frame-src https:; media-src 'self' wlmedia:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>rilio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@600;700;800&family=Readex+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -624,6 +624,12 @@
   .site-row .site-name .ic{color:var(--accent)}
   html:not(.desktop) .desk-only{display:none}
   .site-row .blk[aria-pressed=false]{opacity:.35}
+  .dlrow{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .dlrow .grow{flex:1;min-width:0}
+  .dlrow .dlname{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dlrow progress{width:100%;height:6px;accent-color:var(--accent)}
+  #dlBody h3{margin:16px 0 4px;font-size:15px}
+  #dlVideo{width:100%;max-height:70vh;margin-top:10px;border-radius:12px;background:#000}
   .site-row .site-url{flex:1;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
   .sublangs{display:flex;gap:8px;flex-wrap:wrap}
   .sublangs .sl{height:40px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line-2);background:transparent;color:var(--muted);font-size:14px}
@@ -779,6 +785,7 @@
       <button class="iconbtn" id="tasteBtn" title="ترشيحات على ذوقك" aria-label="ترشيحات على ذوقك"><i data-ic="spark"></i></button>
       <button class="iconbtn" id="statsToggle" title="ذوقك في أرقام" aria-label="ذوقك في أرقام"><i data-ic="chart"></i></button>
       <button class="iconbtn" id="partyBtn" data-act="partyOpen" title="Watch Party — اتفرج مع صحابك" aria-label="Watch Party" style="display:none"><i data-ic="users"></i></button>
+      <button class="iconbtn" id="dlBtn" data-act="dlOpen" title="تنزيلاتي والمكتبة" aria-label="تنزيلاتي والمكتبة" style="display:none"><i data-ic="download"></i></button>
       <button class="iconbtn" id="gearBtn" title="الإعدادات" aria-label="الإعدادات"><i data-ic="sliders"></i></button>
     </div>
   </header>
@@ -870,6 +877,19 @@
   </div>
 </div>
 
+<div class="overlay" id="dlOverlay">
+  <div class="modal party" role="dialog" aria-label="تنزيلاتي">
+    <div class="mhead-plain" style="margin-bottom:16px">
+      <span class="sq" style="background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)"><i data-ic="download"></i></span>
+      <div class="grow">
+        <h2 style="font-size:22px">تنزيلاتي</h2>
+        <div class="sub">اللي بتنزّله من مواقعك بيتحفظ هنا وتشغّله من جوه البرنامج</div>
+      </div>
+      <button class="mclose plain" data-act="dlClose" title="إغلاق" aria-label="إغلاق"><i data-ic="x"></i></button>
+    </div>
+    <div id="dlBody"></div>
+  </div>
+</div>
 <div class="overlay" id="welcomeOverlay" role="dialog" aria-modal="true" aria-label="أهلاً بيك في rilio">
   <div class="modal welcome">
     <button class="mclose plain" id="wClose" data-act="wClose" title="إغلاق" aria-label="إغلاق" hidden><i data-ic="x"></i></button>

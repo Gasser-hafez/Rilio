@@ -986,6 +986,7 @@ document.addEventListener('keydown',e=>{
   if($('importOverlay').classList.contains('show'))importClose();
   else if($('settingsOverlay').classList.contains('show'))closeSettings();
   else if($('partyOverlay').classList.contains('show'))partyClose();
+  else if($('dlOverlay').classList.contains('show'))dlClose();
   else if($('statsOverlay').classList.contains('show'))closeStats();
   else if(playerOpen){playerOpen=false;renderModal();}
   else if(modalId)closeModal();
@@ -2091,6 +2092,55 @@ if(partyApi){
   partyApi.onMedia(m=>partyOpenMedia(m));
 }
 
+/* ================= التنزيلات والمكتبة (الديسكتوب بس) =================
+   التنزيل والحفظ والتشغيل في main (downloads.js) — هنا العرض والأزرار بس */
+const dlApi=window.__wlDesktop&&window.__wlDesktop.dl;
+let dl={dir:'',items:[],library:[]}, dlPlaying=null;
+const fmtSize=b=>!(b>0)?'':b>=1e9?(b/1e9).toFixed(2)+' GB':(b/1e6).toFixed(1)+' MB';
+const DL_STATE={progressing:'بيتنزّل',paused:'متوقف',interrupted:'اتقطع',completed:'خلص',cancelled:'اتلغى'};
+function dlActs(d){
+  const b=(a,t)=>`<button class="srv" data-act="dlAct" data-id="${Number(d.id)}" data-a="${a}">${t}</button>`;
+  if(d.state==='progressing')return b('pause','إيقاف مؤقت')+b('cancel','إلغاء');
+  if(d.state==='paused')return b('resume','كمّل')+b('cancel','إلغاء');
+  if(d.state==='interrupted')return b('resume','كمّل');
+  if(d.state==='completed')return b('show','الفولدر');
+  return '';
+}
+function renderDl(){
+  const box=$('dlBody');
+  if(dlPlaying){
+    box.innerHTML=`<div style="display:flex;gap:8px;align-items:center"><button class="srv" data-act="dlBack">${ic('x','sm')}رجوع</button><b dir="auto" class="dlname">${esc(dlPlaying.name)}</b></div>
+      <video id="dlVideo" controls autoplay src="${esc(dlPlaying.url)}"></video>`;
+    return;
+  }
+  const rows=dl.items.map(d=>{
+    const pct=d.total>0?Math.min(100,Math.round(d.received/d.total*100)):null, live=d.state!=='completed'&&d.state!=='cancelled';
+    return `<div class="dlrow"><div class="grow"><div class="dlname" dir="auto">${esc(d.name)}</div>
+      <div class="sub">${DL_STATE[d.state]||''}${live&&pct!=null?' · '+pct+'%':''} ${fmtSize(d.total)}</div>
+      ${live&&pct!=null?`<progress max="100" value="${pct}"></progress>`:''}</div>${dlActs(d)}</div>`;
+  }).join('');
+  const lib=dl.library.map((f,ix)=>`<div class="dlrow"><div class="grow"><div class="dlname" dir="auto">${esc(f.name)}</div><div class="sub">${fmtSize(f.size)}</div></div>
+    <button class="btn btn-amber btn-sm" data-act="dlPlay" data-ix="${ix}">${ic('play','fill sm')}شغّل</button><button class="srv" data-act="dlReveal" data-ix="${ix}">الفولدر</button></div>`).join('');
+  box.innerHTML=`<div class="sub" style="display:flex;gap:8px;align-items:center"><span>بيتحفظوا في</span>
+      <span dir="ltr" class="dlname" style="flex:1;min-width:0;font-weight:400">${esc(dl.dir)}</span><button class="srv" data-act="dlPickDir">غيّر</button></div>
+    ${rows?`<h3>التنزيلات</h3>${rows}`:''}
+    <h3>المكتبة</h3>${lib||'<div class="sub">لسه فاضية — أي فيلم تنزّله من مواقعك هيظهر هنا</div>'}`;
+}
+async function dlRefresh(){try{dl=await dlApi.state();}catch(e){}if(!dlPlaying)renderDl();}
+function dlOpen(){dlPlaying=null;renderDl();$('dlOverlay').classList.add('show');dlRefresh();}
+function dlClose(){dlPlaying=null;$('dlOverlay').classList.remove('show');renderDl();} // renderDl بيشيل الفيديو فبيقف
+if(dlApi){
+  $('dlBtn').style.display='';
+  $('dlOverlay').addEventListener('click',e=>{if(e.target===$('dlOverlay'))dlClose();});
+  dlApi.onList(l=>{dl.items=Array.isArray(l)?l:[];if(!dlPlaying)renderDl();});
+  dlApi.onEvent(ev=>{
+    const n=String(ev&&ev.name||'');
+    if(ev.kind==='started')toast('بدأ تنزيل '+n+' — تابعه من تنزيلاتي');
+    else if(ev.kind==='blocked')toast('اتمنع تنزيل '+n+' — نوع الملف ده ممكن يكون برنامج ضار');
+    else if(ev.kind==='done'){toast('خلص تنزيل '+n+' ✔');dlRefresh();}
+  });
+}
+
 /* ================= التحديثات (الديسكتوب بس) =================
    الفحص والتنزيل والتحقق في main (update-controller.js) — هنا بنعرض الحالة بس */
 const updApi=window.__wlDesktop&&window.__wlDesktop.update;
@@ -2240,6 +2290,13 @@ document.addEventListener('click',(e)=>{
     case 'addSite': addSite(); break;
     case 'delSite': delSite(parseInt(el.dataset.ix)); break;
     case 'siteBlock': siteBlock(parseInt(el.dataset.ix)); break;
+    case 'dlOpen': dlOpen(); break;
+    case 'dlClose': dlClose(); break;
+    case 'dlAct': dlApi.act(parseInt(el.dataset.id),el.dataset.a); break;
+    case 'dlPlay': {const f=dl.library[parseInt(el.dataset.ix)];if(f){dlPlaying=f;renderDl();}} break;
+    case 'dlBack': dlPlaying=null;dlRefresh(); break;
+    case 'dlReveal': {const f=dl.library[parseInt(el.dataset.ix)];if(f)dlApi.reveal(f.name);} break;
+    case 'dlPickDir': dlApi.pickDir().then(()=>dlRefresh()); break;
     case 'backup': backup(); break;
     case 'restore': $('restoreFile').click(); break;
     case 'bkSnooze': bkSnooze(); break;
