@@ -1,13 +1,13 @@
 {
   "name": "watchlist",
   "productName": "Watchlist",
-  "version": "4.4.0",
+  "version": "4.5.0",
   "description": "قائمة المشاهدة — نسخة الديسكتوب",
   "main": "main.js",
   "partyServer": "wss://watchlist-party.gaser-7afez.workers.dev",
   "scripts": {
     "start": "electron .",
-    "test": "node test/e2e.mjs",
+    "test": "node --test \"test/**/*.test.mjs\" && node test/e2e.mjs",
     "dist": "electron-builder --win nsis --publish never"
   },
   "build": {
@@ -41,6 +41,7 @@
       "main.js",
       "preload.js",
       "updater.js",
+      "update-controller.js",
       "app.html",
       "app.js",
       "popupblock.js",

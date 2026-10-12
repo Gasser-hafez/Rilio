@@ -23,6 +23,12 @@ if (process.isMainFrame && location.origin === 'app://local') {
   contextBridge.exposeInMainWorld('__wlDesktop', {
     notify: p => ipcRenderer.invoke('wl:notify', p),
     titlebar: mood => ipcRenderer.invoke('wl:titlebar', mood),
+    update: {
+      get: () => ipcRenderer.invoke('wl:update:get'),
+      check: () => ipcRenderer.invoke('wl:update:check'),
+      install: () => ipcRenderer.invoke('wl:update:install'),
+      onState: fn => ipcRenderer.on('wl:update:state', (e, st) => fn(st)),
+    },
     onOpenItem: fn => ipcRenderer.on('wl:openItem', (e, id) => fn(id)),
     party: {
       create: () => ipcRenderer.invoke('wl:party:create'),

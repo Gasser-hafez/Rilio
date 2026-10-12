@@ -112,6 +112,15 @@ try {
     // '3' من غير طول محفوظ = "مخصص" من أيام الـ 3 سيرفرات → يفضل مخصص (4) مش vidlink (3)
     assert.deepEqual(JSON.parse(r), [4, 3, 1, 4, 4, 4]);
   });
+  await check('updates section: shows current version; dev build never checks or installs', async () => {
+    const r = await app.ev(`(async()=>{const st=await __wlDesktop.update.check();const inst=await __wlDesktop.update.install();
+      await new Promise(r=>setTimeout(r,200));
+      return {st:st.status,cur:st.current,inst,shown:$('updSec').style.display!=='none',nav:$('navUpd').style.display!=='none',
+        txt:$('updStatus').textContent,ver:$('verTxt').textContent,btnDisabled:$('updCheckBtn').disabled}})()`);
+    assert.equal(r.st, 'dev'); assert.equal(r.inst, false);
+    assert.ok(r.shown && r.nav, 'section + nav visible on desktop');
+    assert.match(r.txt, /المتثبّتة/); assert.equal(r.ver, 'v' + r.cur); assert.equal(r.btnDisabled, true);
+  });
   await check('app page cannot read local files', async () => {
     const r = await app.ev(`fetch('file:///C:/Windows/win.ini').then(()=>'READ').catch(()=>'blocked')`);
     assert.equal(r, 'blocked');

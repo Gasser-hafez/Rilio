@@ -489,6 +489,8 @@
   .setsec[open]>summary::after{transform:rotate(-135deg)}
   .setsec .ssin{padding:0 20px 20px;display:flex;flex-direction:column;gap:12px}
   .setsec .ssin label{margin:0}
+  .updbar{height:6px;border-radius:4px;background:var(--line);overflow:hidden}
+  .updbar b{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
   .fieldrow{display:flex;gap:8px;flex-wrap:wrap}
   .fieldrow>input{flex:1;min-width:200px}
   .site-row{display:flex;align-items:center;gap:10px;background:var(--field);border:1px solid var(--line);border-radius:14px;padding:6px 6px 6px 14px;padding-inline:14px 6px}
@@ -774,6 +776,7 @@
       <button data-act="setNav" data-v="secPlayer" style="--c:var(--watching)"><i></i>البلاير والتحميل</button>
       <button data-act="setNav" data-v="secSites" style="--c:#9BE4A8"><i></i>مواقع المشاهدة</button>
       <button data-act="setNav" data-v="secBackup" style="--c:var(--dropped)"><i></i>النسخ الاحتياطي</button>
+      <button data-act="setNav" data-v="updSec" id="navUpd" style="--c:var(--accent);display:none"><i></i>التحديثات</button>
       <div class="ver"><span class="wordmark" aria-label="rilio">r<span class="i1">i</span>l<span class="i2">i</span><span class="o"></span></span><span id="verTxt" dir="ltr"></span></div>
     </nav>
     <div class="setbody">
@@ -907,6 +910,15 @@
           <button class="btn" data-act="setExport"><i data-ic="download"></i>صدّر الإعدادات</button>
           <button class="btn" data-act="setImport"><i data-ic="upload"></i>استورد إعدادات</button>
           <input type="file" id="setFile" accept=".json,application/json" style="display:none">
+        </div>
+      </div></details>
+      <details class="setsec" id="updSec" style="display:none"><summary><i style="--c:var(--accent)"></i>التحديثات</summary><div class="ssin">
+        <div class="sub" id="updCur"></div>
+        <div id="updStatus" role="status" aria-live="polite"></div>
+        <div class="updbar" id="updBar" hidden><b id="updFill"></b></div>
+        <div class="fieldrow">
+          <button class="btn" data-act="updCheck" id="updCheckBtn"><i data-ic="refresh"></i>دوّر على تحديث</button>
+          <button class="btn btn-amber" data-act="updInstall" id="updInstallBtn" hidden>ثبّت وأعد التشغيل</button>
         </div>
       </div></details>
     </div>

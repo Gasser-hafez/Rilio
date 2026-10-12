@@ -1895,6 +1895,42 @@ if(partyApi){
   partyApi.onMedia(m=>partyOpenMedia(m));
 }
 
+/* ================= التحديثات (الديسكتوب بس) =================
+   الفحص والتنزيل والتحقق في main (update-controller.js) — هنا بنعرض الحالة بس */
+const updApi=window.__wlDesktop&&window.__wlDesktop.update;
+let upd=null;
+function renderUpd(){
+  if(!upd)return;
+  if($('verTxt'))$('verTxt').textContent='v'+upd.current;
+  $('updCur').textContent='النسخة اللي عندك: '+upd.current;
+  const T={
+    dev:'التحديث التلقائي بيشتغل في النسخة المتثبّتة بس',
+    idle:'البرنامج بيدوّر على تحديثات لوحده كل 6 ساعات — أو دوّر دلوقتي',
+    checking:'بدوّر على تحديث...',
+    'up-to-date':'✔ إنت على آخر نسخة',
+    downloading:`فيه نسخة جديدة ${upd.version||''} — بتنزل ${upd.percent}%`,
+    downloaded:`✔ نسخة ${upd.version||''} نزلت وجاهزة — ثبّتها وأعد تشغيل البرنامج`,
+    error:upd.error==='OFFLINE'?'معرفتش أوصل لسيرفر التحديثات — اتأكد من النت وجرّب تاني':'حصلت مشكلة وأنا بدوّر — جرّب تاني بعد شوية',
+  };
+  $('updStatus').textContent=T[upd.status]||'';
+  $('updBar').hidden=upd.status!=='downloading';
+  $('updFill').style.width=upd.percent+'%';
+  $('updCheckBtn').disabled=upd.status==='checking'||upd.status==='downloading'||upd.status==='dev';
+  $('updCheckBtn').hidden=upd.status==='downloaded';
+  $('updInstallBtn').hidden=upd.status!=='downloaded';
+}
+async function updCheck(){upd=await updApi.check();renderUpd();}
+async function updInstall(){
+  const inParty=typeof party!=='undefined'&&party.status==='connected';
+  if(!confirm('البرنامج هيقفل ويفتح تاني بالنسخة الجديدة'+(inParty?' — وهتخرج من الـ Watch Party':'')+'. نكمّل؟'))return;
+  if(!(await updApi.install()))toast('التحديث لسه مش جاهز');
+}
+if(updApi){
+  $('updSec').style.display='';$('navUpd').style.display='';
+  updApi.get().then(st=>{upd=st;renderUpd();}).catch(()=>{});
+  updApi.onState(st=>{upd=st;renderUpd();});
+}
+
 /* ================= توجيه الأحداث (MV3 CSP يمنع inline onclick) ================= */
 document.addEventListener('click',(e)=>{
   const el=e.target.closest('[data-act]');
@@ -1960,6 +1996,8 @@ document.addEventListener('click',(e)=>{
     case 'partyJoin': partyJoin(); break;
     case 'partyLeave': partyLeave(); break;
     case 'partyCopy': partyCopy(); break;
+    case 'updCheck': updCheck(); break;
+    case 'updInstall': updInstall(); break;
     case 'partyWatch': partyClose(); partyOpenMedia(party.media); break;
     case 'aiSave': aiSave(); break;
     case 'aiClear': aiClear(); break;

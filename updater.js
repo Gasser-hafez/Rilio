@@ -3,6 +3,7 @@
 // electron-updater بيتأكد من sha512 للملف من latest.yml وبيرفض الرجوع لنسخة أقدم.
 const { app, Notification } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const { createUpdateController } = require('./update-controller');
 const fs = require('fs');
 const path = require('path');
 
@@ -20,10 +21,13 @@ function log(level, msg) {
   } catch (e) { console.error(line, e); }
 }
 
-// onReady(version): بيتنادى لما التحديث يخلص تحميل — main.js بيحدّث قايمة الـ tray
-function initUpdater({ onReady }) {
-  // النسخة اللي شغالة من npm start ملهاش app-update.yml — مفيش تحديث
-  if (!app.isPackaged) return { install: () => {} };
+// onChange(state): كل تغيير في حالة التحديث (main.js بيحدّث الـ tray والواجهة)
+// بيرجّع { check, install, getState } — check للزرار اليدوي، والفحص الدوري شغال لوحده
+function initUpdater({ onChange }) {
+  const controller = createUpdateController({ updater: autoUpdater, isPackaged: app.isPackaged, currentVersion: app.getVersion() });
+  controller.onChange(onChange);
+  // النسخة اللي شغالة من npm start ملهاش app-update.yml — الحالة 'dev' ومفيش طلبات
+  if (!app.isPackaged) return controller;
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true; // "خروج" من الـ tray بيثبّت التحديث
@@ -33,26 +37,21 @@ function initUpdater({ onReady }) {
   // الأخطاء بتتسجل مرة واحدة من event 'error' تحت — من غير headers الـ HTTP (فيها كوكيز وكلام ملوش لازمة)
   autoUpdater.logger = { info: m => log('info', m), warn: m => log('warn', m), error: () => {}, debug: () => {} };
 
-  const install = () => autoUpdater.quitAndInstall(false, true);
-
   autoUpdater.on('update-available', i => log('info', `update available: ${i.version}`));
   autoUpdater.on('update-downloaded', i => {
     log('info', `update downloaded: ${i.version}`);
-    onReady(i.version);
     if (Notification.isSupported()) {
-      const n = new Notification({ title: 'قائمة المشاهدة', body: `نسخة ${i.version} جاهزة — اضغط هنا لإعادة التشغيل والتحديث` });
-      n.on('click', install);
+      const n = new Notification({ title: 'rilio', body: `نسخة ${i.version} جاهزة — اضغط هنا لإعادة التشغيل والتحديث` });
+      n.on('click', controller.install);
       n.show();
     }
   });
-  // من غير نت أو GitHub واقع: حاجة عادية، بنسجلها ونحاول تاني في الدورة الجاية
+  // من غير نت أو GitHub واقع: حاجة عادية، بنسجلها والـ controller بيعرضها لو الفحص يدوي
   autoUpdater.on('error', e => log('error', String((e && e.message) || e).split('\n')[0]));
 
-  const check = () => autoUpdater.checkForUpdates().catch(() => {}); // اتسجل خلاص في 'error'
-  setTimeout(check, FIRST_CHECK_DELAY_MS);
-  setInterval(check, CHECK_EVERY_MS);
-
-  return { install };
+  setTimeout(controller.check, FIRST_CHECK_DELAY_MS);
+  setInterval(controller.check, CHECK_EVERY_MS);
+  return controller;
 }
 
 module.exports = { initUpdater };

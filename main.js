@@ -374,17 +374,42 @@ app.whenReady().then(() => {
   createWindow();
   initParty({ getWindow: () => win, serverUrl: partyServerUrl(), fromApp });
   tray = new Tray(path.join(__dirname, 'icon16.png'));
-  let readyVersion = null;
-  const updater = initUpdater({ onReady: v => { readyVersion = v; buildTrayMenu(); } });
+  const updater = initUpdater({
+    onChange: st => {
+      buildTrayMenu();
+      if (win && !win.isDestroyed()) win.webContents.send('wl:update:state', st);
+    },
+  });
   function buildTrayMenu() {
+    const st = updater.getState();
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: `النسخة ${app.getVersion()}`, enabled: false },
       { type: 'separator' },
       { label: 'افتح rilio', click: show },
-      ...(readyVersion ? [{ label: `أعد التشغيل للتحديث (${readyVersion})`, click: updater.install }] : []),
+      st.status === 'downloaded'
+        ? { label: `أعد التشغيل للتحديث (${st.version})`, click: updater.install }
+        : { label: st.status === 'downloading' ? `بينزّل التحديث ${st.percent}%` : st.status === 'checking' ? 'بدوّر على تحديث...' : 'دوّر على تحديثات',
+            enabled: st.status !== 'downloading' && st.status !== 'checking', click: checkFromTray },
       { label: 'خروج', click: () => app.quit() },
     ]));
   }
+  // من الـ tray مفيش واجهة — النتيجة بتظهر كإشعار ويندوز
+  async function checkFromTray() {
+    const st = await updater.check();
+    const body = {
+      'up-to-date': `إنت على آخر نسخة (${st.current}) ✔`,
+      downloading: `فيه نسخة جديدة ${st.version} — بتنزل دلوقتي، وهقولك لما تجهز`,
+      downloaded: `نسخة ${st.version} جاهزة — اختار "أعد التشغيل للتحديث" من القايمة`,
+      error: st.error === 'OFFLINE' ? 'معرفتش أوصل لسيرفر التحديثات — اتأكد من النت' : 'حصلت مشكلة وأنا بدوّر على تحديث — جرّب تاني بعد شوية',
+      dev: 'التحديث التلقائي بيشتغل في النسخة المتثبّتة بس',
+    }[st.status];
+    if (body && Notification.isSupported()) new Notification({ title: 'rilio', body }).show();
+  }
+
+  // الواجهة: تقرا الحالة، تطلب فحص، أو تثبّت — التثبيت بيحصل بس لو التحديث نازل ومتأكد منه
+  ipcMain.handle('wl:update:get', e => { if (!fromApp(e)) throw new Error('forbidden'); return updater.getState(); });
+  ipcMain.handle('wl:update:check', e => { if (!fromApp(e)) throw new Error('forbidden'); return updater.check(); });
+  ipcMain.handle('wl:update:install', e => { if (!fromApp(e)) throw new Error('forbidden'); return updater.install(); });
   buildTrayMenu();
   tray.on('click', show);
   updateBadge();
