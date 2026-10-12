@@ -8,7 +8,7 @@ const { initParty } = require('./party');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 // لازم يطابق appId في package.json عشان إشعارات ويندوز تظهر
-app.setAppUserModelId('com.watchlist.desktop');
+app.setAppUserModelId('com.rilio.desktop');
 
 // الواجهة بتتحمل من app://local بدل file:// — صفحة file:// تقدر تقرا أي ملف على الجهاز لو حصل فيها injection
 const APP_ORIGIN = 'app://local/';
@@ -17,6 +17,18 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: t
 
 /* ================= التخزين ================= */
 const DB = path.join(app.getPath('userData'), 'storage.json');
+// الاسم اتغيّر من Watchlist لـ rilio فالفولدر اتغيّر — أول تشغيل بننسخ بيانات الفولدر القديم (ومبنمسحوش، يفضل نسخة احتياطية).
+// مش لما الفولدر متحدد بـ --user-data-dir (التستات والتجارب) عشان ميتنسخش بيانات حد حقيقية فيه
+const OLD_DB = path.join(app.getPath('appData'), 'Watchlist', 'storage.json');
+if (!app.commandLine.hasSwitch('user-data-dir') && !fs.existsSync(DB) && fs.existsSync(OLD_DB)) {
+  try {
+    fs.mkdirSync(path.dirname(DB), { recursive: true });
+    fs.copyFileSync(OLD_DB, DB, fs.constants.COPYFILE_EXCL);
+    // مفتاح تشفير safeStorage (اللي متشفّر بيه مفتاح الـ AI) محفوظ في Local State — من غيره المفتاح مش هيتفك
+    const oldState = path.join(path.dirname(OLD_DB), 'Local State'), newState = path.join(path.dirname(DB), 'Local State');
+    if (fs.existsSync(oldState) && !fs.existsSync(newState)) fs.copyFileSync(oldState, newState);
+  } catch (e) { console.error('could not migrate Watchlist data:', e.message); }
+}
 let store = {};
 try {
   store = JSON.parse(fs.readFileSync(DB, 'utf8'));
