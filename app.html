@@ -167,26 +167,11 @@
   .tools{display:flex;gap:6px;align-items:center}
   .tools .iconbtn{border-color:transparent}
 
-  /* ============ فورم الإضافة ============ */
+  /* ============ لوحات وشبكة الحقول ============ */
   .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);backdrop-filter:blur(18px)}
-  details.addbox>summary{
-    list-style:none;cursor:pointer;padding:16px 20px;display:flex;align-items:center;gap:12px;user-select:none;
-    font-family:var(--display);font-weight:700;font-size:19px;
-  }
-  details.addbox>summary::-webkit-details-marker{display:none}
-  details.addbox>summary .sq{width:34px;height:34px;border-radius:11px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);display:flex;align-items:center;justify-content:center}
-  details.addbox>summary::after{content:'';margin-inline-start:auto;width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .2s}
-  details.addbox[open]>summary::after{transform:rotate(-135deg)}
-  details.addbox:not([open]){display:none}
-  details.addbox .inner{padding:0 20px 20px}
   .grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
   @media(max-width:700px){.grid{grid-template-columns:1fr}}
   .form-row{display:flex;gap:10px;margin-top:16px;align-items:center;flex-wrap:wrap}
-  #metaPreview{font-size:13px;color:var(--accent-hi);margin-top:6px;min-height:1.2em}
-  #chooser .btn{height:auto;min-height:40px;padding:8px 14px;justify-content:flex-start;border-radius:12px;white-space:normal}
-  .seg{display:inline-flex;background:var(--field);border:1.5px solid var(--line-2);border-radius:14px;padding:4px;gap:2px}
-  .seg button{height:36px;padding:0 16px;border:none;border-radius:10px;background:transparent;color:var(--muted);font-size:13px;font-weight:500}
-  .seg button.on{background:var(--raised);color:var(--ink);font-weight:600}
 
 
   /* الإضافة السريعة */
@@ -354,6 +339,9 @@
   .ptitle{font-weight:600;font-size:15px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pyear{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
   .pyear .pimdb{margin-inline-start:auto;color:var(--queue);direction:ltr;white-space:nowrap}
+  /* Rotten Tomatoes جنب IMDb — الأولى بس هي اللي بتتزق للآخر */
+  .prt{color:#FA6E59!important}
+  .pyear .pimdb.prt{margin-inline-start:8px}
   .pyear .pep{color:var(--watching);font-weight:600;direction:ltr}
   .pill-badge{position:absolute;z-index:2;height:26px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px}
   .next-badge{top:10px;inset-inline-start:10px;background:var(--queue);color:var(--queue-ink)}
@@ -376,20 +364,6 @@
   @keyframes pickGlow{0%,70%{box-shadow:0 0 0 3px var(--accent),0 0 40px color-mix(in srgb,var(--accent) 60%,transparent)}}
 
   /* ============ عرض القايمة ============ */
-  .rows{display:flex;flex-direction:column;gap:12px}
-  .row{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:22px;overflow:hidden;cursor:pointer;backdrop-filter:blur(14px);transition:border-color .2s,transform .2s}
-  .row:hover{border-color:color-mix(in srgb,var(--accent) 45%,transparent);transform:translateY(-2px)}
-  .row .thumb{flex:0 0 76px;min-height:112px;position:relative;background:var(--raised)}
-  .row .thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
-  .row .thumb .noimg .nt{font-size:12px;inset-inline:6px;bottom:6px}
-  .row .rbody{flex:1;padding:14px 16px;min-width:0}
-  .row .rtitle{font-family:var(--display);font-weight:700;font-size:18px;line-height:1.3}
-  .row .rmeta{font-size:13px;color:var(--muted);margin-top:2px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-  .row .rmeta .iv{color:var(--queue);font-weight:600}
-  .row .rmeta .ep{color:var(--watching);font-weight:600;direction:ltr}
-  .row .rdesc{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .row .ract{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-  .row .bell{position:static;margin-top:6px}
 
   .empty{text-align:center;color:var(--muted);padding:56px 18px;border:1.5px dashed var(--line-2);border-radius:var(--r-lg);font-size:14px;background:var(--surface-2)}
   .empty b{display:block;color:var(--ink);font-family:var(--display);font-weight:700;font-size:20px;margin-bottom:4px}
@@ -406,6 +380,13 @@
     display:none;align-items:flex-start;justify-content:center;z-index:60;overflow-y:auto;padding:5vh 16px 40px;
   }
   .overlay.show{display:flex}
+  /* نافذة التأكيد فوق أي نافذة تانية (الإعدادات، التفاصيل...) */
+  #confirmOverlay{z-index:2000}
+  .confirm-box{max-width:420px;width:calc(100% - 32px);padding:26px 24px 20px}
+  .confirm-box p{margin:0 0 20px;font-size:16px;line-height:1.7}
+  .confirm-box .fieldrow{justify-content:flex-start}
+  .btn-dangerfill{background:#E5484D;color:#fff;border-color:transparent}
+  .btn-dangerfill:hover{background:#D13A40}
   .modal{
     width:100%;max-width:780px;position:relative;overflow:hidden;
     background:color-mix(in srgb,var(--solid) 95%,transparent);backdrop-filter:blur(24px);
@@ -749,43 +730,6 @@
     <div class="qa-results" id="qaResults" aria-live="polite"></div>
   </section>
 
-  <details class="panel addbox" id="addBox">
-    <summary><span class="sq"><i data-ic="plus"></i></span><span id="formTitle">ضيف حاجة جديدة</span></summary>
-    <div class="inner">
-      <div class="grid">
-        <div>
-          <label for="fTitle">الاسم</label>
-          <div style="display:flex;gap:8px">
-            <input type="text" id="fTitle" dir="auto" placeholder="اكتب اسم الفيلم أو المسلسل… مثال: Silo" style="flex:1">
-            <button class="btn" id="lookupBtn" title="يجيب البوستر والوصف وتقييم IMDb تلقائي"><i data-ic="search"></i>IMDb</button>
-          </div>
-          <div id="metaPreview"></div>
-          <div id="chooser" style="display:none;margin-top:6px;flex-direction:column;gap:6px"></div>
-        </div>
-        <div>
-          <label for="fType">النوع</label>
-          <select id="fType">
-            <option value="film">فيلم</option>
-            <option value="tv">مسلسل</option>
-          </select>
-        </div>
-        <div>
-          <label for="fGenre">التصنيف (اختياري)</label>
-          <input type="text" id="fGenre" dir="auto" placeholder="Sci-Fi, Crime...">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="seg" id="statusSeg" role="group" aria-label="هيتحط في">
-          <button type="button" data-s="queue" class="on">هشوفه قريب</button>
-          <button type="button" data-s="watched">شفته خلاص</button>
-        </div>
-        <div class="spacer"></div>
-        <button class="btn btn-ghost" id="cancelEdit" style="display:none">إلغاء التعديل</button>
-        <button class="btn btn-amber" id="saveBtn">حفظ</button>
-      </div>
-    </div>
-  </details>
-
   <section class="hometop" id="homeTop">
     <div class="hero" id="hero"></div>
     <aside class="side" id="side">
@@ -817,7 +761,6 @@
     <div class="spacer"></div>
     <div class="chips" id="chips"></div>
     <button class="pillbtn" id="sortBtn" style="display:none"></button>
-    <button class="iconbtn" id="viewBtn" title="بدّل شكل العرض"></button>
   </div>
 
   <div id="list"></div>
@@ -859,6 +802,16 @@
       <button class="mclose plain" data-act="partyClose" title="إغلاق" aria-label="إغلاق"><i data-ic="x"></i></button>
     </div>
     <div id="partyBody" class="partybody"></div>
+  </div>
+</div>
+
+<div class="overlay" id="confirmOverlay" role="alertdialog" aria-modal="true" aria-labelledby="confirmMsg">
+  <div class="modal confirm-box">
+    <p id="confirmMsg"></p>
+    <div class="fieldrow">
+      <button class="btn btn-amber" id="confirmYes">أيوه</button>
+      <button class="btn" id="confirmNo">لأ</button>
+    </div>
   </div>
 </div>
 

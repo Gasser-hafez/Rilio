@@ -176,6 +176,39 @@ try {
     assert.equal(await child.ev('typeof (window.chrome && chrome.storage)'), 'undefined');
     child.close();
   });
+  await check('in-app confirm instead of Windows dialogs: cancel keeps, confirm deletes', async () => {
+    await app.ev(`items.push(cleanItem({id:'tmpdel',title:'Temp',type:'film',status:'queue'}));1`);
+    const p1 = app.ev(`del('tmpdel').then(()=>1)`);
+    await sleep(300);
+    assert.deepEqual(JSON.parse(await app.ev(`JSON.stringify({shown:$('confirmOverlay').classList.contains('show'),msg:$('confirmMsg').textContent})`)), { shown: true, msg: 'متأكد إنك عايز تمسحه من القايمة؟' });
+    await app.ev(`$('confirmNo').click();1`); await p1;
+    assert.equal(await app.ev(`items.some(i=>i.id==='tmpdel')`), true, 'cancel keeps the item');
+    const p2 = app.ev(`del('tmpdel').then(()=>1)`);
+    await sleep(300);
+    await app.ev(`$('confirmYes').click();1`); await p2;
+    assert.equal(await app.ev(`items.some(i=>i.id==='tmpdel')`), false);
+    assert.equal(await app.ev(`$('confirmOverlay').classList.contains('show')`), false);
+  });
+  await check('removed: edit button + old form, list view toggle', async () => {
+    const r = await app.ev(`(()=>{openModal(items[0].id);const h=$('modal').innerHTML;closeModal();
+      return {edit:/data-act="edit"/.test(h),addBox:!!document.getElementById('addBox'),viewBtn:!!document.getElementById('viewBtn'),wall:$('list').className}})()`);
+    assert.deepEqual(r, { edit: false, addBox: false, viewBtn: false, wall: r.wall });
+    assert.notEqual(r.wall, 'rows');
+  });
+  await check('external links: only the GitHub account is allowed out of the app', async () => {
+    for (const u of ['https://evil.example/x', 'file:///C:/Windows/System32/calc.exe', 'https://github.com.evil.io/Gasser-hafez', 'https://github.com/other', 'ms-settings:']) {
+      assert.equal(await app.ev(`__wlDesktop.openExternal(${JSON.stringify(u)})`), false, u);
+    }
+  });
+  await check('Rotten Tomatoes: parsed from OMDb Ratings, validated, shown next to IMDb', async () => {
+    const r = await app.ev(`JSON.stringify([
+      rtOf({Ratings:[{Source:'Internet Movie Database',Value:'8.8/10'},{Source:'Rotten Tomatoes',Value:'94%'}]}),
+      rtOf({Ratings:[{Source:'Rotten Tomatoes',Value:'<b>1</b>'}]}), rtOf({}), rtOf({Ratings:[{Source:'Rotten Tomatoes',Value:'150%'}]}),
+      cleanItem({title:'x',rt:87}).rt, cleanItem({title:'x',rt:'150'}).rt, cleanItem({title:'x',rt:'"><img>'}).rt])`);
+    assert.deepEqual(JSON.parse(r), [94, null, null, null, 87, null, null]);
+    await app.ev(`items.push(cleanItem({id:'rt1',title:'RT Film',type:'film',status:'queue',imdb:8.1,rt:87,rtChecked:true}));tab='queue';render();1`);
+    assert.match(await app.ev(`document.querySelector('[data-itemid="rt1"]').textContent`), /🍅 87%/);
+  });
   app.close();
 } finally { proc.kill(); }
 
@@ -256,6 +289,22 @@ try {
     assert.equal(notes.length, 3, JSON.stringify(notes));
     assert.equal(notes[2].itemId, undefined);
     assert.match(notes[2].title, /2/);
+  });
+  await check('quick add from search, then undo from the same row', async () => {
+    TMDB[500] = { seasons: seasons(1), name: 'Quick Show' };
+    const r = await app.ev(`(async()=>{qaRows.set('t500',{key:'t500',src:'tmdb',tv:true,tmdbId:500,title:'Quick Show',year:'2020',poster:null,posterBig:null,backdrop:null,desc:''});
+      await qaAdd('t500','queue');
+      const it=items.find(i=>i.tmdbId===500);
+      const acts=qaActsHtml(qaRows.get('t500'),it);
+      await qaUndo('t500');
+      const saved=await chrome.storage.local.get('watchlist:data');
+      return {added:!!it,undoBtn:/data-act="qaUndo"/.test(acts),gone:!items.some(i=>i.tmdbId===500),
+        savedGone:!JSON.parse(saved['watchlist:data']).some(i=>i.tmdbId===500),afterActs:qaActsHtml(qaRows.get('t500'),null)}})()`);
+    assert.equal(r.added, true); assert.equal(r.undoBtn, true);
+    assert.equal(r.gone, true); assert.equal(r.savedGone, true);
+    assert.match(r.afterActs, /data-act="qaAdd"/, 'row offers add again');
+    // عنصر كان في القايمة من قبل: مفيش تراجع سريع (منمسحش حاجة قديمة بالغلط)
+    assert.doesNotMatch(await app.ev(`qaActsHtml({key:'x',title:'Show A'},items.find(i=>i.id==='s100'))`), /qaUndo/);
   });
   await check('offline: failed check is not recorded, retried next hour', async () => {
     tmdbMode = 'offline';

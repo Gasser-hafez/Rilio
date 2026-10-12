@@ -1,5 +1,5 @@
 // نسخة الديسكتوب — نفس app.html/app.js بتاعة الاكستنشن، والـ chrome.storage بيتعمله shim في preload.js
-const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, protocol, net, session, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, protocol, net, session, safeStorage, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -282,6 +282,16 @@ function guardPopups(wc, allowChildren) {
   });
   wc.on('did-create-window', child => guardPopups(child.webContents, false));
 }
+
+/* ================= لينكات تفتح في المتصفح برا ================= */
+// قايمة ثابتة بس — shell.openExternal بيفتح أي بروتوكول (ملفات، برامج...) فمينفعش يقبل لينك من الواجهة على بعضه
+const EXTERNAL_OK = [/^https:\/\/github\.com\/Gasser-hafez(\/[\w.\-\/]*)?$/];
+ipcMain.handle('wl:openExternal', (e, url) => {
+  if (!fromApp(e)) throw new Error('forbidden');
+  if (typeof url !== 'string' || url.length > 300 || !EXTERNAL_OK.some(re => re.test(url))) return false;
+  shell.openExternal(url);
+  return true;
+});
 
 /* ================= النافذة والـ tray ================= */
 let win, tray, quitting = false;

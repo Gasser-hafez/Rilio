@@ -23,6 +23,7 @@ if (process.isMainFrame && location.origin === 'app://local') {
   contextBridge.exposeInMainWorld('__wlDesktop', {
     notify: p => ipcRenderer.invoke('wl:notify', p),
     titlebar: mood => ipcRenderer.invoke('wl:titlebar', mood),
+    openExternal: url => ipcRenderer.invoke('wl:openExternal', url),
     update: {
       get: () => ipcRenderer.invoke('wl:update:get'),
       check: () => ipcRenderer.invoke('wl:update:check'),

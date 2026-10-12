@@ -17,9 +17,9 @@ const SEED=[
   {title:'Legend',type:'film',genre:'Crime biopic'},
   {title:'The Irishman',type:'film',genre:'Crime epic'}
 ];
-let items=[], sites=[], tab='queue', view='grid';
-let sortDesc=true, queueSort='manual', editId=null, formStatus='queue', modalId=null;
-let pendingMeta=null, selfWrites=0;
+let items=[], sites=[], tab='queue';
+let sortDesc=true, queueSort='manual', modalId=null;
+let selfWrites=0;
 let filterType='all', filterGenre=null, statsOpen=false, impCands=[], playerOpen=false, genresOpen=false;
 let mysteryMode=false, mysteryId=null;
 const DEFAULT_PLAYER='https://vidsrc-embed.ru/embed/{type}?tmdb={tmdbID}&season={season}&episode={episode}';
@@ -122,6 +122,9 @@ function cleanItem(it){
   out.status=STATUSES.includes(it.status)?it.status:'queue';
   for(const k of ['rating','year','imdb','tmdbId','curSeason','curEp','added','order','watchedAt','totalSeasons','latestSeasons','lastKnownSeasons'])
     out[k]=num(it[k]);
+  // Rotten Tomatoes: نسبة صحيحة 0-100. rtChecked = سألنا OMDb خلاص (حتى لو مفيش تقييم) عشان منسألش تاني
+  {const r=num(it.rt);out.rt=r!=null&&Number.isInteger(r)&&r<=100?r:null;}
+  out.rtChecked=it.rtChecked===true;
   out.imdbID=/^tt\d+$/.test(str(it.imdbID))?it.imdbID:null;
   out.poster=isHttp(it.poster)?it.poster:null;
   // backdrop مسار TMDB زي /abc.jpg، و'' معناها "جربنا وملقيناش"
@@ -145,6 +148,28 @@ function parseSites(raw){
   const arr=JSON.parse(raw);
   return Array.isArray(arr)?arr.filter(s=>s&&isHttp(s.url)).map(s=>({name:str(s.name)||s.url,url:s.url})):null;
 }
+
+/* ================= نافذة تأكيد جوه البرنامج =================
+   بدل confirm/alert بتوع ويندوز (شكلهم غريب عن البرنامج) — بترجع Promise<boolean> */
+let confirmResolve=null;
+function uiConfirm(msg,{yes='أيوه',no='لأ',danger=false}={}){
+  if(confirmResolve)confirmDone(false); // تأكيد قديم مفتوح = اتلغى
+  $('confirmMsg').textContent=msg;
+  $('confirmYes').textContent=yes;$('confirmNo').textContent=no;
+  $('confirmYes').className='btn '+(danger?'btn-dangerfill':'btn-amber'); // حذف = زرار أحمر واضح
+  $('confirmOverlay').classList.add('show');
+  setTimeout(()=>$('confirmNo').focus(),0); // الافتراضي "لأ" — Enter بالغلط ميمسحش حاجة
+  return new Promise(r=>{confirmResolve=r;});
+}
+function confirmDone(v){
+  if(!confirmResolve)return;
+  const r=confirmResolve;confirmResolve=null;
+  $('confirmOverlay').classList.remove('show');
+  r(v);
+}
+$('confirmYes').onclick=()=>confirmDone(true);
+$('confirmNo').onclick=()=>confirmDone(false);
+$('confirmOverlay').addEventListener('click',e=>{if(e.target===$('confirmOverlay'))confirmDone(false);});
 
 /* ================= التخزين ================= */
 async function persist(){
@@ -181,7 +206,6 @@ async function load(){
   subLang=(await sget('watchlist:subLang'));if(subLang==null)subLang='ar';
   {const stored=await sget('watchlist:theme'), t=applyTheme(stored);
     if(stored&&stored!==t)await sset('watchlist:theme',t);} // الثيمات القديمة بتتحول للمزاج المقابل مرة واحدة
-  view=(await sget('watchlist:view'))||'grid';
   try{const s=await sget('watchlist:sites');sites=s?parseSites(s):null;}catch(e){sites=null;}
   if(!sites){sites=DEFAULT_SITES.slice();await sset('watchlist:sites',JSON.stringify(sites));}
   statsOpen=(await sget('watchlist:statsOpen'))==='1';
@@ -190,6 +214,7 @@ async function load(){
   aiLoad();
   checkSeasons();
   checkBackupDue();
+  setTimeout(rtBackfill,20000);
 }
 async function checkBackupDue(){
   const now=Date.now(), day=24*3600*1000;
@@ -297,57 +322,15 @@ async function ackSeason(id){
   await persist();render();if(modalId)renderModal();
 }
 
-/* ================= الفورم ================= */
-document.querySelectorAll('#statusSeg button').forEach(b=>{
-  b.onclick=()=>{
-    formStatus=b.dataset.s;
-    document.querySelectorAll('#statusSeg button').forEach(x=>x.classList.toggle('on',x===b));
-  };
-});
-
-$('saveBtn').onclick=async()=>{
-  const title=$('fTitle').value.trim();
-  if(!title){toast('اكتب الاسم الأول');$('fTitle').focus();return;}
-  const type=$('fType').value, genre=$('fGenre').value.trim();
-  if(editId){
-    const it=items.find(i=>i.id===editId);
-    if(it){it.title=title;it.type=type;it.genre=genre;
-      if(pendingMeta){it.year=pendingMeta.year;it.imdb=pendingMeta.imdb;it.desc=pendingMeta.desc||'';it.poster=pendingMeta.poster||null;it.imdbID=pendingMeta.imdbID||it.imdbID||null;it.tmdbId=null;it.backdrop=null;}
-      if(it.status!==formStatus){it.status=formStatus;if(formStatus==='queue'){it.rating=null;it.note='';}}
-    }
-    editId=null;toast('اتعدل ✔');
-  }else{
-    const it={id:uid(),title,type,genre,status:formStatus,rating:null,note:'',added:Date.now(),order:Date.now(),
-      year:pendingMeta?pendingMeta.year:null,imdb:pendingMeta?pendingMeta.imdb:null,
-      desc:pendingMeta?pendingMeta.desc||'':'',poster:pendingMeta?pendingMeta.poster||null:null,
-      imdbID:pendingMeta?pendingMeta.imdbID||null:null};
-    items.unshift(it);
-    if(formStatus==='watched')modalId=it.id;
-    toast('اتضاف ✔');
-  }
-  await persist();resetForm();tab=formStatus;render();
-  if(modalId)openModal(modalId);
-};
-
-$('cancelEdit').onclick=()=>{editId=null;resetForm();};
-
-function resetForm(){
-  $('fTitle').value='';$('fGenre').value='';$('fType').value='film';
-  formStatus='queue';pendingMeta=null;$('metaPreview').textContent='';hideChooser();
-  document.querySelectorAll('#statusSeg button').forEach(x=>x.classList.toggle('on',x.dataset.s==='queue'));
-  $('formTitle').textContent='ضيف حاجة جديدة';
-  $('saveBtn').textContent='حفظ';
-  $('cancelEdit').style.display='none';
-  $('addBox').open=false;
-}
 /* ================= الإضافة السريعة: سيرش لايف ================= */
-// بتكتب الاسم ← النتايج بتطلع وانت بتكتب ← "هشوفه" أو "شفته". الفورم القديم بقى للتعديل بس
+// بتكتب الاسم ← النتايج بتطلع وانت بتكتب ← "هشوفه" أو "شفته"
 // المصدر TMDB (سريع وبوسترات أحسن)، ولو مفيش مفتاح TMDB بنرجع لـ OMDb
 let qaTimer=null, qaReq=0;
 const qaCache=new Map(), qaRows=new Map();
+// اللي اتضاف من البحث في الجلسة دي (key → id) — بيظهرله "تراجع" بدل ما تروح للقايمة تمسحه
+const qaAdded=new Map();
 const TMDB_PATH=/^\/[\w.-]+$/;
 function addOpen(){
-  if(editId){editId=null;resetForm();}
   const box=$('quickAdd'), q=$('search').value.trim();
   box.hidden=false;
   if(q&&!$('qaInput').value){$('qaInput').value=q;qaSearch();}
@@ -361,6 +344,32 @@ function qaClose(){
 $('qaInput').addEventListener('input',()=>{clearTimeout(qaTimer);qaTimer=setTimeout(qaSearch,300);});
 $('qaInput').addEventListener('keydown',e=>{if(e.key==='Enter'){clearTimeout(qaTimer);qaSearch();}});
 const omdbKey=async()=>(await sget('watchlist:omdbkey'))||DEFAULT_OMDB_KEY;
+// تقييم Rotten Tomatoes من نفس رد OMDb (Ratings) — "94%" → 94
+function rtOf(m){
+  const r=m&&Array.isArray(m.Ratings)?m.Ratings.find(x=>x&&x.Source==='Rotten Tomatoes'):null;
+  const v=r&&/^(\d{1,3})%$/.exec(str(r.Value));
+  return v&&+v[1]<=100?+v[1]:null;
+}
+const rtHtml=(it,cls)=>it.rt!=null?`<span class="${cls}" title="Rotten Tomatoes">🍅 ${it.rt}%</span>`:'';
+// العناصر القديمة: تقييم RT بيتجاب في الخلفية واحدة واحدة — OMDb المجاني محدود (1000 طلب في اليوم)
+const RT_BACKFILL_MAX=40, RT_BACKFILL_GAP_MS=1500;
+async function rtBackfill(){
+  const todo=items.filter(i=>i.imdbID&&!i.rtChecked&&!i._party).slice(0,RT_BACKFILL_MAX);
+  if(!todo.length)return;
+  const key=await omdbKey();
+  let changed=0;
+  for(const it of todo){
+    try{
+      const m=await(await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(key)}&i=${encodeURIComponent(it.imdbID)}`,{signal:AbortSignal.timeout(20000)})).json();
+      if(m.Response==='False'&&/key|limit/i.test(str(m.Error)))break; // مفتاح غلط أو الحد اليومي خلص
+      const cur=items.find(i=>i.id===it.id);if(!cur)continue;
+      cur.rt=rtOf(m);cur.rtChecked=true;changed++;
+      if(!cur.imdb&&parseFloat(m.imdbRating))cur.imdb=parseFloat(m.imdbRating);
+    }catch(e){break;} // من غير نت: نكمّل المرة الجاية
+    await new Promise(r=>setTimeout(r,RT_BACKFILL_GAP_MS));
+  }
+  if(changed){await persist();render();}
+}
 // كل اللي جاي من TMDB/OMDb بيتنضف هنا: أرقام بس، بوستر بمسار صالح، والنصوص بتتعمل esc وقت العرض
 async function qaFetch(q){
   if(await sget('watchlist:tmdbkey')){
@@ -404,12 +413,29 @@ function qaRender(list){
         <div class="qa-t" dir="auto">${esc(r.title)}</div>
         <div class="qa-m">${r.tv?'مسلسل':'فيلم'}${r.year?' · '+esc(r.year):''}</div>
       </div>
-      <div class="qa-acts">${own
-        ?`<span class="qa-own">${ic('check','sm')}في قايمتك</span>`
-        :`<button class="btn btn-sm btn-amber" data-act="qaAdd" data-key="${esc(r.key)}" data-s="queue">${ic('plus','sm')}هشوفه</button>
-          <button class="btn btn-sm" data-act="qaAdd" data-key="${esc(r.key)}" data-s="watched">${ic('check','sm')}شفته</button>`}</div>
+      <div class="qa-acts">${qaActsHtml(r,own)}</div>
     </div>`;
   }).join('');
+}
+function qaActsHtml(r,own){
+  const k=esc(r.key);
+  if(own&&qaAdded.get(r.key)===own.id)
+    return `<span class="qa-own">${ic('check','sm')}اتضاف</span><button class="btn btn-sm btn-ghost" data-act="qaUndo" data-key="${k}" title="شيله من القايمة">تراجع</button>`;
+  if(own)return `<span class="qa-own">${ic('check','sm')}في قايمتك</span>`;
+  return `<button class="btn btn-sm btn-amber" data-act="qaAdd" data-key="${k}" data-s="queue">${ic('plus','sm')}هشوفه</button>
+          <button class="btn btn-sm" data-act="qaAdd" data-key="${k}" data-s="watched">${ic('check','sm')}شفته</button>`;
+}
+const qaRowEl=key=>document.querySelector(`.qa-row[data-key="${CSS.escape(key)}"]`);
+// التراجع: بيشيل اللي اتضاف من نفس الصف، من غير تأكيد (التراجع نفسه هو التأكيد)
+async function qaUndo(key){
+  const id=qaAdded.get(key);if(!id)return;
+  qaAdded.delete(key);
+  items=items.filter(i=>i.id!==id);
+  if(modalId===id)closeModal();
+  await persist();render();
+  const row=qaRowEl(key),r=qaRows.get(key);
+  if(row&&r){row.classList.remove('added');row.querySelector('.qa-acts').innerHTML=qaActsHtml(r,null);}
+  toast('اتشال من القايمة');
 }
 // تقييم IMDb من OMDb بييجي في الخلفية — الإضافة نفسها متستناهوش (OMDb ساعات بيتأخر جداً)
 async function qaFillImdb(it){
@@ -419,6 +445,7 @@ async function qaFillImdb(it){
     if(m.Response!=='True')return;
     const cur=items.find(i=>i.id===it.id);if(!cur)return;
     cur.imdb=parseFloat(m.imdbRating)||cur.imdb||null;
+    cur.rt=rtOf(m)??cur.rt??null;cur.rtChecked=true;
     if(!cur.genre&&m.Genre&&m.Genre!=='N/A')cur.genre=m.Genre;
     await persist();render();if(modalId===cur.id&&!playerOpen)renderModal();
   }catch(e){}
@@ -427,7 +454,7 @@ async function qaAdd(key,status){
   const r=qaRows.get(key);
   if(!r||!['queue','watched'].includes(status))return;
   if(qaOwned(r)){toast('موجود في قايمتك بالفعل');return;}
-  const row=document.querySelector(`.qa-row[data-key="${CSS.escape(key)}"]`);
+  const row=qaRowEl(key);
   row?.querySelectorAll('button').forEach(b=>b.disabled=true);
   try{
     let raw;
@@ -441,101 +468,22 @@ async function qaAdd(key,status){
       const m=await(await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(await omdbKey())}&i=${encodeURIComponent(r.imdbID)}&plot=short`)).json();
       if(m.Response!=='True')throw new Error('x');
       raw={title:m.Title,genre:m.Genre&&m.Genre!=='N/A'?m.Genre:'',year:parseInt(str(m.Year).slice(0,4))||null,
-        imdb:parseFloat(m.imdbRating)||null,desc:m.Plot&&m.Plot!=='N/A'?m.Plot:'',poster:m.Poster&&m.Poster!=='N/A'?m.Poster:null,imdbID:r.imdbID};
+        imdb:parseFloat(m.imdbRating)||null,rt:rtOf(m),rtChecked:true,desc:m.Plot&&m.Plot!=='N/A'?m.Plot:'',poster:m.Poster&&m.Poster!=='N/A'?m.Poster:null,imdbID:r.imdbID};
     }
     const it=cleanItem({id:uid(),type:r.tv?'tv':'film',status,rating:null,note:'',added:Date.now(),order:Date.now(),
       watchedAt:status==='watched'?Date.now():null,...raw});
     if(!it)throw new Error('x');
     items.unshift(it);
+    qaAdded.set(key,it.id);
     await persist();
     tab=status;render();
-    if(row){row.classList.add('added');row.querySelector('.qa-acts').innerHTML=`<span class="qa-own">${ic('check','sm')}اتضاف</span>`;}
+    if(row){row.classList.add('added');row.querySelector('.qa-acts').innerHTML=qaActsHtml(r,it);}
     if(status==='watched'){openModal(it.id);toast('اتضاف لـ"شفتهم" — قيّمه');}
     else toast('اتضاف لـ"هشوفهم" ✔');
     if(r.src==='tmdb')qaFillImdb(it);
   }catch(e){
     row?.querySelectorAll('button').forEach(b=>b.disabled=false);
     toast(e.message==='BAD_KEY'?'مفتاح TMDB غلط — راجعه في الإعدادات':'حصلت مشكلة في جلب التفاصيل — جرب تاني');
-  }
-}
-
-function startEdit(id){
-  const it=items.find(i=>i.id===id);if(!it)return;
-  closeModal();
-  qaClose(); // التعديل بيستخدم الفورم الكامل
-  editId=id;
-  $('fTitle').value=it.title;$('fType').value=it.type;$('fGenre').value=it.genre||'';
-  pendingMeta=(it.year||it.imdb||it.desc||it.poster)?{year:it.year||null,imdb:it.imdb||null,desc:it.desc||'',poster:it.poster||null,imdbID:it.imdbID||null}:null;
-  $('metaPreview').textContent=pendingMeta?`✔ ${it.year||'؟'} • IMDb ★ ${it.imdb||'؟'}`:'';
-  formStatus=it.status==='dropped'?'queue':it.status;
-  document.querySelectorAll('#statusSeg button').forEach(x=>x.classList.toggle('on',x.dataset.s===formStatus));
-  $('formTitle').textContent='تعديل: '+it.title;
-  $('saveBtn').textContent='حفظ التعديل';
-  $('cancelEdit').style.display='';
-  $('addBox').open=true;
-  window.scrollTo({top:0,behavior:'smooth'});
-}
-
-/* ================= بحث OMDb للإضافة اليدوية ================= */
-$('lookupBtn').onclick=async()=>{
-  const title=$('fTitle').value.trim();
-  if(!title){toast('اكتب الاسم الأول');$('fTitle').focus();return;}
-  const key=(await sget('watchlist:omdbkey'))||DEFAULT_OMDB_KEY;
-  const btn=$('lookupBtn');
-  btn.disabled=true;btn.textContent='…';
-  $('metaPreview').textContent='بدور على البيانات...';
-  hideChooser();
-  try{
-    const res=await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(key)}&s=${encodeURIComponent(title)}`);
-    const data=await res.json();
-    if(data.Response!=='True')throw new Error(data.Error||'not found');
-    const results=(data.Search||[]).filter(r=>r.Type==='movie'||r.Type==='series').slice(0,6);
-    if(!results.length)throw new Error('not found');
-    if(results.length===1){
-      await pickResult(results[0].imdbID,key);
-    }else{
-      $('metaPreview').textContent='لقيت أكتر من نتيجة — اختار الصح:';
-      const ch=$('chooser');
-      ch.innerHTML=results.map(r=>
-        `<button type="button" class="btn btn-sm" style="text-align:start" data-act="pick" data-imdb="${r.imdbID}">`+
-        `<span dir="ltr">${esc(r.Title)} (${esc(r.Year)})</span> — ${r.Type==='series'?'مسلسل':'فيلم'}</button>`).join('');
-      ch.style.display='flex';
-    }
-  }catch(e){
-    pendingMeta=null;
-    $('metaPreview').textContent='';
-    toast(e.message==='Invalid API key!'?'مفتاح OMDb غلط أو لسه متفعّلش — بص على إيميل التفعيل':'ملقتش حاجة بالاسم ده — جرب تكتبه أدق');
-  }
-  btn.disabled=false;btn.innerHTML=ic('search')+'IMDb';
-};
-
-function hideChooser(){const ch=$('chooser');ch.style.display='none';ch.innerHTML='';}
-
-async function pickResult(imdbID,key){
-  key=key||(await sget('watchlist:omdbkey'))||DEFAULT_OMDB_KEY;
-  $('metaPreview').textContent='بجيب التفاصيل...';
-  hideChooser();
-  try{
-    const res=await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(key)}&i=${encodeURIComponent(imdbID)}&plot=short`);
-    const meta=await res.json();
-    if(meta.Response!=='True')throw new Error(meta.Error||'not found');
-    const year=parseInt((meta.Year||'').slice(0,4))||null;
-    const imdb=parseFloat(meta.imdbRating)||null;
-    pendingMeta={
-      year, imdb,
-      desc:(meta.Plot&&meta.Plot!=='N/A')?meta.Plot:'',
-      poster:(meta.Poster&&meta.Poster!=='N/A')?meta.Poster:null,
-      imdbID:meta.imdbID||imdbID||null
-    };
-    if(meta.Title)$('fTitle').value=meta.Title;
-    $('fType').value=meta.Type==='series'?'tv':'film';
-    if(meta.Genre&&meta.Genre!=='N/A'&&!$('fGenre').value.trim())$('fGenre').value=meta.Genre;
-    $('metaPreview').textContent=`✔ ${year||'؟'} • IMDb ★ ${imdb||'؟'}${pendingMeta.desc?' • '+pendingMeta.desc.slice(0,80)+'…':''}`;
-    toast('البيانات اتجابت ✔');
-  }catch(e){
-    pendingMeta=null;
-    $('metaPreview').textContent='';
-    toast('حصلت مشكلة في جلب التفاصيل — جرب تاني');
   }
 }
 
@@ -547,11 +495,6 @@ $('gearBtn').onclick=openSettings;
 $('statsToggle').onclick=()=>{openStats();};
 $('search').oninput=()=>render();
 
-$('viewBtn').onclick=async()=>{
-  view=view==='grid'?'list':'grid';
-  await sset('watchlist:view',view);
-  render();
-};
 
 // الفيلم الغامض: اختيار عشوائي من "هشوفهم"، والأعلى على IMDb فرصته أكبر
 function weightedPick(pool){
@@ -706,7 +649,7 @@ function pcardHtml(it,ix){
       </div>
       <div class="pmeta">
         <div class="ptitle" dir="auto">${esc(it.title)}</div>
-        <div class="pyear">${it.status==='watching'?`<span class="pep">${progLabel(it)}</span><span class="dotsep"></span>`:''}<span>${KIND(it)}${it.year?' · '+it.year:''}</span>${showImdb?`<span class="pimdb">★ ${it.imdb}</span>`:''}</div>
+        <div class="pyear">${it.status==='watching'?`<span class="pep">${progLabel(it)}</span><span class="dotsep"></span>`:''}<span>${KIND(it)}${it.year?' · '+it.year:''}</span>${showImdb?`<span class="pimdb">★ ${it.imdb}</span>`:''}${showImdb?rtHtml(it,'pimdb prt'):''}</div>
       </div>
     </article>`;
 }
@@ -742,7 +685,7 @@ function heroSlideHtml(it,i,n){
   return `${bg}<div class="hin">
     <span class="hbadge">${ic('star','fill sm')}${i===0?'اختيار الليلة · التالي في قايمتك':`اختيار الليلة · ${i+1} من ${n}`}</span>
     <div class="htitle" dir="auto">${esc(it.title)}</div>
-    <div class="hmeta"><span>${KIND(it)}${it.year?' · '+it.year:''}</span>${it.imdb?`<span class="dotsep"></span><span class="imdb">IMDb ★ ${it.imdb}</span>`:''}${it.genre?`<span class="dotsep"></span><span dir="auto">${esc(it.genre)}</span>`:''}</div>
+    <div class="hmeta"><span>${KIND(it)}${it.year?' · '+it.year:''}</span>${it.imdb?`<span class="dotsep"></span><span class="imdb">IMDb ★ ${it.imdb}</span>`:''}${it.rt!=null?`<span class="dotsep"></span>${rtHtml(it,'imdb prt')}`:''}${it.genre?`<span class="dotsep"></span><span dir="auto">${esc(it.genre)}</span>`:''}</div>
     ${it.desc?`<p class="hdesc" dir="auto">${esc(it.desc)}</p>`:''}
     <div class="hact">
       <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل</button>
@@ -880,9 +823,6 @@ function render(){
     ?(sortDesc?'★ الأعلى':'★ الأقل')
     :(queueSort==='manual'?'ترتيبي':queueSort==='added'?'الأحدث':queueSort==='imdbDesc'?'IMDb ↑':'IMDb ↓'));
   $('sortBtn').title='اضغط لتغيير الترتيب';
-  $('viewBtn').innerHTML=ic(view==='grid'?'list':'grid');
-  $('viewBtn').title=view==='grid'?'اعرض كقايمة':'اعرض كحائط بوسترات';
-  $('viewBtn').setAttribute('aria-label',$('viewBtn').title);
   renderHome();
 
   const q=$('search').value.trim().toLowerCase();
@@ -906,33 +846,9 @@ function render(){
     return;
   }
 
-  if(view==='grid'){
-    list.className='wall';
-    list.innerHTML=rows.map((it,ix)=>pcardHtml(it,ix)).join('');
-    if(tab==='queue'&&queueSort==='manual')enableDrag();
-  }else{
-    list.className='rows';
-    list.innerHTML=rows.map(it=>`
-      <article class="row" data-act="open" data-id="${it.id}" data-itemid="${it.id}" tabindex="0" role="button" aria-label="${esc(it.title)}">
-        <div class="thumb">${it.poster?`<img src="${esc(it.poster)}" alt="" loading="lazy">`:noimgHtml(it)}</div>
-        <div class="rbody">
-          <div class="rtitle" dir="auto">${esc(it.title)}</div>
-          <div class="rmeta">${it.status==='watching'?`<span class="ep">${progLabel(it)}</span><span class="dotsep"></span>`:''}<span>${KIND(it)}</span>${it.year?`<span class="dotsep"></span>${it.year}`:''}${it.genre?`<span class="dotsep"></span><span dir="auto">${esc(it.genre)}</span>`:''}${it.imdb?`<span class="dotsep"></span><span class="iv">IMDb ★ ${it.imdb}</span>`:''}${it.status==='watched'&&it.rating?`<span class="dotsep"></span><span class="iv" style="color:var(--watched)">تقييمي ${it.rating}/10</span>`:''}</div>
-          ${it.newSeason?`<div><button class="pill-badge bell" data-act="ackSeason" data-id="${it.id}">${ic('bell','sm')}موسم جديد</button></div>`:''}
-          ${it.desc?`<div class="rdesc" dir="auto">${esc(it.desc)}</div>`:''}
-          <div class="ract">
-            ${it.status==='queue'
-              ?`<button class="btn btn-sm btn-amber" data-act="watched" data-id="${it.id}">${ic('check','sm')}شفته</button>`+
-                (it.type==='tv'?`<button class="btn btn-sm" data-act="startWatch" data-id="${it.id}">${ic('play','fill sm')}بدأته</button>`:'')+
-                sites.map((s,ix)=>`<button class="btn btn-sm btn-watch" data-act="watch" data-id="${it.id}" data-site="${ix}">${esc(s.name)} ↗</button>`).join('')
-              :it.status==='watching'
-              ?`<button class="btn btn-sm btn-amber" data-act="epPlus" data-id="${it.id}">${ic('plus','sm')}حلقة</button>
-                 <button class="btn btn-sm" data-act="watched" data-id="${it.id}">${ic('check','sm')}خلصته</button>`
-              :''}
-          </div>
-        </div>
-      </article>`).join('');
-  }
+  list.className='wall';
+  list.innerHTML=rows.map((it,ix)=>pcardHtml(it,ix)).join('');
+  if(tab==='queue'&&queueSort==='manual')enableDrag();
 }
 
 /* ================= السحب لإعادة الترتيب ================= */
@@ -985,6 +901,7 @@ function closeModal(){
 $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal();});
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
+  if(confirmResolve){confirmDone(false);return;}
   if($('importOverlay').classList.contains('show'))importClose();
   else if($('settingsOverlay').classList.contains('show'))closeSettings();
   else if($('partyOverlay').classList.contains('show'))partyClose();
@@ -1072,7 +989,7 @@ function renderModal(){
         <div class="mchips">
           ${ST[it.status]?`<span class="mchip st st-${it.status}">${ST[it.status]}</span>`:''}
           <span class="mchip">${KIND(it)}${it.year?' · '+it.year:''}</span>
-          ${it.imdb?`<span class="mchip iv">IMDb ★ ${it.imdb}</span>`:''}
+          ${it.imdb?`<span class="mchip iv">IMDb ★ ${it.imdb}</span>`:''}${rtHtml(it,'mchip iv prt')}
           ${it.genre?`<span class="mchip" dir="auto">${esc(it.genre)}</span>`:''}
         </div>
         <div class="mact">
@@ -1098,7 +1015,6 @@ function renderModal(){
         <button class="tool" data-act="trailer" data-id="${it.id}">${ic('film')}تريلر</button>
         ${active?`<button class="tool" data-act="drop" data-id="${it.id}">${ic('x')}سبته</button>`:''}
         ${it.status!=='queue'?`<button class="tool" data-act="toQueue" data-id="${it.id}">${ic('undo')}رجّعه للقايمة</button>`:''}
-        <button class="tool" data-act="edit" data-id="${it.id}">${ic('edit')}تعديل</button>
         <button class="tool danger" data-act="del" data-id="${it.id}">${ic('trash')}حذف</button>
       </div>
     </div>`;
@@ -1180,7 +1096,7 @@ async function backToQueue(id){
   await persist();render();if(modalId)renderModal();
 }
 async function del(id){
-  if(!confirm('متأكد من الحذف؟'))return;
+  if(!(await uiConfirm('متأكد إنك عايز تمسحه من القايمة؟',{yes:'امسح',no:'لأ، سيبه',danger:true})))return;
   items=items.filter(i=>i.id!==id);
   if(modalId===id)closeModal();
   await persist();render();toast('اتحذف');
@@ -1524,7 +1440,7 @@ $('restoreFile').addEventListener('change',async e=>{
     const data=JSON.parse(await f.text());
     if(!data['watchlist:data'])throw new Error('bad');
     JSON.parse(data['watchlist:data']); // تأكيد إنها قايمة صالحة
-    if(!confirm('الاسترجاع هيستبدل كل البيانات الحالية بالنسخة دي — متأكد؟'))return;
+    if(!(await uiConfirm('الاسترجاع هيستبدل كل البيانات الحالية بالنسخة دي — متأكد؟',{yes:'استرجع',danger:true})))return;
     await chrome.storage.local.set(data);
     toast('اترجعت ✔');
     setTimeout(()=>location.reload(),600);
@@ -1660,6 +1576,7 @@ async function importFetchOne(c){
       const om=await(await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(key)}&i=${ex.imdb_id}`)).json();
       if(om.Response==='True'){
         item.imdb=parseFloat(om.imdbRating)||null;
+        item.rt=rtOf(om);item.rtChecked=true;
         if(om.Genre&&om.Genre!=='N/A')item.genre=om.Genre;
         if(om.Plot&&om.Plot!=='N/A')item.desc=om.Plot;
       }
@@ -1797,7 +1714,7 @@ async function aiSave(){
   aiTest();
 }
 async function aiClear(){
-  if(!confirm('تمسح إعدادات الـ AI والمفتاح؟'))return;
+  if(!(await uiConfirm('تمسح إعدادات الـ AI والمفتاح؟',{yes:'امسح',danger:true})))return;
   await window.__wlAi.set({url:''});
   await aiLoad();toast('إعدادات الـ AI اتمسحت');
 }
@@ -1827,7 +1744,7 @@ async function aiRun(){
 }
 
 /* ================= تصدير/استيراد الإعدادات ================= */
-const SETTINGS_KEYS=['watchlist:omdbkey','watchlist:tmdbkey','watchlist:sites','watchlist:playerTpl','watchlist:playerSrv','watchlist:srvListLen','watchlist:playerShield','watchlist:view','watchlist:statsOpen','watchlist:theme','watchlist:dlTpl','watchlist:subLang'];
+const SETTINGS_KEYS=['watchlist:omdbkey','watchlist:tmdbkey','watchlist:sites','watchlist:playerTpl','watchlist:playerSrv','watchlist:srvListLen','watchlist:playerShield','watchlist:statsOpen','watchlist:theme','watchlist:dlTpl','watchlist:subLang'];
 async function settingsExport(){
   const all=await chrome.storage.local.get(SETTINGS_KEYS);
   const out={__watchlistSettings:1};
@@ -2087,7 +2004,7 @@ function renderUpd(){
 async function updCheck(){upd=await updApi.check();renderUpd();}
 async function updInstall(){
   const inParty=typeof party!=='undefined'&&party.status==='connected';
-  if(!confirm('البرنامج هيقفل ويفتح تاني بالنسخة الجديدة'+(inParty?' — وهتخرج من الـ Watch Party':'')+'. نكمّل؟'))return;
+  if(!(await uiConfirm('البرنامج هيقفل ويفتح تاني بالنسخة الجديدة'+(inParty?' — وهتخرج من الـ Watch Party':'')+'. نكمّل؟',{yes:'ثبّت دلوقتي',no:'بعدين'})))return;
   if(!(await updApi.install()))toast('التحديث لسه مش جاهز');
 }
 if(updApi){
@@ -2109,12 +2026,10 @@ document.addEventListener('click',(e)=>{
     case 'watched': markWatched(id); break;
     case 'drop': markDropped(id); break;
     case 'toQueue': backToQueue(id); break;
-    case 'edit': startEdit(id); break;
     case 'del': del(id); break;
     case 'watch': openWatch(id, parseInt(el.dataset.site)); break;
     case 'trailer': openTrailer(id); break;
     case 'ackSeason': ackSeason(id); break;
-    case 'pick': pickResult(el.dataset.imdb); break;
     case 'saveKey': saveKey(); break;
     case 'saveTmdb': saveTmdb(); break;
     case 'addSite': addSite(); break;
@@ -2173,8 +2088,9 @@ document.addEventListener('click',(e)=>{
     case 'addOpen': addOpen(); break;
     case 'qaClose': qaClose(); break;
     case 'qaAdd': qaAdd(el.dataset.key,el.dataset.s); break;
+    case 'qaUndo': qaUndo(el.dataset.key); break;
     // window.open (مش لينك عادي) عشان الديسكتوب بيسمح بس بالنوافذ اللي الواجهة فتحتها
-    case 'openGh': e.preventDefault(); window.open('https://github.com/Gasser-hafez','_blank'); break;
+    case 'openGh': e.preventDefault(); if(window.__wlDesktop)window.__wlDesktop.openExternal('https://github.com/Gasser-hafez'); else window.open('https://github.com/Gasser-hafez','_blank'); break;
     case 'heroGo': heroGo(parseInt(el.dataset.ix),true); break;
     case 'setNav': setNav(el.dataset.v); break;
     case 'aiPreset': aiPresetPick(el.dataset.v); break;
