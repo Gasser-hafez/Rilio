@@ -530,6 +530,7 @@
   .playerbox{position:relative;background:#000;width:auto;margin:0 16px 16px;border-radius:18px;overflow:hidden;
     height:min(76vh,calc(min(1400px,97vw)*9/16));box-shadow:0 0 90px -10px color-mix(in srgb,var(--amb-a,var(--watching)) 30%,transparent),0 0 160px 0 color-mix(in srgb,var(--amb-b,var(--accent)) 12%,transparent)}
   .playerbox iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .player-note{margin:0 16px 12px;padding:10px 14px;border:1px solid var(--line-2);border-radius:12px;background:var(--surface);color:var(--ink-2);font-family:'Readex Pro',Tahoma,Arial,sans-serif;font-size:14px;font-weight:400;line-height:1.9;text-align:start;direction:rtl;overflow-wrap:anywhere}
   .playerbox:fullscreen,.playerbox:-webkit-full-screen{width:100vw;height:100vh;margin:0;border-radius:0}
   .mystery-reveal,.wl-veil{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:28px;color:#F6EEE3}
   .mystery-reveal{background:var(--bg);z-index:2;color:var(--ink)}
@@ -589,6 +590,11 @@
   .adv[open]>summary::before{transform:rotate(90deg)}
   .advin{display:flex;flex-direction:column;gap:8px;padding:0 16px 16px}
   .ferr{color:#FF7A7A;font-size:13px;min-height:1em}
+  .custom-server-list{display:flex;flex-direction:column;gap:8px}
+  .custom-server-row,.custom-server-add{display:grid;grid-template-columns:minmax(110px,.45fr) minmax(0,1fr) auto;gap:8px;align-items:center}
+  .custom-server-row input,.custom-server-add input{min-width:0}
+  .iconbtn.danger{color:var(--dropped)}
+  @media(max-width:620px){.custom-server-row,.custom-server-add{grid-template-columns:1fr auto}.custom-server-row input[data-csrv="tpl"],.custom-server-add input#customServerTpl{grid-column:1/-1;grid-row:2}}
   .tmdbnote{font-size:12.5px}
   /* الشروط من "عن rilio" للقراية بس */
   #welcomeOverlay.guide .wagree,#welcomeOverlay.guide [data-step="terms"] .wfoot{display:none}
@@ -1301,13 +1307,19 @@
         <details class="adv">
           <summary>متقدم</summary>
           <div class="advin">
-            <label for="playerTpl">قالب البلاير المخصص — بيظهر كـ "مخصص" في السيرفرات. لو الدومين وقع جرّب: <span dir="ltr">vidsrc-embed.su · vidsrcme.su · vsrc.su</span></label>
-            <input type="text" id="playerTpl" dir="ltr" class="mono" spellcheck="false">
-            <div class="ferr" id="playerTplErr" role="alert"></div>
+            <label>سيرفراتك المخصصة</label>
+            <div class="sub">أضف بس سيرفر أنت مسموح لك تستخدمه. السيرفرات دي بتشتغل عندك فقط؛ Watch Party بيستخدم السيرفرات الأساسية عشان الضيف يفضل محمي ومتوافق.</div>
+            <div id="customServers" class="custom-server-list"></div>
+            <div class="custom-server-add">
+              <input type="text" id="customServerName" maxlength="48" placeholder="اسم السيرفر" aria-label="اسم السيرفر المخصص">
+              <input type="text" id="customServerTpl" dir="ltr" class="mono" spellcheck="false" placeholder="https://example.com/embed/{type}?tmdb={tmdbID}" aria-label="قالب رابط السيرفر المخصص">
+              <button class="btn btn-sm" data-act="customServerAdd"><i data-ic="plus"></i>ضيف سيرفر</button>
+            </div>
+            <div class="ferr" id="customServersErr" role="alert"></div>
             <label for="dlTpl">لينك زرار التحميل</label>
             <input type="text" id="dlTpl" dir="ltr" class="mono" spellcheck="false">
             <div class="ferr" id="dlTplErr" role="alert"></div>
-            <div class="sub">بيتحفظوا لوحدهم أول ما تخرج من الخانة، وفاضي = الافتراضي. الـ placeholders: <b dir="ltr">{tmdbID}</b> <b dir="ltr">{imdbID}</b> <b dir="ltr">{type}</b> <b dir="ltr">{season}</b> <b dir="ltr">{episode}</b></div>
+            <div class="sub">القالب بيتحفظ لما تخرج من الخانة. الـ placeholders: <b dir="ltr">{tmdbID}</b> <b dir="ltr">{imdbID}</b> <b dir="ltr">{type}</b> <b dir="ltr">{season}</b> <b dir="ltr">{episode}</b></div>
           </div>
         </details>
       </section>

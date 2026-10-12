@@ -29,14 +29,35 @@ const PLAYER_SERVERS=[
   {name:'سيرفر 3', tpl:'https://player.embed-api.stream/?id={tmdbID}&s={season}&e={episode}'},
   {name:'سيرفر 4', tpl:'https://vidlink.pro/{type}/{tmdbID}/{season}/{episode}'}
 ];
-// "مخصص" = رقم بعد آخر سيرفر في الليستة — فبنخزّن طول الليستة وقت الحفظ،
-// عشان لما سيرفر جديد يتضاف، اللي كان مختار "مخصص" ميتحوّلش للسيرفر الجديد من غير ما يعرف
+const CUSTOM_SERVERS_KEY='watchlist:customPlayerServers';
+const MAX_CUSTOM_SERVERS=12;
+let customPlayerServers=[];
+const playerServers=()=>PLAYER_SERVERS.concat(customPlayerServers);
+function validPlayerTpl(v){
+  if(typeof v!=='string'||!isHttp(v)||!/\{(tmdbID|imdbID|q)\}/.test(v))return false;
+  try{const u=new URL(v.replace(/\{[^}]+\}/g,'x'));return !!u.hostname&&!u.username&&!u.password;}catch(e){return false;}
+}
+function customServer(v,ix){
+  if(!v||typeof v!=='object'||!validPlayerTpl(v.tpl))return null;
+  const name=String(v.name||'').replace(/\s+/g,' ').trim().slice(0,48)||`سيرفر مخصص ${ix+1}`;
+  return {name,tpl:v.tpl.trim()};
+}
+function parseCustomServers(raw){
+  try{
+    const a=JSON.parse(raw||'[]');
+    return Array.isArray(a)?a.slice(0,MAX_CUSTOM_SERVERS).map(customServer).filter(Boolean):[];
+  }catch(e){return [];}
+}
+// بنخزّن طول كل الليستة، عشان اختيار قديم لـ "مخصص" يفضل مخصص لما نضيف سيرفرات جديدة.
 const SRV_LIST_LEN_KEY='watchlist:srvListLen';
 const LEGACY_SRV_LIST_LEN=3; // قبل ما نبدأ نخزّن الطول (لحد 4.3.0)
 function restorePlayerSrv(saved,savedLen){
   const ix=parseInt(saved||'0')||0;
   const len=parseInt(savedLen||'')||LEGACY_SRV_LIST_LEN;
-  return ix>=len?PLAYER_SERVERS.length:Math.min(ix,PLAYER_SERVERS.length);
+  const total=playerServers().length;
+  if(ix<0)return 0;
+  if(ix>=len)return customPlayerServers.length?PLAYER_SERVERS.length:0;
+  return ix<total?ix:0;
 }
 let playerSrv=0, playerShield=true, subLang='ar';
 const DEFAULT_DL='https://web.nxsha.app/dl/{type}/{tmdbID}/{season}/{episode}';
@@ -208,7 +229,13 @@ async function load(){
   await seedOnce();
   $('apiKey').value=(await sget('watchlist:omdbkey'))||'';
   $('tmdbKey').value=(await sget('watchlist:tmdbkey'))||'';
-  $('playerTpl').value=(await sget('watchlist:playerTpl'))||DEFAULT_PLAYER;
+  customPlayerServers=parseCustomServers(await sget(CUSTOM_SERVERS_KEY));
+  // القالب القديم كان بيسمح بس بسيرفر مخصص واحد؛ ننقله للقائمة الجديدة مرة واحدة.
+  const legacyPlayerTpl=(await sget('watchlist:playerTpl'))||'';
+  if(!customPlayerServers.length&&legacyPlayerTpl&&legacyPlayerTpl!==DEFAULT_PLAYER&&validPlayerTpl(legacyPlayerTpl)){
+    customPlayerServers=[{name:'سيرفر مخصص',tpl:legacyPlayerTpl}];
+    await sset(CUSTOM_SERVERS_KEY,JSON.stringify(customPlayerServers));
+  }
   {const d=await sget('watchlist:dlTpl');$('dlTpl').value=!d||d===LEGACY_DL?DEFAULT_DL:d;}
   playerSrv=restorePlayerSrv(await sget('watchlist:playerSrv'),await sget(SRV_LIST_LEN_KEY));
   playerShield=(await sget('watchlist:playerShield'))==='1';
@@ -263,7 +290,7 @@ async function setTheme(t){
 function openSettings(page){
   shieldLabel();
   document.querySelectorAll('#subLangs .sl').forEach(b=>b.classList.toggle('on',b.dataset.v===(subLang||'ar')));
-  renderDefSrv();
+  renderDefSrv();renderCustomServers();
   setNav(typeof page==='string'?page:'pgGeneral');
   $('settingsOverlay').classList.add('show');
 }
@@ -334,21 +361,67 @@ async function keyShared(){
 }
 
 /* ---- المشاهدة ---- */
-// السيرفر الافتراضي: نفس playerSrv اللي البلاير بيبدّله، و"مخصص" بيظهر بس لو فيه قالب غير الافتراضي
 function renderDefSrv(){
-  const custom=$('playerTpl').value.trim();
-  const opts=PLAYER_SERVERS.map((s,ix)=>({ix,name:s.name}));
-  if(custom&&custom!==DEFAULT_PLAYER)opts.push({ix:PLAYER_SERVERS.length,name:'مخصص'});
-  $('defSrv').innerHTML=opts.map(o=>`<button class="sl${o.ix===playerSrv?' on':''}" role="radio" aria-checked="${o.ix===playerSrv}" data-act="defSrv" data-ix="${o.ix}">${esc(o.name)}</button>`).join('');
+  $('defSrv').innerHTML=playerServers().map((s,ix)=>`<button class="sl${ix===playerSrv?' on':''}" role="radio" aria-checked="${ix===playerSrv}" data-act="defSrv" data-ix="${ix}">${esc(s.name)}</button>`).join('');
+}
+function renderCustomServers(){
+  const box=$('customServers');
+  box.innerHTML=customPlayerServers.length?customPlayerServers.map((s,ix)=>`
+    <div class="custom-server-row" data-ix="${ix}">
+      <input type="text" data-csrv="name" data-ix="${ix}" value="${esc(s.name)}" maxlength="48" aria-label="اسم السيرفر المخصص ${ix+1}">
+      <input type="text" dir="ltr" class="mono" spellcheck="false" data-csrv="tpl" data-ix="${ix}" value="${esc(s.tpl)}" aria-label="رابط السيرفر المخصص ${ix+1}">
+      <button class="iconbtn danger" data-act="customServerRemove" data-ix="${ix}" title="امسح السيرفر" aria-label="امسح ${esc(s.name)}">${ic('trash')}</button>
+    </div>`).join(''):'<div class="sub">لسه مفيش سيرفرات مضافة.</div>';
+}
+async function saveCustomServers(){
+  await sset(CUSTOM_SERVERS_KEY,JSON.stringify(customPlayerServers));
+  if(playerSrv>=playerServers().length)playerSrv=0;
+  await sset('watchlist:playerSrv',String(playerSrv));
+  await sset(SRV_LIST_LEN_KEY,String(playerServers().length));
+  renderCustomServers();renderDefSrv();
+  if(modalId&&playerOpen)renderModal();
 }
 async function defSrv(ix){
-  if(!Number.isInteger(ix)||ix<0||ix>PLAYER_SERVERS.length)return;
+  if(!Number.isInteger(ix)||ix<0||ix>=playerServers().length)return;
   playerSrv=ix;
   await sset('watchlist:playerSrv',String(ix));
-  await sset(SRV_LIST_LEN_KEY,String(PLAYER_SERVERS.length));
+  await sset(SRV_LIST_LEN_KEY,String(playerServers().length));
   renderDefSrv();
   if(modalId&&playerOpen)renderModal();
   toast('السيرفر الافتراضي اتغيّر ✔');
+}
+async function customServerAdd(){
+  const name=$('customServerName').value.replace(/\s+/g,' ').trim();
+  const tpl=$('customServerTpl').value.trim();
+  const err=$('customServersErr');
+  if(customPlayerServers.length>=MAX_CUSTOM_SERVERS){err.textContent=`بالكتير ${MAX_CUSTOM_SERVERS} سيرفر مخصص`;return;}
+  if(!validPlayerTpl(tpl)){err.textContent='اكتب رابط http(s) سليم فيه {tmdbID} أو {imdbID}';return;}
+  if(customPlayerServers.some(s=>s.tpl===tpl)){err.textContent='السيرفر ده مضاف بالفعل';return;}
+  customPlayerServers.push({name:name.slice(0,48)||`سيرفر مخصص ${customPlayerServers.length+1}`,tpl});
+  $('customServerName').value='';$('customServerTpl').value='';err.textContent='';
+  await saveCustomServers();
+  toast('اتضاف السيرفر ✔');
+}
+async function customServerUpdate(ix){
+  const row=$('customServers').querySelector(`.custom-server-row[data-ix="${ix}"]`);
+  const err=$('customServersErr');
+  if(!row||!customPlayerServers[ix])return;
+  const next=customServer({name:row.querySelector('[data-csrv="name"]').value,tpl:row.querySelector('[data-csrv="tpl"]').value},ix);
+  if(!next){err.textContent='اكتب رابط http(s) سليم فيه {tmdbID} أو {imdbID}';return;}
+  if(customPlayerServers.some((s,i)=>i!==ix&&s.tpl===next.tpl)){err.textContent='السيرفر ده مضاف بالفعل';return;}
+  customPlayerServers[ix]=next;err.textContent='';
+  await saveCustomServers();
+  toast('اتحفظ ✔');
+}
+async function customServerRemove(ix){
+  if(!Number.isInteger(ix)||!customPlayerServers[ix])return;
+  if(!await uiConfirm(`تمسح «${customPlayerServers[ix].name}»؟`,{yes:'امسح',no:'لأ',danger:true}))return;
+  const was=PLAYER_SERVERS.length+ix;
+  customPlayerServers.splice(ix,1);
+  if(playerSrv===was)playerSrv=0;
+  else if(playerSrv>was)playerSrv--;
+  await saveCustomServers();
+  toast('اتمسح السيرفر');
 }
 // القوالب بتتحفظ لوحدها لما تخرج من الخانة — لينك http(s) فيه رقم الفيلم، وإلا خطأ تحت الخانة ومبيتحفظش
 function bindTemplate(inputId,errId,storeKey,def){
@@ -361,12 +434,11 @@ function bindTemplate(inputId,errId,storeKey,def){
     $(errId).textContent='';
     await sset(storeKey,v);
     if(!v)$(inputId).value=def;
-    if(inputId==='playerTpl')renderDefSrv();
     toast('اتحفظ ✔');
   });
 }
-bindTemplate('playerTpl','playerTplErr','watchlist:playerTpl',DEFAULT_PLAYER);
 bindTemplate('dlTpl','dlTplErr','watchlist:dlTpl',DEFAULT_DL);
+$('customServers').addEventListener('change',e=>{if(e.target.dataset.csrv)customServerUpdate(parseInt(e.target.dataset.ix));});
 function closeSettings(){$('settingsOverlay').classList.remove('show');}
 $('settingsOverlay').addEventListener('click',e=>{if(e.target===$('settingsOverlay'))closeSettings();});
 
@@ -1428,6 +1500,39 @@ function openTrailer(id){
 }
 
 /* ================= البلاير الداخلي ================= */
+let compatiblePlayer=false, embeddedState='';
+const embeddedApi=window.__wlDesktop?.embeddedPlayer;
+function compatiblePlayerActive(){
+  return !!embeddedApi&&compatiblePlayer&&!mysteryMode&&party.status!=='connected';
+}
+function syncEmbeddedPlayer(){
+  if(!embeddedApi)return;
+  const box=document.querySelector('.playerbox[data-compatible]');
+  let state=null;
+  if(box&&playerOpen&&$('overlay').classList.contains('show')){
+    const rect=box.getBoundingClientRect();
+    const covered=[...document.querySelectorAll('.overlay.show')].some(el=>el.id!=='overlay')||!$('lp').hidden;
+    const radius=parseFloat(getComputedStyle(box).borderTopLeftRadius)||0;
+    // The native fullscreen player can occlude this document. Its visibility must
+    // not depend on document.hidden, or hiding it reveals us and starts a loop.
+    state={url:box.dataset.src,bounds:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},radius,visible:!covered};
+  }
+  const key=JSON.stringify(state);
+  if(key!==embeddedState){embeddedState=key;embeddedApi.layout(state);}
+}
+function toggleCompatiblePlayer(){
+  if(!embeddedApi)return;
+  if(party.status==='connected'||mysteryMode){toast('التشغيل المتوافق متاح للمشاهدة الفردية');return;}
+  compatiblePlayer=!compatiblePlayer;
+  renderModal();syncEmbeddedPlayer();
+}
+if(embeddedApi){
+  // Native views sit above HTML; hide them while settings or confirmation dialogs are open.
+  new MutationObserver(syncEmbeddedPlayer).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden']});
+  setInterval(syncEmbeddedPlayer,100);
+  addEventListener('pagehide',()=>embeddedApi.layout(null));
+  embeddedApi.onError(()=>toast('تعذّر تحميل المشغّل — جرّب سيرفر تاني أو وضع التضمين'));
+}
 async function openPlayer(id){
   const it=items.find(i=>i.id===id);if(!it)return;
   playerOpen=true;
@@ -1487,9 +1592,10 @@ async function playerSrvCycle(n){
   await setPlayerSrv((playerSrv+1)%n);
 }
 async function setPlayerSrv(ix){
+  if(!Number.isInteger(ix)||ix<0||ix>=playerServers().length)return;
   playerSrv=ix;
   await sset('watchlist:playerSrv',String(ix));
-  await sset(SRV_LIST_LEN_KEY,String(PLAYER_SERVERS.length));
+  await sset(SRV_LIST_LEN_KEY,String(playerServers().length));
   renderModal();
   try{
     const host=new URL(currentPlayerTpl().replace(/\{[^}]+\}/g,'x')).hostname;
@@ -1497,8 +1603,7 @@ async function setPlayerSrv(ix){
   }catch(e){}
 }
 function currentPlayerTpl(){
-  if(playerSrv<PLAYER_SERVERS.length)return PLAYER_SERVERS[playerSrv].tpl;
-  return $('playerTpl').value.trim()||DEFAULT_PLAYER;
+  return playerServers()[playerSrv]?.tpl||null;
 }
 async function mysteryPlay(){
   const pool=items.filter(i=>i.status==='queue'&&i.type==='film');
@@ -1638,12 +1743,12 @@ function renderPlayer(it){
   const rs=it.resume;
   const resumeTxt=!mystery&&rs&&rs.pos>=60
     ?`<span class="srv" title="آخر مرة وقفت هنا — قدّم البلاير للمكان ده">${ic('clock','sm')}وقفت عند ${it.type==='tv'&&rs.s&&rs.e?`S${pad(rs.s)}E${pad(rs.e)} · `:''}${mmss(rs.pos)}</span>`:'';
-  const custom=$('playerTpl').value.trim();
-  const nSrv=PLAYER_SERVERS.length+((custom&&custom!==DEFAULT_PLAYER)?1:0);
-  const srvName=playerSrv<PLAYER_SERVERS.length?PLAYER_SERVERS[playerSrv].name:'مخصص';
+  const nSrv=playerServers().length;
+  const srvName=playerServers()[playerSrv]?.name||'سيرفر';
   const srvHost=(()=>{try{return new URL(currentPlayerTpl().replace(/\{[^}]+\}/g,'x')).hostname;}catch(e){return'';}})();
-  const srvChips=`<button class="srv on" data-act="playerSrvCycle" data-n="${nSrv}" title="بدّل السيرفر لو مش شغال — دلوقتي: ${esc(srvHost)}">${ic('server','sm')}${srvName} — بدّل</button>`;
-  const frame=!src?'':playerShield
+  const srvChips=`<button class="srv on" data-act="playerSrvCycle" data-n="${nSrv}" title="بدّل السيرفر لو مش شغال — دلوقتي: ${esc(srvHost)}">${ic('server','sm')}${esc(srvName)} — بدّل</button>`;
+  const compatible=compatiblePlayerActive();
+  const frame=!src?'':compatible?'':playerShield
     ?`<iframe src="${esc(src)}" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock" allow="fullscreen 'src' *; encrypted-media *; autoplay *; picture-in-picture *" allowfullscreen webkitallowfullscreen mozallowfullscreen referrerpolicy="no-referrer"></iframe>`
     :`<iframe src="${esc(src)}" allow="fullscreen 'src' *; encrypted-media *; autoplay *; picture-in-picture *" allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>`;
   return `
@@ -1651,6 +1756,7 @@ function renderPlayer(it){
       <button class="mclose plain" data-act="playerClose" title="رجوع للتفاصيل" aria-label="رجوع للتفاصيل">${ic('x','sm')}</button>
       <div class="pt">${mystery?`<b>فيلم غامض</b>`:`<b dir="auto">${esc(it.title)}</b>${epTxt}`}</div>
       ${mystery?'':srvChips}
+      ${embeddedApi&&!mystery?`<button class="srv" data-act="compatiblePlayer" aria-pressed="${compatible}" ${party.status==='connected'?'disabled':''}>${compatible?'رجوع للتضمين':'تشغيل متوافق'}</button>`:''}
       ${resumeTxt}
       ${mystery?'':`<span id="partyBadge">${partyBadgeHtml()}</span>`}
       <button class="srv" data-act="playerFs" title="ملء الشاشة">${ic('expand','sm')}ملء الشاشة</button>
@@ -1662,8 +1768,9 @@ function renderPlayer(it){
         :!mystery&&it.type==='tv'&&it.status==='queue'
         ?`<button class="btn btn-sm" data-act="startWatch" data-id="${it.id}">${ic('play','fill sm')}فعّل متابعة الحلقات</button>`:''}
     </div>
-    <div class="playerbox">
-      ${frame||`<div class="mystery-reveal"><div class="giftbig">${ic('gift')}</div><div class="mr-t">بجهّزلك المفاجأة…</div><div class="mr-s">استنى ثانية، الفيلم جاي</div></div>`}
+    ${compatible?'<div class="player-note">التشغيل المتوافق مفعّل. متابعة الحلقات تلقائيًا غير متاحة في الوضع ده.</div>':''}
+    <div class="playerbox" ${compatible&&src?`data-compatible data-src="${esc(src)}"`:''}>
+      ${compatible&&src?'':frame||`<div class="mystery-reveal"><div class="giftbig">${ic('gift')}</div><div class="mr-t">بجهّزلك المفاجأة…</div><div class="mr-s">استنى ثانية، الفيلم جاي</div></div>`}
       ${mystery?`<div class="wl-veil" id="wlVeil">
         <div class="giftbig">${ic('gift')}</div>
         <div class="wl-veil-t" id="wlVeilT">فيلمك الغامض جاهز</div>
@@ -1999,7 +2106,7 @@ async function aiRun(){
 }
 
 /* ================= تصدير/استيراد الإعدادات ================= */
-const SETTINGS_KEYS=['watchlist:omdbkey','watchlist:tmdbkey','watchlist:sites','watchlist:playerTpl','watchlist:playerSrv','watchlist:srvListLen','watchlist:playerShield','watchlist:statsOpen','watchlist:theme','watchlist:dlTpl','watchlist:subLang'];
+const SETTINGS_KEYS=['watchlist:omdbkey','watchlist:tmdbkey','watchlist:sites','watchlist:playerTpl',CUSTOM_SERVERS_KEY,'watchlist:playerSrv','watchlist:srvListLen','watchlist:playerShield','watchlist:statsOpen','watchlist:theme','watchlist:dlTpl','watchlist:subLang'];
 async function settingsExport(){
   const all=await chrome.storage.local.get(SETTINGS_KEYS);
   const out={__watchlistSettings:1};
@@ -2007,6 +2114,7 @@ async function settingsExport(){
   // اكتب القيم الفعلية حتى لو جاية من الـ defaults المدمجة في الكود
   if(out['watchlist:omdbkey']==null)out['watchlist:omdbkey']=DEFAULT_OMDB_KEY;
   if(out['watchlist:playerTpl']==null)out['watchlist:playerTpl']=DEFAULT_PLAYER;
+  if(out[CUSTOM_SERVERS_KEY]==null)out[CUSTOM_SERVERS_KEY]=JSON.stringify(customPlayerServers);
   if(out['watchlist:dlTpl']==null)out['watchlist:dlTpl']=DEFAULT_DL;
   const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
   const a=document.createElement('a');
@@ -2869,6 +2977,9 @@ document.addEventListener('click',(e)=>{
     case 'download': openDownload(id); break;
     case 'playerSrv': setPlayerSrv(parseInt(el.dataset.ix)); break;
     case 'playerSrvCycle': playerSrvCycle(parseInt(el.dataset.n)); break;
+    case 'compatiblePlayer': toggleCompatiblePlayer(); break;
+    case 'customServerAdd': customServerAdd(); break;
+    case 'customServerRemove': customServerRemove(parseInt(el.dataset.ix)); break;
     case 'playerShield': togglePlayerShield(); break;
     case 'adblockToggle': toggleAdblock(); break;
     case 'playerFs': playerFs(); break;

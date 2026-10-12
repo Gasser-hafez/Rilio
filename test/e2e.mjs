@@ -155,8 +155,13 @@ try {
     assert.equal(await app.ev(`fillUrl(PLAYER_SERVERS[3].tpl,{type:'film'},550)`), 'https://vidlink.pro/movie/550');
     assert.equal(await app.ev(`fillUrl(PLAYER_SERVERS[3].tpl,{type:'tv',curSeason:2,curEp:4},1396)`), 'https://vidlink.pro/tv/1396/2/5');
     const r = await app.ev(`JSON.stringify([restorePlayerSrv('3',undefined),restorePlayerSrv('3','4'),restorePlayerSrv('1',undefined),restorePlayerSrv('4','4'),restorePlayerSrv('99','4'),PLAYER_SERVERS.length])`);
-    // '3' من غير طول محفوظ = "مخصص" من أيام الـ 3 سيرفرات → يفضل مخصص (4) مش vidlink (3)
-    assert.deepEqual(JSON.parse(r), [4, 3, 1, 4, 4, 4]);
+    // مفيش سيرفرات مخصصة (القالب القديم javascript: اترفض) → اختيار "مخصص" القديم يرجع لسيرفر 1
+    assert.deepEqual(JSON.parse(r), [0, 3, 1, 0, 0, 4]);
+    // '3' من غير طول محفوظ = "مخصص" من أيام الـ 3 سيرفرات → يفضل أول مخصص (4) مش vidlink (3)
+    const c = await app.ev(`(()=>{const was=customPlayerServers;customPlayerServers=[{name:'x',tpl:'https://example.com/e/{tmdbID}'}];
+      const out=[restorePlayerSrv('3',undefined),restorePlayerSrv('4','4'),restorePlayerSrv('4','5'),restorePlayerSrv('5','5')];customPlayerServers=was;return JSON.stringify(out)})()`);
+    assert.deepEqual(JSON.parse(c), [4, 4, 4, 0]);
+    assert.deepEqual(await app.ev(`[validPlayerTpl('https://a.com/{tmdbID}'),validPlayerTpl('https://a.com/x'),validPlayerTpl('https://u:p@a.com/{tmdbID}'),validPlayerTpl('javascript:{tmdbID}')]`), [true, false, false, false]);
   });
   await check('updates section: shows current version; dev build never checks or installs', async () => {
     const r = await app.ev(`(async()=>{const st=await __wlDesktop.update.check();const inst=await __wlDesktop.update.install();

@@ -7,6 +7,7 @@ const { initUpdater } = require('./updater');
 const { initParty } = require('./party');
 const { initAdblock } = require('./adblock');
 const { initDownloads } = require('./downloads');
+const { initEmbeddedPlayer } = require('./embedded-player');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 // لازم يطابق appId في package.json عشان إشعارات ويندوز تظهر
@@ -505,6 +506,12 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+  const embeddedPlayer = initEmbeddedPlayer({ ipcMain, WebContentsView, getWindow: () => win, fromApp });
+  win.webContents.on('did-start-navigation', (_e, _url, inPlace, mainFrame) => {
+    if (mainFrame && !inPlace) embeddedPlayer.close();
+  });
+  win.on('closed', embeddedPlayer.close);
+  app.on('before-quit', embeddedPlayer.close);
   initParty({ getWindow: () => win, serverUrl: partyServerUrl(), fromApp });
   tray = new Tray(path.join(__dirname, 'icon.ico'));
   const updater = initUpdater({

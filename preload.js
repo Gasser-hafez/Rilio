@@ -27,6 +27,10 @@ if (process.isMainFrame && location.origin === 'app://local' && location.pathnam
   });
   contextBridge.exposeInMainWorld('__wlAllowOpen', () => ipcRenderer.sendSync('wl:allowOpen'));
   contextBridge.exposeInMainWorld('__wlDesktop', {
+    embeddedPlayer: {
+      layout: state => ipcRenderer.send('wl:embedded:layout', state),
+      onError: fn => ipcRenderer.on('wl:embedded:error', () => fn()),
+    },
     notify: p => ipcRenderer.invoke('wl:notify', p),
     titlebar: mood => ipcRenderer.invoke('wl:titlebar', mood),
     openExternal: url => ipcRenderer.invoke('wl:openExternal', url),
