@@ -19,7 +19,8 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": true,
@@ -46,6 +47,7 @@
       "popupblock.js",
       "mysteryhide.js",
       "icon*.png",
+      "icon.ico",
       "party.js",
       "party-server/src/protocol.mjs"
     ]

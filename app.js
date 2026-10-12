@@ -39,7 +39,6 @@ if(window.__wlDesktop)document.documentElement.classList.add('desktop');
 /* ================= الأيقونات (SVG خطية — نصوص ثابتة، مفيهاش بيانات يوزر) ================= */
 const ICONS={
   play:'<path d="M7 4.5v15l12-7.5z"/>',
-  playring:'<circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z" fill="currentColor"/>',
   check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
   x:'<path d="M6 6l12 12M18 6L6 18"/>',
@@ -331,18 +330,129 @@ function resetForm(){
   $('cancelEdit').style.display='none';
   $('addBox').open=false;
 }
-// زرار "ضيف" اللي جنب البحث: لو كاتب اسم في البحث بيتنقل للفورم على طول
+/* ================= الإضافة السريعة: سيرش لايف ================= */
+// بتكتب الاسم ← النتايج بتطلع وانت بتكتب ← "هشوفه" أو "شفته". الفورم القديم بقى للتعديل بس
+// المصدر TMDB (سريع وبوسترات أحسن)، ولو مفيش مفتاح TMDB بنرجع لـ OMDb
+let qaTimer=null, qaReq=0;
+const qaCache=new Map(), qaRows=new Map();
+const TMDB_PATH=/^\/[\w.-]+$/;
 function addOpen(){
-  const q=$('search').value.trim();
-  if(q&&!$('fTitle').value)$('fTitle').value=q;
-  $('addBox').open=true;
-  $('addBox').scrollIntoView({behavior:'smooth',block:'center'});
-  $('fTitle').focus({preventScroll:true});
+  if(editId){editId=null;resetForm();}
+  const box=$('quickAdd'), q=$('search').value.trim();
+  box.hidden=false;
+  if(q&&!$('qaInput').value){$('qaInput').value=q;qaSearch();}
+  box.scrollIntoView({behavior:'smooth',block:'center'});
+  $('qaInput').focus({preventScroll:true});
+}
+function qaClose(){
+  $('quickAdd').hidden=true;$('qaInput').value='';$('qaResults').innerHTML='';
+  clearTimeout(qaTimer);qaReq++;$('qaSpin').hidden=true;
+}
+$('qaInput').addEventListener('input',()=>{clearTimeout(qaTimer);qaTimer=setTimeout(qaSearch,300);});
+$('qaInput').addEventListener('keydown',e=>{if(e.key==='Enter'){clearTimeout(qaTimer);qaSearch();}});
+const omdbKey=async()=>(await sget('watchlist:omdbkey'))||DEFAULT_OMDB_KEY;
+// كل اللي جاي من TMDB/OMDb بيتنضف هنا: أرقام بس، بوستر بمسار صالح، والنصوص بتتعمل esc وقت العرض
+async function qaFetch(q){
+  if(await sget('watchlist:tmdbkey')){
+    const d=await tmdbFetch(`/search/multi?query=${encodeURIComponent(q)}&include_adult=false`);
+    return (d.results||[]).filter(r=>(r.media_type==='movie'||r.media_type==='tv')&&Number.isInteger(r.id)).slice(0,8).map(r=>({
+      key:`tm-${r.media_type}-${r.id}`,src:'tmdb',tmdbId:r.id,tv:r.media_type==='tv',
+      title:str(r.title||r.name),year:str(r.release_date||r.first_air_date).slice(0,4),
+      poster:TMDB_PATH.test(str(r.poster_path))?'https://image.tmdb.org/t/p/w154'+r.poster_path:null,
+      posterBig:TMDB_PATH.test(str(r.poster_path))?'https://image.tmdb.org/t/p/w342'+r.poster_path:null,
+      backdrop:TMDB_PATH.test(str(r.backdrop_path))?r.backdrop_path:null,desc:str(r.overview)}));
+  }
+  const data=await(await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(await omdbKey())}&s=${encodeURIComponent(q)}`)).json();
+  if(data.Error==='Invalid API key!')throw new Error('KEY');
+  return (data.Search||[]).filter(r=>(r.Type==='movie'||r.Type==='series')&&/^tt\d+$/.test(r.imdbID)).slice(0,8).map(r=>({
+    key:r.imdbID,src:'omdb',imdbID:r.imdbID,tv:r.Type==='series',title:str(r.Title),year:str(r.Year).slice(0,4),
+    poster:isHttp(r.Poster)?r.Poster:null}));
+}
+async function qaSearch(){
+  const q=$('qaInput').value.trim(), n=++qaReq;
+  if(q.length<2){$('qaResults').innerHTML='';$('qaSpin').hidden=true;return;}
+  $('qaSpin').hidden=false;
+  try{
+    let list=qaCache.get(q.toLowerCase());
+    if(!list){list=await qaFetch(q);qaCache.set(q.toLowerCase(),list);}
+    if(n!==qaReq)return; // اتكتب حاجة أحدث وانا مستني
+    qaRender(list);
+  }catch(e){
+    if(n!==qaReq)return;
+    $('qaResults').innerHTML=`<div class="qa-hint">${e.message==='KEY'?'مفتاح OMDb غلط — راجعه في الإعدادات':e.message==='BAD_KEY'?'مفتاح TMDB غلط — راجعه في الإعدادات':'مقدرتش أدوّر دلوقتي — اتأكد من النت'}</div>`;
+  }finally{if(n===qaReq)$('qaSpin').hidden=true;}
+}
+const qaOwned=r=>items.find(i=>r.src==='tmdb'?(i.tmdbId===r.tmdbId&&(i.type==='tv')===r.tv):i.imdbID===r.imdbID);
+function qaRender(list){
+  if(!list.length){$('qaResults').innerHTML='<div class="qa-hint">ملقتش حاجة بالاسم ده — جرّب تكتبه بالإنجليزي أو أدق</div>';return;}
+  list.forEach(r=>qaRows.set(r.key,r));
+  $('qaResults').innerHTML=list.map(r=>{
+    const own=qaOwned(r);
+    return `<div class="qa-row${own?' added':''}" data-key="${esc(r.key)}">
+      <div class="qa-p">${ic('film')}${r.poster?`<img src="${esc(r.poster)}" alt="" loading="lazy">`:''}</div>
+      <div class="qa-info">
+        <div class="qa-t" dir="auto">${esc(r.title)}</div>
+        <div class="qa-m">${r.tv?'مسلسل':'فيلم'}${r.year?' · '+esc(r.year):''}</div>
+      </div>
+      <div class="qa-acts">${own
+        ?`<span class="qa-own">${ic('check','sm')}في قايمتك</span>`
+        :`<button class="btn btn-sm btn-amber" data-act="qaAdd" data-key="${esc(r.key)}" data-s="queue">${ic('plus','sm')}هشوفه</button>
+          <button class="btn btn-sm" data-act="qaAdd" data-key="${esc(r.key)}" data-s="watched">${ic('check','sm')}شفته</button>`}</div>
+    </div>`;
+  }).join('');
+}
+// تقييم IMDb من OMDb بييجي في الخلفية — الإضافة نفسها متستناهوش (OMDb ساعات بيتأخر جداً)
+async function qaFillImdb(it){
+  if(!it.imdbID)return;
+  try{
+    const m=await(await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(await omdbKey())}&i=${encodeURIComponent(it.imdbID)}`,{signal:AbortSignal.timeout(60000)})).json();
+    if(m.Response!=='True')return;
+    const cur=items.find(i=>i.id===it.id);if(!cur)return;
+    cur.imdb=parseFloat(m.imdbRating)||cur.imdb||null;
+    if(!cur.genre&&m.Genre&&m.Genre!=='N/A')cur.genre=m.Genre;
+    await persist();render();if(modalId===cur.id&&!playerOpen)renderModal();
+  }catch(e){}
+}
+async function qaAdd(key,status){
+  const r=qaRows.get(key);
+  if(!r||!['queue','watched'].includes(status))return;
+  if(qaOwned(r)){toast('موجود في قايمتك بالفعل');return;}
+  const row=document.querySelector(`.qa-row[data-key="${CSS.escape(key)}"]`);
+  row?.querySelectorAll('button').forEach(b=>b.disabled=true);
+  try{
+    let raw;
+    if(r.src==='tmdb'){
+      const d=await tmdbFetch(`/${r.tv?'tv':'movie'}/${r.tmdbId}?append_to_response=external_ids`);
+      raw={title:d.title||d.name||r.title,genre:(d.genres||[]).map(g=>str(g.name)).filter(Boolean).join(', '),
+        year:parseInt(str(d.release_date||d.first_air_date).slice(0,4))||parseInt(r.year)||null,desc:str(d.overview)||r.desc,
+        poster:r.posterBig,backdrop:TMDB_PATH.test(str(d.backdrop_path))?d.backdrop_path:r.backdrop,tmdbId:r.tmdbId,
+        imdbID:str(d.external_ids&&d.external_ids.imdb_id),imdb:null};
+    }else{
+      const m=await(await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(await omdbKey())}&i=${encodeURIComponent(r.imdbID)}&plot=short`)).json();
+      if(m.Response!=='True')throw new Error('x');
+      raw={title:m.Title,genre:m.Genre&&m.Genre!=='N/A'?m.Genre:'',year:parseInt(str(m.Year).slice(0,4))||null,
+        imdb:parseFloat(m.imdbRating)||null,desc:m.Plot&&m.Plot!=='N/A'?m.Plot:'',poster:m.Poster&&m.Poster!=='N/A'?m.Poster:null,imdbID:r.imdbID};
+    }
+    const it=cleanItem({id:uid(),type:r.tv?'tv':'film',status,rating:null,note:'',added:Date.now(),order:Date.now(),
+      watchedAt:status==='watched'?Date.now():null,...raw});
+    if(!it)throw new Error('x');
+    items.unshift(it);
+    await persist();
+    tab=status;render();
+    if(row){row.classList.add('added');row.querySelector('.qa-acts').innerHTML=`<span class="qa-own">${ic('check','sm')}اتضاف</span>`;}
+    if(status==='watched'){openModal(it.id);toast('اتضاف لـ"شفتهم" — قيّمه');}
+    else toast('اتضاف لـ"هشوفهم" ✔');
+    if(r.src==='tmdb')qaFillImdb(it);
+  }catch(e){
+    row?.querySelectorAll('button').forEach(b=>b.disabled=false);
+    toast(e.message==='BAD_KEY'?'مفتاح TMDB غلط — راجعه في الإعدادات':'حصلت مشكلة في جلب التفاصيل — جرب تاني');
+  }
 }
 
 function startEdit(id){
   const it=items.find(i=>i.id===id);if(!it)return;
   closeModal();
+  qaClose(); // التعديل بيستخدم الفورم الكامل
   editId=id;
   $('fTitle').value=it.title;$('fType').value=it.type;$('fGenre').value=it.genre||'';
   pendingMeta=(it.year||it.imdb||it.desc||it.poster)?{year:it.year||null,imdb:it.imdb||null,desc:it.desc||'',poster:it.poster||null,imdbID:it.imdbID||null}:null;
@@ -871,6 +981,7 @@ document.addEventListener('keydown',e=>{
   else if($('statsOverlay').classList.contains('show'))closeStats();
   else if(playerOpen){playerOpen=false;renderModal();}
   else if(modalId)closeModal();
+  else if(!$('quickAdd').hidden)qaClose();
 });
 
 async function loadBackdrop(it){
@@ -2001,6 +2112,8 @@ document.addEventListener('click',(e)=>{
     case 'aiTest': aiTest(); break;
     case 'impWhy': e.preventDefault(); impWhyToggle(parseInt(el.dataset.ix)); break;
     case 'addOpen': addOpen(); break;
+    case 'qaClose': qaClose(); break;
+    case 'qaAdd': qaAdd(el.dataset.key,el.dataset.s); break;
     // window.open (مش لينك عادي) عشان الديسكتوب بيسمح بس بالنوافذ اللي الواجهة فتحتها
     case 'openGh': e.preventDefault(); window.open('https://github.com/Gasser-hafez','_blank'); break;
     case 'heroGo': heroGo(parseInt(el.dataset.ix),true); break;

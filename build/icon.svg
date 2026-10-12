@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- أيقونة rilio: Liquid Glass — حرف R فراغه زرار تشغيل، زجاج فوق ألوان متوهجة.. المصدر اللي اتعمل منه icon*.png و icon.ico -->
+  <defs>
+    <path id="mR" fill-rule="evenodd" clip-rule="evenodd" d="M330 260 H560 A150 150 0 0 1 610 551 L712 764 H596 L506 560 H430 V764 H330 Z M478 328 L616 410 L478 492 Z"/>
+    <clipPath id="mBody"><rect x="100" y="100" width="824" height="824" rx="186"/></clipPath>
+    <radialGradient id="gb1"><stop offset="0" stop-color="#ff2f6d"/><stop offset="1" stop-color="#ff2f6d" stop-opacity="0"/></radialGradient>
+    <radialGradient id="gb2"><stop offset="0" stop-color="#ffae1f"/><stop offset="1" stop-color="#ffae1f" stop-opacity="0"/></radialGradient>
+    <radialGradient id="gb3"><stop offset="0" stop-color="#5b45ff"/><stop offset="1" stop-color="#5b45ff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="gb4"><stop offset="0" stop-color="#00cfff"/><stop offset="1" stop-color="#00cfff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="m2Edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.95"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.15"/><stop offset="1" stop-color="#fff" stop-opacity="0.6"/></linearGradient>
+    <linearGradient id="m2Fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.42"/><stop offset="1" stop-color="#fff" stop-opacity="0.12"/></linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.18"/><stop offset="0.35" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity="0.5"/></filter>
+  </defs>
+  <g filter="url(#shadow)"><rect x="100" y="100" width="824" height="824" rx="186" fill="#0b0a1c"/></g>
+  <g clip-path="url(#mBody)">
+    <circle cx="560" cy="740" r="380" fill="url(#gb3)"/>
+    <circle cx="360" cy="320" r="360" fill="url(#gb1)"/>
+    <circle cx="720" cy="360" r="330" fill="url(#gb2)"/>
+    <circle cx="280" cy="720" r="270" fill="url(#gb4)"/>
+  </g>
+  <use href="#mR" fill="#100830" opacity="0.3" transform="translate(14 26)"/>
+  <use href="#mR" fill="url(#m2Fill)" stroke="url(#m2Edge)" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M350 282 H556" stroke="#fff" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#sheen)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="185" fill="none" stroke="#fff" stroke-opacity="0.18" stroke-width="3"/>
+</svg>
