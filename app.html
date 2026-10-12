@@ -58,6 +58,13 @@
   :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
   ::selection{background:color-mix(in srgb,var(--accent) 40%,transparent)}
   [hidden]{display:none!important}
+  /* سكرول بار رفيع بلون المزاج بدل الرمادي بتاع ويندوز */
+  ::-webkit-scrollbar{width:12px;height:12px}
+  ::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+  ::-webkit-scrollbar-button{display:none}
+  ::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--ink) 16%,transparent);background-clip:padding-box;border:3px solid transparent;border-radius:999px;min-height:48px}
+  ::-webkit-scrollbar-thumb:hover{background-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+  ::-webkit-scrollbar-thumb:active{background-color:var(--accent)}
 
   /* ============ الجو: إضاءة محيطة + حبيبات فيلم ============ */
   #ambient{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
@@ -94,7 +101,8 @@
   .ic.fill{fill:currentColor;stroke:none}
   .ic.sm{width:14px;height:14px} .ic.lg{width:24px;height:24px}
 
-  .wrap{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:18px 24px 64px;display:flex;flex-direction:column;gap:30px}
+  /* عرض الشاشة كله، والمسافات بتكبر مع الشاشة عشان العين ترتاح */
+  .wrap{position:relative;z-index:1;width:100%;margin:0 auto;padding:18px clamp(16px,3.2vw,56px) 64px;display:flex;flex-direction:column;gap:clamp(24px,2.4vw,36px)}
 
   /* ============ الأزرار ============ */
   .btn{
@@ -150,7 +158,7 @@
   .hello .ic{color:var(--queue);width:16px;height:16px}
   .tonight{font-family:var(--display);font-weight:800;font-size:28px;line-height:1.2;margin-top:2px}
   .searchbox{
-    flex:0 1 460px;display:flex;align-items:center;gap:10px;height:52px;margin:0;padding-inline:18px 6px;
+    flex:0 1 clamp(380px,32vw,560px);display:flex;align-items:center;gap:10px;height:52px;margin:0;padding-inline:18px 6px;
     background:var(--surface);border:1px solid var(--line);border-radius:999px;backdrop-filter:blur(14px);
     transition:border-color .2s,box-shadow .2s;
   }
@@ -185,17 +193,21 @@
   /* ============ اختيار الليلة + كمّل ============ */
   .hometop{display:flex;gap:20px;flex-wrap:wrap;align-items:stretch}
   .hero{
-    flex:999 1 600px;min-width:0;position:relative;min-height:400px;border-radius:30px;overflow:hidden;
-    background:var(--solid);box-shadow:0 40px 80px -34px color-mix(in srgb,var(--amb-a,var(--glow-a)) 55%,transparent),inset 0 0 0 1px rgba(255,255,255,.06);
+    flex:999 1 600px;min-width:0;position:relative;min-height:clamp(400px,32vw,580px);border-radius:30px;overflow:hidden;
+    background:var(--solid);box-shadow:0 40px 80px -44px color-mix(in srgb,var(--amb-a,var(--glow-a)) 40%,transparent);
     isolation:isolate;
   }
-  .hero .hbg{position:absolute;inset:0;z-index:-1}
-  .hero .hbg img{width:100%;height:100%;object-fit:cover;display:block;animation:breathe 18s ease-in-out infinite}
+  /* الصورة بتتحرك (zoom) — Chromium بيسرّب حافتها برا الركن المدوّر، فبنقصّها بنفس الشكل */
+  .hero .hbg{position:absolute;inset:0;z-index:-1;overflow:hidden;clip-path:inset(0 round 30px)}
+  .hero::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);pointer-events:none}
+  /* الوشوش غالباً في التلت الفوقاني من الخلفية — القص يبقى من تحت مش من النص */
+  .hero .hbg img{width:100%;height:100%;object-fit:cover;object-position:50% 12%;transform-origin:50% 0;display:block;animation:breathe 18s ease-in-out infinite}
   .hero .hbg.poster img{filter:blur(28px) saturate(1.2);transform:scale(1.25);animation:none}
   .hero .hbg.art{background:radial-gradient(circle at 26% 30%,var(--accent) 0 18%,transparent 19%),radial-gradient(ellipse 120% 60% at 30% 105%,color-mix(in srgb,var(--accent) 35%,var(--bg)) 0 50%,transparent 51%),linear-gradient(var(--raised),var(--solid))}
-  .hero .hbg::after{content:'';position:absolute;inset:0;background:linear-gradient(to left,rgba(var(--scrim),.94),rgba(var(--scrim),.55) 55%,rgba(var(--scrim),.1)),linear-gradient(to top,rgba(var(--scrim),.7),transparent 45%)}
+  .hero .hbg::after{content:'';position:absolute;inset:0;background:linear-gradient(to right,rgba(var(--scrim),.94),rgba(var(--scrim),.55) 55%,rgba(var(--scrim),.1)),linear-gradient(to top,rgba(var(--scrim),.7),transparent 45%)}
+  .hero.empty .hbg::after{background:linear-gradient(to left,rgba(var(--scrim),.94),rgba(var(--scrim),.55) 55%,rgba(var(--scrim),.1)),linear-gradient(to top,rgba(var(--scrim),.7),transparent 45%)}
   @keyframes breathe{0%,100%{transform:scale(1.02)}50%{transform:scale(1.07)}}
-  .hero .hin{position:relative;height:100%;min-height:400px;padding:36px 40px;display:flex;flex-direction:column;justify-content:flex-end;gap:14px;max-width:560px;color:#F6EEE3}
+  .hero .hin{position:relative;height:100%;min-height:clamp(400px,32vw,580px);padding:clamp(28px,3vw,48px) clamp(28px,3.2vw,56px);display:flex;flex-direction:column;justify-content:flex-end;gap:14px;max-width:clamp(520px,42vw,700px);color:#F6EEE3}
   .hero .hbadge{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:999px;background:rgba(255,211,110,.16);color:#FFD36E;font-size:13px;font-weight:600}
   .hero .htitle{font-family:var(--display);font-weight:800;font-size:clamp(34px,4.4vw,56px);line-height:1.02;letter-spacing:-.5px;text-shadow:0 4px 24px rgba(0,0,0,.45);overflow-wrap:anywhere}
   .hero .hmeta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px;color:#E4D9EE}
@@ -205,9 +217,25 @@
   .hero .hact .btn{height:52px;padding:0 26px;font-size:16px}
   .hero .hact .iconbtn{width:52px;height:52px;background:rgba(var(--scrim),.45);border-color:rgba(246,238,227,.25);color:#F6EEE3;backdrop-filter:blur(8px)}
   .hero.empty .hin{justify-content:center}
+  /* العناوين والأوصاف إنجليزي غالباً — الكلام على الشمال، والصورة باينة على اليمين */
+  .hero:not(.empty) .hin{direction:ltr;text-align:left;margin-right:auto;margin-left:0}
+  .hero:not(.empty) .hin .hbadge,.hero:not(.empty) .hin .hmeta>span{unicode-bidi:plaintext}
+  /* شرايح اختيار الليلة: الجديدة بتظهر فوق القديمة ببطء، والكلام بيطلع بعدها بلحظة */
+  .hslide{position:absolute;inset:0;isolation:isolate;opacity:0;transition:opacity 1.5s ease}
+  .hslide.on{opacity:1}
+  .hslide .hin>*{transform:translateY(14px);opacity:0;transition:transform 1s cubic-bezier(.2,.8,.2,1),opacity 1s ease}
+  .hslide.on .hin>*{transform:none;opacity:1}
+  .hslide.on .hin>:nth-child(2){transition-delay:.35s} .hslide.on .hin>:nth-child(3){transition-delay:.45s}
+  .hslide.on .hin>:nth-child(4){transition-delay:.55s} .hslide.on .hin>:nth-child(5){transition-delay:.65s}
+  .hslide.on .hin>:nth-child(1){transition-delay:.25s}
+  .hdots{position:absolute;bottom:22px;right:28px;z-index:3;display:flex;gap:6px;direction:ltr}
+  .hdots button{width:8px;height:22px;padding:7px 0;background-clip:content-box;border:none;border-radius:999px;background-color:rgba(246,238,227,.35);transition:width .4s ease,background-color .4s}
+  .hdots button:hover{background-color:rgba(246,238,227,.6)}
+  .hdots button[aria-current]{width:26px;background-color:#F6EEE3}
   .dotsep{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.4;flex-shrink:0}
 
-  .side{flex:1 1 300px;display:flex;flex-direction:column;gap:14px;min-width:0}
+  .side{flex:1 1 300px;max-width:440px;display:flex;flex-direction:column;gap:14px;min-width:0}
+  @media(max-width:960px){.side{max-width:none}}
   .cw{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px 14px 12px;backdrop-filter:blur(16px);display:flex;flex-direction:column;gap:4px}
   .cw-h{display:flex;align-items:center;gap:9px;padding:0 8px 8px}
   .cw-h h2{font-family:var(--display);font-weight:700;font-size:18px;flex:1}
@@ -234,6 +262,26 @@
   .mystery b{display:block;font-family:var(--display);font-weight:700;font-size:17px;color:var(--queue);line-height:1.3}
   .mystery small{display:block;font-size:12px;color:var(--muted)}
   @keyframes wob{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg) scale(1.06)}}
+  /* لو مفيش "كمّل اللي بدأته"، الصندوق الغامض ياخد العمود كله بدل ما يسيب فراغ */
+  .cw[hidden]+.mystery{flex:1;flex-direction:column;justify-content:center;text-align:center;gap:16px;padding:28px}
+  .cw[hidden]+.mystery .gift{width:84px;height:84px;border-radius:26px}
+  .cw[hidden]+.mystery .gift .ic{width:42px;height:42px;stroke-width:1.6}
+  .cw[hidden]+.mystery b{font-size:24px}
+  .cw[hidden]+.mystery small{font-size:14px}
+  /* نافذة صغيرة: العمود الجانبي بينزل صف واحد تحت الـ hero، والصندوق يرجع صغير */
+  @media(max-width:1100px){
+    .hometop{flex-direction:column}
+    .hero{flex:none}
+    .side{flex:none;max-width:none;flex-direction:row;flex-wrap:wrap;align-items:stretch}
+    .side .cw{flex:999 1 340px}
+    .side .mystery,.cw[hidden]+.mystery{flex:1 1 260px;flex-direction:row;justify-content:flex-start;text-align:start;gap:14px;padding:16px 18px}
+    .cw[hidden]+.mystery .gift{width:46px;height:46px;border-radius:14px}
+    .cw[hidden]+.mystery .gift .ic{width:24px;height:24px;stroke-width:2}
+    .cw[hidden]+.mystery b{font-size:17px}
+    .cw[hidden]+.mystery small{font-size:12px}
+    .toolbar .spacer{display:none}
+    .tabs{width:100%}
+  }
 
   /* ============ التابات والفلاتر ============ */
   .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -269,7 +317,7 @@
   .bkbanner .btn-amber{background:var(--watched);border-color:var(--watched);color:var(--watched-ink);box-shadow:none}
 
   /* ============ حائط البوسترات ============ */
-  .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:30px 22px}
+  .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(160px,11.5vw,240px),1fr));gap:clamp(24px,2.2vw,36px) clamp(18px,1.6vw,28px)}
   @media(max-width:520px){.wall{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:22px 14px}}
   .pcard{display:flex;flex-direction:column;gap:12px;cursor:pointer;outline:none;transition:transform .3s cubic-bezier(.34,1.4,.5,1)}
   .pcard:hover,.pcard:focus-visible{transform:translateY(-6px)}
@@ -326,6 +374,10 @@
   .empty b{display:block;color:var(--ink);font-family:var(--display);font-weight:700;font-size:20px;margin-bottom:4px}
   .foot{display:flex;align-items:center;justify-content:center;gap:10px;padding-top:24px;border-top:1px dashed var(--line-2);color:var(--faint);font-size:13px}
   .foot .wordmark{font-size:18px;color:var(--ink-2)}
+  .foot{flex-wrap:wrap}
+  .ghlink{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;color:var(--ink-2);text-decoration:none;border:1px solid var(--line);transition:color .2s,border-color .2s,background .2s}
+  .ghlink:hover{color:var(--accent-hi);border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  .ghlink .ic{width:16px;height:16px}
 
   /* ============ المودالات ============ */
   .overlay{
@@ -334,7 +386,7 @@
   }
   .overlay.show{display:flex}
   .modal{
-    width:100%;max-width:740px;position:relative;overflow:hidden;
+    width:100%;max-width:780px;position:relative;overflow:hidden;
     background:color-mix(in srgb,var(--solid) 95%,transparent);backdrop-filter:blur(24px);
     border:1px solid var(--line);border-radius:30px;
     box-shadow:0 50px 100px -30px color-mix(in srgb,var(--amb-a,var(--glow-a)) 35%,transparent),0 30px 60px -20px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);
@@ -357,19 +409,23 @@
   .bdrop{position:relative;height:240px;background:var(--raised);overflow:hidden}
   .bdrop img{width:100%;height:100%;object-fit:cover;display:block}
   .bdrop::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,color-mix(in srgb,var(--solid) 92%,transparent) 4%,rgba(var(--scrim),.25) 60%,rgba(var(--scrim),.1))}
-  .mhead{display:flex;gap:20px;padding:0 28px;margin-top:-86px;position:relative;z-index:2;align-items:flex-end}
-  .mposter{flex:0 0 128px;aspect-ratio:2/3;border-radius:16px;overflow:hidden;position:relative;background:var(--raised);box-shadow:0 16px 32px -10px rgba(0,0,0,.7),0 0 0 4px var(--solid)}
+  .mhead{display:flex;gap:22px;padding:0 30px;margin-top:-100px;position:relative;z-index:2;align-items:flex-end}
+  .mposter{flex:0 0 140px;aspect-ratio:2/3;border-radius:16px;overflow:hidden;position:relative;background:var(--raised);box-shadow:0 16px 32px -10px rgba(0,0,0,.7),0 0 0 4px var(--solid)}
   .mposter img{width:100%;height:100%;object-fit:cover;display:block}
   .mposter .noimg .nt{font-size:15px;inset-inline:10px;bottom:10px}
-  .mtitles{padding-bottom:4px;min-width:0;display:flex;flex-direction:column;gap:10px}
-  .mtitle{font-family:var(--display);font-weight:800;font-size:34px;line-height:1.05;overflow-wrap:anywhere;text-shadow:0 2px 14px rgba(0,0,0,.4)}
+  .mtitles{flex:1;padding-bottom:4px;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+  .mtitles .mact{margin-top:6px}
+  .mtitles .mact .btn{height:46px}
+  .mtitles .mact .btn-amber{padding:0 24px;font-size:15px}
+  /* العنوان الإنجليزي جنب البوستر (يمين) زي الشرايح اللي تحته */
+  .mtitle{font-family:var(--display);font-weight:800;font-size:34px;line-height:1.05;overflow-wrap:anywhere;text-shadow:0 2px 14px rgba(0,0,0,.4);text-align:right}
   .mchips{display:flex;gap:6px;flex-wrap:wrap}
   .mchip{height:28px;padding:0 12px;border-radius:999px;background:var(--raised);color:var(--ink-2);font-size:12px;display:inline-flex;align-items:center;gap:6px}
   .mchip.iv{background:color-mix(in srgb,var(--queue) 15%,transparent);color:var(--queue);font-weight:600}
   .mchip.st{background:color-mix(in srgb,var(--c) 15%,transparent);color:var(--c);font-weight:600}
   .mchip.st::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--c)}
   .st-queue{--c:var(--queue)} .st-watching{--c:var(--watching)} .st-watched{--c:var(--watched)} .st-dropped{--c:var(--dropped)}
-  .mbody{padding:20px 28px 28px;display:flex;flex-direction:column;gap:18px}
+  .mbody{padding:22px 30px 18px;display:flex;flex-direction:column;gap:16px}
   .mdesc{font-size:15px;color:var(--ink-2);line-height:1.8;opacity:.9}
   .msec{background:var(--field);border:1px solid var(--line);border-radius:22px;padding:18px 20px}
   .msec .sh{font-family:var(--display);font-weight:700;font-size:18px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
@@ -403,13 +459,18 @@
   .noterow input{flex:1}
   .mnote-view{font-size:14px;color:var(--ink-2);border-inline-start:3px solid var(--watched);padding-inline-start:12px}
   .mact{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  .mact .btn{height:50px}
-  .mact .btn-amber{padding:0 26px;font-size:16px}
-  .mact.more{gap:2px;padding-top:14px;border-top:1px dashed var(--line-2)}
-  .mact.more .btn{height:40px;border-color:transparent;color:var(--muted);border-radius:12px;padding:0 12px}
-  .mact.more .btn:hover{color:var(--ink)}
-  .mact.more .btn-watch{color:var(--accent-hi)}
-  .mact.more .btn-danger{color:var(--dropped);margin-inline-start:auto}
+  .sitegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+  .site{height:44px;padding:0 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:14px;font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:8px;transition:border-color .2s,background .2s,color .2s}
+  .site span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .site .ic{color:var(--faint)}
+  .site:hover{border-color:color-mix(in srgb,var(--accent) 50%,transparent);background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent-hi)}
+  .site:hover .ic{color:var(--accent)}
+  .mtools{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:4px;padding-top:12px;border-top:1px solid var(--line)}
+  .tool{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border-radius:14px;border:none;background:transparent;color:var(--muted);font-size:12px;transition:background .2s,color .2s}
+  .tool .ic{width:20px;height:20px}
+  .tool:hover{background:var(--hover);color:var(--ink)}
+  .tool.danger{color:var(--dropped)}
+  .tool.danger:hover{background:color-mix(in srgb,var(--dropped) 10%,transparent);color:var(--dropped)}
   .rw{font-size:14px;color:var(--ink-2);line-height:1.75}
   .rw-l{color:var(--muted);font-size:12px;margin:10px 0 6px}
   .rw-chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -732,6 +793,8 @@
     <span class="wordmark" aria-label="rilio">r<span class="i1">i</span>l<span class="i2">i</span><span class="o"></span></span>
     <span class="dotsep"></span>
     <span id="footCount"></span>
+    <span class="dotsep"></span>
+    <a class="ghlink" href="https://github.com/Gasser-hafez" data-act="openGh" dir="ltr"><i data-ic="github"></i>Gasser-hafez</a>
   </footer>
 </div>
 

@@ -86,7 +86,9 @@ const ICONS={
   clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   bookmark:'<path d="M6 3h12v18l-6-4-6 4z"/>',
   alert:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
-  clipboard:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/>'
+  ext:'<path d="M7 17L17 7M9 7h8v8"/>',
+  clipboard:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/>',
+  github:'<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.2-1.5 6.2-6.7a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.6s-1.2-.3-3.8 1.4a13 13 0 0 0-7 0C6.4 1.6 5.2 1.9 5.2 1.9a4.8 4.8 0 0 0-.1 3.6 5.2 5.2 0 0 0-1.4 3.6c0 5.2 3.2 6.4 6.2 6.7a3.4 3.4 0 0 0-.9 2.6V22"/>'
 };
 const ic=(n,cls='')=>`<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]||''}</svg>`;
 document.querySelectorAll('i[data-ic]').forEach(el=>{el.outerHTML=ic(el.dataset.ic,el.className);});
@@ -441,21 +443,13 @@ $('viewBtn').onclick=async()=>{
   render();
 };
 
-// زرار النرد في "اختيار الليلة": اختيار عشوائي من "هشوفهم"، والأعلى على IMDb فرصته أكبر
+// الفيلم الغامض: اختيار عشوائي من "هشوفهم"، والأعلى على IMDb فرصته أكبر
 function weightedPick(pool){
   const weights=pool.map(i=>Math.pow(i.imdb||6,2));
   let r=Math.random()*weights.reduce((a,b)=>a+b,0);
   for(let j=0;j<pool.length;j++){r-=weights[j];if(r<=0)return pool[j];}
   return pool[0];
 }
-function heroShuffle(){
-  const cur=heroItem();
-  const pool=items.filter(i=>i.status==='queue'&&(!cur||i.id!==cur.id));
-  if(!pool.length){toast('مفيش غيره في "هشوفهم"');return;}
-  heroId=weightedPick(pool).id;
-  renderHome();
-}
-
 $('sortBtn').onclick=()=>{
   if(tab==='watched'){sortDesc=!sortDesc;}
   else{queueSort=queueSort==='manual'?'added':queueSort==='added'?'imdbDesc':queueSort==='imdbDesc'?'imdbAsc':'manual';}
@@ -623,43 +617,93 @@ function quickHtml(it){
 }
 
 /* ================= اختيار الليلة + كمّل اللي بدأته ================= */
-let heroId=null, heroKey='', heroCurId=null;
-// التالي في "هشوفهم" (ترتيبك اليدوي)، أو اللي النرد اختاره
-function heroItem(){
-  const q=items.filter(i=>i.status==='queue');
-  if(!q.length)return null;
-  return q.find(i=>i.id===heroId)||q.slice().sort((a,b)=>(a.order??a.added??0)-(b.order??b.added??0))[0];
+// الـ hero بيلف على أول عناوين "هشوفهم" (بترتيبك) بانتقال هادي — وبيقف لما الماوس عليه أو فيه نافذة مفتوحة
+const HERO_MAX=6, HERO_EVERY=9000, HERO_FADE=1500;
+let heroIdx=0, heroSig='', heroCurId=null, heroHover=false, heroBusy=false;
+const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
+function heroList(){
+  return items.filter(i=>i.status==='queue').sort((a,b)=>(a.order??a.added??0)-(b.order??b.added??0)).slice(0,HERO_MAX);
 }
+function heroItem(){const l=heroList();return l.length?l[heroIdx%l.length]:null;}
+const heroImg=it=>it.backdrop?`https://image.tmdb.org/t/p/w1280${it.backdrop}`:it.poster||null;
+function heroSlideHtml(it,i,n){
+  const bg=it.backdrop?`<div class="hbg"><img src="${esc(heroImg(it))}" alt=""></div>`
+    :it.poster?`<div class="hbg poster"><img src="${esc(it.poster)}" alt=""></div>`:`<div class="hbg art"></div>`;
+  return `${bg}<div class="hin">
+    <span class="hbadge">${ic('star','fill sm')}${i===0?'اختيار الليلة · التالي في قايمتك':`اختيار الليلة · ${i+1} من ${n}`}</span>
+    <div class="htitle" dir="auto">${esc(it.title)}</div>
+    <div class="hmeta"><span>${KIND(it)}${it.year?' · '+it.year:''}</span>${it.imdb?`<span class="dotsep"></span><span class="imdb">IMDb ★ ${it.imdb}</span>`:''}${it.genre?`<span class="dotsep"></span><span dir="auto">${esc(it.genre)}</span>`:''}</div>
+    ${it.desc?`<p class="hdesc" dir="auto">${esc(it.desc)}</p>`:''}
+    <div class="hact">
+      <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل</button>
+      <button class="btn btn-glass" data-act="open" data-id="${it.id}">التفاصيل</button>
+    </div></div>`;
+}
+const heroDotsHtml=n=>n<2?'':`<div class="hdots" role="group" aria-label="اختيارات الليلة">${Array.from({length:n},(_,i)=>
+  `<button data-act="heroGo" data-ix="${i}" aria-label="اختيار ${i+1}"${i===heroIdx?' aria-current="true"':''}></button>`).join('')}</div>`;
+const heroSigOf=list=>{const c=list[heroIdx];return list.map(i=>i.id).join('|')+'#'+(c?[c.id,c.title,c.backdrop,c.poster,c.imdb,c.year,c.desc,c.genre].join('|'):'');};
+// انتقال لعنوان تاني: بنحمّل صورته الأول، وبعدين الشريحة الجديدة بتظهر فوق القديمة ببطء
+function heroGo(ix,user){
+  const list=heroList();
+  if(heroBusy||list.length<2||ix===heroIdx)return;
+  ix=(ix+list.length)%list.length;
+  const it=list[ix];
+  heroBusy=true;
+  const show=()=>{
+    const h=$('hero'), old=h.querySelector('.hslide.on'), s=document.createElement('div');
+    s.className='hslide';s.innerHTML=heroSlideHtml(it,ix,list.length);
+    h.insertBefore(s,h.querySelector('.hdots'));
+    void s.offsetWidth; // عشان الـ transition يشتغل من opacity:0
+    s.classList.add('on');
+    if(old){old.classList.remove('on');setTimeout(()=>old.remove(),HERO_FADE+100);}
+    heroIdx=ix;heroCurId=it.id;heroSig=heroSigOf(list);
+    h.querySelectorAll('.hdots button').forEach((b,i)=>b.toggleAttribute('aria-current',i===ix));
+    if(!modalId)setAmbient(it);
+    const next=list[(ix+1)%list.length];if(next.backdrop==null)loadBackdrop(next);
+    setTimeout(()=>{heroBusy=false;},HERO_FADE);
+  };
+  const src=heroImg(it);
+  if(!src)return show();
+  const img=new Image(), t=setTimeout(show,2500); // الصورة اتأخرت؟ نكمّل من غيرها
+  img.onload=img.onerror=()=>{clearTimeout(t);show();};
+  img.src=src;
+  if(user)heroRestart();
+}
+let heroTimer=null;
+function heroRestart(){
+  clearInterval(heroTimer);
+  heroTimer=setInterval(()=>{
+    if(heroHover||modalId||document.hidden||reduceMotion.matches||$('homeTop').hidden)return;
+    heroGo(heroIdx+1);
+  },HERO_EVERY);
+}
+$('hero').addEventListener('mouseenter',()=>{heroHover=true;});
+$('hero').addEventListener('mouseleave',()=>{heroHover=false;});
+$('hero').addEventListener('focusin',()=>{heroHover=true;});
+$('hero').addEventListener('focusout',()=>{heroHover=false;});
+heroRestart();
+
 function renderHome(){
   $('homeTop').hidden=!!$('search').value.trim();
-  const it=heroItem();
+  const list=heroList();
+  if(heroIdx>=list.length)heroIdx=0;
+  const it=list[heroIdx]||null;
   heroCurId=it?it.id:null;
-  // بنعيد بناء الـ hero بس لو اتغيّر فعلاً — عشان الصورة متعملش وميض مع كل render
-  const key=it?[it.id,it.title,it.backdrop,it.poster,it.imdb,it.year,it.desc,it.genre,heroId===it.id].join('|'):'empty';
-  if(key!==heroKey){
-    heroKey=key;
+  // بنعيد البناء (من غير انتقال) بس لو القايمة نفسها اتغيرت — عشان الصورة متعملش وميض مع كل render
+  const sig=heroSigOf(list);
+  if(sig!==heroSig&&!heroBusy){
+    heroSig=sig;
     const h=$('hero');
     h.classList.toggle('empty',!it);
     if(!it){
-      h.innerHTML=`<div class="hbg art"></div><div class="hin">
+      h.innerHTML=`<div class="hslide on"><div class="hbg art"></div><div class="hin">
         <span class="hbadge">${ic('star','fill sm')}اختيار الليلة</span>
         <div class="htitle">قايمتك لسه فاضية</div>
         <p class="hdesc">ضيف أول فيلم أو مسلسل، وكل ليلة هنختارلك حاجة تتفرج عليها</p>
-        <div class="hact"><button class="btn btn-amber" data-act="addOpen">${ic('plus')}ضيف أول حاجة</button></div></div>`;
+        <div class="hact"><button class="btn btn-amber" data-act="addOpen">${ic('plus')}ضيف أول حاجة</button></div></div></div>`;
     }else{
-      const bg=it.backdrop?`<div class="hbg"><img src="https://image.tmdb.org/t/p/w1280${esc(it.backdrop)}" alt=""></div>`
-        :it.poster?`<div class="hbg poster"><img src="${esc(it.poster)}" alt=""></div>`:`<div class="hbg art"></div>`;
-      h.innerHTML=`${bg}<div class="hin">
-        <span class="hbadge">${ic('star','fill sm')}${heroId===it.id?'اختيار عشوائي الليلة':'اختيار الليلة · التالي في قايمتك'}</span>
-        <div class="htitle" dir="auto">${esc(it.title)}</div>
-        <div class="hmeta"><span>${KIND(it)}${it.year?' · '+it.year:''}</span>${it.imdb?`<span class="dotsep"></span><span class="imdb">IMDb ★ ${it.imdb}</span>`:''}${it.genre?`<span class="dotsep"></span><span dir="auto">${esc(it.genre)}</span>`:''}</div>
-        ${it.desc?`<p class="hdesc" dir="auto">${esc(it.desc)}</p>`:''}
-        <div class="hact">
-          <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل</button>
-          <button class="btn btn-glass" data-act="open" data-id="${it.id}">التفاصيل</button>
-          <button class="iconbtn" data-act="heroShuffle" title="اختارلي حاجة تانية" aria-label="اختارلي حاجة تانية">${ic('dice')}</button>
-        </div></div>`;
-      if(it.backdrop==null)loadBackdrop(it);
+      h.innerHTML=`<div class="hslide on">${heroSlideHtml(it,heroIdx,list.length)}</div>${heroDotsHtml(list.length)}`;
+      list.forEach(x=>{if(x.backdrop==null)loadBackdrop(x);}); // مرة واحدة لكل عنوان (loadBackdrop بيتأكد)
     }
   }
   if(!modalId)setAmbient(it);
@@ -860,9 +904,6 @@ function renderModal(){
   $('overlay').classList.toggle('theater',playerOpen);
   if(playerOpen){$('modal').innerHTML=renderPlayer(it);partySyncMedia(it);return;}
   const bd=it.backdrop?`https://image.tmdb.org/t/p/w780${it.backdrop}`:null;
-  const sitesBtns=(it.status==='queue'||it.status==='watching')
-    ?sites.map((s,ix)=>`<button class="btn btn-sm btn-watch" data-act="watch" data-id="${it.id}" data-site="${ix}">${esc(s.name)} ↗</button>`).join('')
-    :'';
   const total=it.seasonEps?it.seasonEps[it.curSeason||1]:null;
   const remain=total!=null?Math.max(0,total-(it.curEp||0)):null;
   const ep=it.curEp||0;
@@ -907,7 +948,9 @@ function renderModal(){
     </div>`
     :(it.note?`<div class="msec"><div class="sh">ملاحظتي</div><div class="mnote-view" dir="auto">${esc(it.note)}</div></div>`:'');
   const ST={queue:'هشوفه',watching:'بتفرج',watched:'شفته',dropped:'سبته'};
+  const active=it.status==='queue'||it.status==='watching';
 
+  // الترتيب: مين/إيه ← شغّل ← المحتوى ← مواقع المشاهدة ← أدوات صغيرة
   $('modal').innerHTML=`
     <div class="bdrop">${bd?`<img src="${esc(bd)}" alt="">`:noimgHtml(it,false)}</div>
     <button class="mclose" data-act="closeModal" title="إغلاق" aria-label="إغلاق">${ic('x')}</button>
@@ -918,8 +961,14 @@ function renderModal(){
         <div class="mchips">
           ${ST[it.status]?`<span class="mchip st st-${it.status}">${ST[it.status]}</span>`:''}
           <span class="mchip">${KIND(it)}${it.year?' · '+it.year:''}</span>
-          ${it.genre?`<span class="mchip" dir="auto">${esc(it.genre)}</span>`:''}
           ${it.imdb?`<span class="mchip iv">IMDb ★ ${it.imdb}</span>`:''}
+          ${it.genre?`<span class="mchip" dir="auto">${esc(it.genre)}</span>`:''}
+        </div>
+        <div class="mact">
+          <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل هنا</button>
+          ${it.status==='queue'?`<button class="btn" data-act="watched" data-id="${it.id}">${ic('check')}شفته — قيّمه</button>`:''}
+          ${it.status==='queue'&&it.type==='tv'?`<button class="btn" data-act="startWatch" data-id="${it.id}">${ic('play','fill sm')}بدأته</button>`:''}
+          ${it.status==='watching'?`<button class="btn" data-act="watched" data-id="${it.id}">${ic('check')}خلصته — قيّمه</button>`:''}
         </div>
       </div>
     </div>
@@ -929,21 +978,17 @@ function renderModal(){
       ${progSec}
       ${rateSec}
       ${it.recWhy||it.recFrom?`<div class="msec why"><div class="sh">${ic('spark')}اترشحلك ليه</div><div class="rw">${recWhyHtml(it.recWhy,it.recFrom)}</div></div>`:''}
-      <div class="mact">
-        <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل هنا</button>
-        ${it.status==='queue'?`<button class="btn" data-act="watched" data-id="${it.id}">${ic('check')}شفته — قيّمه</button>`:''}
-        ${it.status==='queue'&&it.type==='tv'?`<button class="btn" data-act="startWatch" data-id="${it.id}">${ic('play','fill sm')}بدأته</button>`:''}
-        ${it.status==='watching'?`<button class="btn" data-act="watched" data-id="${it.id}">${ic('check')}خلصته — قيّمه</button>`:''}
-        <button class="btn btn-ghost" data-act="moreToggle" aria-label="المزيد">${ic('more')}المزيد</button>
-      </div>
-      <div class="mact more" id="moreActs" style="display:none">
-        <button class="btn btn-sm" data-act="download" data-id="${it.id}">${ic('download','sm')}تحميل</button>
-        ${sitesBtns}
-        <button class="btn btn-sm" data-act="trailer" data-id="${it.id}">${ic('film','sm')}تريلر</button>
-        ${(it.status==='queue'||it.status==='watching')?`<button class="btn btn-sm" data-act="drop" data-id="${it.id}">${ic('x','sm')}سبته</button>`:''}
-        ${it.status!=='queue'?`<button class="btn btn-sm" data-act="toQueue" data-id="${it.id}">${ic('undo','sm')}رجّعه للقايمة</button>`:''}
-        <button class="btn btn-sm" data-act="edit" data-id="${it.id}">${ic('edit','sm')}تعديل</button>
-        <button class="btn btn-sm btn-danger" data-act="del" data-id="${it.id}">${ic('trash','sm')}حذف</button>
+      ${active&&sites.length?`<div class="msec">
+        <div class="sh">اتفرج على موقع<span class="aside">بيفتح في نافذة جديدة</span></div>
+        <div class="sitegrid">${sites.map((s,ix)=>`<button class="site" data-act="watch" data-id="${it.id}" data-site="${ix}"><span dir="auto">${esc(s.name)}</span>${ic('ext','sm')}</button>`).join('')}</div>
+      </div>`:''}
+      <div class="mtools">
+        <button class="tool" data-act="download" data-id="${it.id}">${ic('download')}تحميل</button>
+        <button class="tool" data-act="trailer" data-id="${it.id}">${ic('film')}تريلر</button>
+        ${active?`<button class="tool" data-act="drop" data-id="${it.id}">${ic('x')}سبته</button>`:''}
+        ${it.status!=='queue'?`<button class="tool" data-act="toQueue" data-id="${it.id}">${ic('undo')}رجّعه للقايمة</button>`:''}
+        <button class="tool" data-act="edit" data-id="${it.id}">${ic('edit')}تعديل</button>
+        <button class="tool danger" data-act="del" data-id="${it.id}">${ic('trash')}حذف</button>
       </div>
     </div>`;
 }
@@ -1988,7 +2033,6 @@ document.addEventListener('click',(e)=>{
     case 'theme': setTheme(el.dataset.v); break;
     case 'settingsClose': closeSettings(); break;
     case 'statsClose': closeStats(); break;
-    case 'moreToggle': {const m=$('moreActs');if(m)m.style.display=m.style.display==='none'?'flex':'none';} break;
     case 'setImport': $('setFile').click(); break;
     case 'partyOpen': partyOpen(); break;
     case 'partyClose': partyClose(); break;
@@ -2006,7 +2050,9 @@ document.addEventListener('click',(e)=>{
     case 'aiTest': aiTest(); break;
     case 'impWhy': e.preventDefault(); impWhyToggle(parseInt(el.dataset.ix)); break;
     case 'addOpen': addOpen(); break;
-    case 'heroShuffle': heroShuffle(); break;
+    // window.open (مش لينك عادي) عشان الديسكتوب بيسمح بس بالنوافذ اللي الواجهة فتحتها
+    case 'openGh': e.preventDefault(); window.open('https://github.com/Gasser-hafez','_blank'); break;
+    case 'heroGo': heroGo(parseInt(el.dataset.ix),true); break;
     case 'setNav': setNav(el.dataset.v); break;
     case 'aiPreset': aiPresetPick(el.dataset.v); break;
   }
