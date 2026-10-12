@@ -105,6 +105,13 @@ try {
     assert.equal(await app.ev(`playerSrv=99; playerSrc({...items[1], tmdbId:1})`), null);
     assert.equal(await app.ev(`(()=>{try{fillUrl('javascript:x',items[1],1);return 'allowed'}catch(e){return e.message}})()`), 'BAD_URL');
   });
+  await check('server 4 (vidlink) URLs; adding a server keeps a saved "custom" choice as custom', async () => {
+    assert.equal(await app.ev(`fillUrl(PLAYER_SERVERS[3].tpl,{type:'film'},550)`), 'https://vidlink.pro/movie/550');
+    assert.equal(await app.ev(`fillUrl(PLAYER_SERVERS[3].tpl,{type:'tv',curSeason:2,curEp:4},1396)`), 'https://vidlink.pro/tv/1396/2/5');
+    const r = await app.ev(`JSON.stringify([restorePlayerSrv('3',undefined),restorePlayerSrv('3','4'),restorePlayerSrv('1',undefined),restorePlayerSrv('4','4'),restorePlayerSrv('99','4'),PLAYER_SERVERS.length])`);
+    // '3' من غير طول محفوظ = "مخصص" من أيام الـ 3 سيرفرات → يفضل مخصص (4) مش vidlink (3)
+    assert.deepEqual(JSON.parse(r), [4, 3, 1, 4, 4, 4]);
+  });
   await check('app page cannot read local files', async () => {
     const r = await app.ev(`fetch('file:///C:/Windows/win.ini').then(()=>'READ').catch(()=>'blocked')`);
     assert.equal(r, 'blocked');
@@ -295,6 +302,7 @@ try {
     await check('out-of-list server index from a peer falls back to server 1, never the custom template', async () => {
       assert.equal(await B.ev(`partySrvOf({srv:7})`), 0);
       assert.equal(await B.ev(`partySrvOf({srv:2})`), 2);
+      assert.equal(await B.ev(`partySrvOf({srv:3})`), 3, 'vidlink is a built-in server');
       assert.equal(await B.ev(`partySrvOf({srv:-1})`), 0);
     });
     await check('host picks a movie → guest is told to open the same one (ids only)', async () => {

@@ -26,8 +26,18 @@ const DEFAULT_PLAYER='https://vidsrc-embed.ru/embed/{type}?tmdb={tmdbID}&season=
 const PLAYER_SERVERS=[
   {name:'سيرفر 1', tpl:'https://vsembed.ru/embed/{type}?tmdb={tmdbID}&season={season}&episode={episode}'},
   {name:'سيرفر 2', tpl:'https://vidsrc.cc/v2/embed/{type}/{tmdbID}/{season}/{episode}'},
-  {name:'سيرفر 3', tpl:'https://player.embed-api.stream/?id={tmdbID}&s={season}&e={episode}'}
+  {name:'سيرفر 3', tpl:'https://player.embed-api.stream/?id={tmdbID}&s={season}&e={episode}'},
+  {name:'سيرفر 4', tpl:'https://vidlink.pro/{type}/{tmdbID}/{season}/{episode}'}
 ];
+// "مخصص" = رقم بعد آخر سيرفر في الليستة — فبنخزّن طول الليستة وقت الحفظ،
+// عشان لما سيرفر جديد يتضاف، اللي كان مختار "مخصص" ميتحوّلش للسيرفر الجديد من غير ما يعرف
+const SRV_LIST_LEN_KEY='watchlist:srvListLen';
+const LEGACY_SRV_LIST_LEN=3; // قبل ما نبدأ نخزّن الطول (لحد 4.3.0)
+function restorePlayerSrv(saved,savedLen){
+  const ix=parseInt(saved||'0')||0;
+  const len=parseInt(savedLen||'')||LEGACY_SRV_LIST_LEN;
+  return ix>=len?PLAYER_SERVERS.length:Math.min(ix,PLAYER_SERVERS.length);
+}
 let playerSrv=0, playerShield=true, subLang='ar';
 const DEFAULT_DL='https://web.nxsha.app/dl/{type}/{tmdbID}';
 
@@ -112,7 +122,7 @@ async function load(){
   $('tmdbKey').value=(await sget('watchlist:tmdbkey'))||'';
   $('playerTpl').value=(await sget('watchlist:playerTpl'))||DEFAULT_PLAYER;
   $('dlTpl').value=(await sget('watchlist:dlTpl'))||DEFAULT_DL;
-  playerSrv=parseInt((await sget('watchlist:playerSrv'))||'0')||0;
+  playerSrv=restorePlayerSrv(await sget('watchlist:playerSrv'),await sget(SRV_LIST_LEN_KEY));
   playerShield=(await sget('watchlist:playerShield'))==='1';
   subLang=(await sget('watchlist:subLang'));if(subLang==null)subLang='ar';
   applyTheme((await sget('watchlist:theme'))||'cinema');
@@ -1059,6 +1069,7 @@ async function playerSrvCycle(n){
 async function setPlayerSrv(ix){
   playerSrv=ix;
   await sset('watchlist:playerSrv',String(ix));
+  await sset(SRV_LIST_LEN_KEY,String(PLAYER_SERVERS.length));
   renderModal();
   try{
     const host=new URL(currentPlayerTpl().replace(/\{[^}]+\}/g,'x')).hostname;
@@ -1496,7 +1507,7 @@ async function aiRun(){
 }
 
 /* ================= تصدير/استيراد الإعدادات ================= */
-const SETTINGS_KEYS=['watchlist:omdbkey','watchlist:tmdbkey','watchlist:sites','watchlist:playerTpl','watchlist:playerSrv','watchlist:playerShield','watchlist:view','watchlist:statsOpen','watchlist:theme','watchlist:dlTpl','watchlist:subLang'];
+const SETTINGS_KEYS=['watchlist:omdbkey','watchlist:tmdbkey','watchlist:sites','watchlist:playerTpl','watchlist:playerSrv','watchlist:srvListLen','watchlist:playerShield','watchlist:view','watchlist:statsOpen','watchlist:theme','watchlist:dlTpl','watchlist:subLang'];
 async function settingsExport(){
   const all=await chrome.storage.local.get(SETTINGS_KEYS);
   const out={__watchlistSettings:1};
