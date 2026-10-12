@@ -166,9 +166,12 @@ try {
   await app.ev(`document.getElementById('tf').remove()`);
 
   await check('app-initiated window.open still opens a window without storage access', async () => {
-    await app.ev(`window.open('about:blank','_blank').location='https://example.org'; 1`);
-    await sleep(2500);
-    assert.ok((await pages()).some(u => u.startsWith('https://example.org')));
+    const opened = await app.ev(`(()=>{const w=window.open('about:blank','_blank');if(!w)return 'null';w.location='https://example.org';return 'ok'})()`);
+    assert.equal(opened, 'ok', 'window.open returned null — the app blocked its own window');
+    // موقع خارجي — نستنى لحد 10 ثواني بدل وقت ثابت (الشبكة على GitHub Actions أبطأ أحياناً)
+    let urls = [];
+    for (let i = 0; i < 50 && !urls.some(u => u.startsWith('https://example.org')); i++) { await sleep(200); urls = await pages(); }
+    assert.ok(urls.some(u => u.startsWith('https://example.org')), 'pages: ' + JSON.stringify(urls));
     const child = await conn('example.org');
     assert.equal(await child.ev('typeof (window.chrome && chrome.storage)'), 'undefined');
     child.close();
