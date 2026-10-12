@@ -272,14 +272,18 @@ const webPreferences = {
   nodeIntegrationInSubFrames: true, // يخلي preload يشتغل جوه iframe البلاير عشان مانع الـ popups
 };
 
-// أي نافذة بيفتحها البرنامج (مواقع المشاهدة/التحميل/التريلر) بتفتح جوه البرنامج بنفس الحماية،
-// وأي popup من جوه النوافذ دي نفسها بيتمنع
-function guardPopups(wc, allowChildren) {
+// أي نافذة بيفتحها البرنامج (مواقع المشاهدة/التحميل/التريلر) بتفتح جوه البرنامج بنفس الحماية.
+// نافذة الواجهة: بتصريح بس. نوافذ المواقع: لينكات التحميل بتفتح في نافذة جديدة فمسموح —
+// إلا لو اللينك إعلان معروف (adblock.isAdPopup) أو صفحة فاضية (سكريبتات الإعلانات بتكتب فيها)
+let adblock = null;
+function guardPopups(wc, isAppWindow) {
   wc.setWindowOpenHandler(({ url }) => {
     openGrants = openGrants.filter(t => t > Date.now());
-    const granted = allowChildren && openGrants.length > 0;
-    if (!granted || !/^(https?:|about:blank)/.test(url)) return { action: 'deny' };
-    openGrants.shift();
+    if (!/^(https?:|about:blank)/.test(url)) return { action: 'deny' };
+    if (isAppWindow) {
+      if (!openGrants.length) return { action: 'deny' };
+      openGrants.shift();
+    } else if (!/^https?:/.test(url) || !adblock || adblock.isAdPopup(url, wc.getURL())) return { action: 'deny' };
     return {
       action: 'allow',
       overrideBrowserWindowOptions: { width: 1280, height: 800, autoHideMenuBar: true, icon: path.join(__dirname, 'icon128.png'), webPreferences },
@@ -415,7 +419,7 @@ app.whenReady().then(() => {
   const ALLOWED_PERMS = new Set(['fullscreen', 'clipboard-sanitized-write']);
   session.defaultSession.setPermissionRequestHandler((wc, perm, cb) => cb(ALLOWED_PERMS.has(perm)));
   session.defaultSession.setPermissionCheckHandler((wc, perm) => ALLOWED_PERMS.has(perm));
-  initAdblock({
+  adblock = initAdblock({
     session: session.defaultSession, cachePath: path.join(app.getPath('userData'), 'adblock.bin'),
     devFilters: !app.isPackaged && process.env.WL_ADBLOCK_FILTERS, // التست بس
     isSiteWindow: wc => siteWindows.has(wc), isAllowed: siteAllowed,

@@ -90,7 +90,7 @@ fs.writeFileSync(path.join(ud2, 'storage.json'), JSON.stringify({
   'watchlist:playerTpl': 'javascript:parent.document.title="pwned"',
 }));
 const dlDir = path.join(ud2, 'dl-test');
-proc = await launch(ud2, { env: { WL_ADBLOCK_FILTERS: '/wl-ad.gif', WL_DL_DIR: dlDir } });
+proc = await launch(ud2, { env: { WL_ADBLOCK_FILTERS: '/wl-ad.gif\n/wl-adpop', WL_DL_DIR: dlDir } });
 try {
   console.log('run 2: malicious backup + hostile iframe');
   const app = await conn('app://local/');
@@ -215,9 +215,13 @@ try {
     wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
     wav.writeUInt32LE(sr, 24); wav.writeUInt32LE(sr * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
     const SLOW = 40 * 65536;
+    let adpop = 0;
     const srv = http.createServer((req, res) => {
       const att = name => ({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${name}"` });
       if (req.url === '/con.wav') { res.writeHead(200, { ...att('CON.wav'), 'Content-Length': wav.length }); return res.end(wav); }
+      if (req.url === '/dlpage') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end('<a id=file href="/popfile.wav" target=_blank>Download</a><a id=ad href="/wl-adpop" target=_blank>AD</a>'); }
+      if (req.url === '/wl-adpop') { adpop++; res.writeHead(200); return res.end('ad'); }
+      if (req.url === '/popfile.wav') { res.writeHead(200, { ...att('popfile.wav'), 'Content-Length': 44 }); return res.end(wav.subarray(0, 44)); }
       if (req.url === '/evil.exe') { res.writeHead(200, { ...att('evil.exe'), 'Content-Length': 2 }); return res.end('MZ'); }
       if (req.url === '/slow.mp4') {
         res.writeHead(200, { ...att('slow.mp4'), 'Content-Length': SLOW });
@@ -240,6 +244,18 @@ try {
         await sleep(2000);
         assert.equal(fs.existsSync(path.join(dlDir, 'evil.exe')), false);
         assert.equal(await item('evil.exe'), undefined);
+      });
+      await check('site windows: download links that open a new window work; known ad popups are denied', async () => {
+        // التشيك اللي فات قفل الحظر لـ 127.0.0.1 (نفس السيرفر ده) — نرجّعه
+        await app.ev(`sites=[];sset('watchlist:sites','[]').then(()=>1)`);
+        await siteOpen(base + '/dlpage');
+        const page = await until(async () => { try { return await conn('/dlpage'); } catch (e) { return null; } }, 8000, 'download page');
+        const click = id => page('Runtime.evaluate', { expression: `document.getElementById('${id}').click()`, userGesture: true });
+        await click('ad'); await sleep(1500);
+        assert.equal(adpop, 0, 'ad popup was opened');
+        await click('file');
+        await until(async () => (await item('popfile.wav'))?.state === 'completed', 8000, 'download from a new-window link');
+        page.close();
       });
       await check('downloads: pause stops progress, resume finishes', async () => {
         await siteOpen(base + '/slow.mp4');

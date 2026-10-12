@@ -28,6 +28,12 @@ function initAdblock({ session, cachePath, devFilters, isSiteWindow, isAllowed }
     const { match } = engine.match(Request.fromRawDetails({ url: d.url, sourceUrl: d.referrer || top, type: d.resourceType }));
     cb(match ? { cancel: true } : {});
   });
+  // نافذة جديدة من موقع (لينكات التحميل بتفتح كده): إعلان؟ — القوايم مفيهاش نوع popup، بس subFrame بيمسك
+  // شبكات الـ popunder (popads, exoclick, adsterra...) ولينكات الملفات بتعدّي. لسه القوايم متحمّلتش = نعتبره إعلان
+  return {
+    isAdPopup: (url, sourceUrl) => (isAllowed(sourceUrl) ? false : !engine
+      || engine.match(Request.fromRawDetails({ url, sourceUrl, type: 'subFrame' })).match),
+  };
 }
 
 module.exports = { initAdblock };
