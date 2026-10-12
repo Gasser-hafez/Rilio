@@ -46,6 +46,7 @@
       "update-controller.js",
       "app.html",
       "app.js",
+      "progress.js",
       "popupblock.js",
       "mysteryhide.js",
       "icon*.png",

@@ -14,7 +14,7 @@ app.setAppUserModelId('com.watchlist.desktop');
 
 // الواجهة بتتحمل من app://local بدل file:// — صفحة file:// تقدر تقرا أي ملف على الجهاز لو حصل فيها injection
 const APP_ORIGIN = 'app://local/';
-const APP_FILES = new Set(['app.html', 'app.js', 'icon16.png', 'icon48.png', 'icon128.png']);
+const APP_FILES = new Set(['app.html', 'app.js', 'progress.js', 'icon16.png', 'icon48.png', 'icon128.png']);
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true } }]);
 
 /* ================= التخزين ================= */

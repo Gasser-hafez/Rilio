@@ -60,6 +60,10 @@ const pages = async () => (await targets()).filter(t => t.type === 'page').map(t
 
 let passed = 0;
 async function check(name, fn) { await fn(); passed++; console.log('  ✔', name); }
+const until = async (fn, ms = 6000, what = 'condition') => {
+  const end = Date.now() + ms;
+  for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error('timeout: ' + what); await sleep(200); }
+};
 
 // ---------- تشغيل 1: ملف تخزين بايظ ----------
 const ud1 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-'));
@@ -248,6 +252,10 @@ try {
   let tmdbMode = 'ok';
   const tmdbHits = [];
   app.on('Fetch.requestPaused', ({ requestId, request }) => {
+    if (request.url.startsWith('https://vsembed.ru/')) { // بلاير مزيف: بيبعت PLAYER_EVENT زي vsembed لما التست يقوله
+      return app('Fetch.fulfillRequest', { requestId, responseCode: 200, responseHeaders: [{ name: 'Content-Type', value: 'text/html' }],
+        body: Buffer.from(`<script>addEventListener('message',e=>{const d=e.data;if(d&&d.fake)parent.postMessage({type:'PLAYER_EVENT',data:{player_status:d.fake,player_progress:d.pos,player_duration:d.dur||2700}},'*')})</script>`).toString('base64') });
+    }
     if (tmdbMode === 'offline') return app('Fetch.failRequest', { requestId, errorReason: 'InternetDisconnected' });
     const id = (request.url.match(/\/tv\/(\d+)/) || [])[1];
     let json, ok;
@@ -262,7 +270,7 @@ try {
       responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Access-Control-Allow-Origin', value: '*' }],
     });
   });
-  await app('Fetch.enable', { patterns: [{ urlPattern: 'https://api.themoviedb.org/*' }, { urlPattern: 'https://www.omdbapi.com/*' }] });
+  await app('Fetch.enable', { patterns: [{ urlPattern: 'https://api.themoviedb.org/*' }, { urlPattern: 'https://www.omdbapi.com/*' }, { urlPattern: 'https://vsembed.ru/*' }] });
   // spy بدل الإشعار الحقيقي عشان التست ميطلعش إشعارات على الجهاز
   await app.ev(`window.__notes=[]; notifyDesktop=p=>{__notes.push(p)}; 1`);
   const runCheck = () => app.ev(`chrome.storage.local.set({'watchlist:lastSeasonCheck':'0'}).then(()=>checkSeasons()).then(()=>1)`);
@@ -326,6 +334,59 @@ try {
     const saved = await app.ev(`chrome.storage.local.get('watchlist:data').then(d=>JSON.parse(d['watchlist:data']).find(i=>i.id==='s200').rt)`);
     assert.equal(saved, 77);
   });
+  // تتبع الحلقات: البلاير المزيف على vsembed.ru بيبعت مكانه ومدته
+  const frame = `document.querySelector('.playerbox iframe')`;
+  const fakeEv = (status, pos) => app.ev(`${frame}.contentWindow.postMessage({fake:${JSON.stringify(status)},pos:${pos}},'*');1`);
+  const itemOf = id => app.ev(`JSON.stringify(items.find(i=>i.id==='${id}'))`).then(JSON.parse);
+  const openFake = async (it) => {
+    await app.ev(`items.push(cleanItem(${JSON.stringify(it)}));playerSrv=0;openPlayer('${it.id}').then(()=>1)`);
+    // لحد ما الصفحة المزيفة تتحمّل وترد
+    await until(async () => { await fakeEv('playing', 120); return (await itemOf(it.id)).resume?.pos === 120; }, 8000, 'fake player answers');
+  };
+  await check('auto-track: resume position saved from player events (episode + position)', async () => {
+    await openFake({ id: 's600', title: 'Show F', type: 'tv', status: 'watching', tmdbId: 600, imdbID: 'tt600', curSeason: 2, curEp: 3, seasonEps: { 1: 10, 2: 4 }, totalSeasons: 3 });
+    const saved = await app.ev(`chrome.storage.local.get('watchlist:data').then(d=>JSON.parse(d['watchlist:data']).find(i=>i.id==='s600').resume)`);
+    assert.deepEqual(saved, { s: 2, e: 4, pos: 120 });
+  });
+  await check('auto-track: messages not from the player iframe are ignored', async () => {
+    await app.ev(`window.postMessage({type:'PLAYER_EVENT',data:{player_status:'playing',player_progress:2650,player_duration:2700}},'*');1`);
+    await sleep(500);
+    const it = await itemOf('s600');
+    assert.deepEqual([it.curSeason, it.curEp], [2, 3]);
+  });
+  await check('auto-track: 90% marks the episode, last of season → next season; player not reloaded; counted once', async () => {
+    const src = await app.ev(`${frame}.src`);
+    await fakeEv('playing', 2450);
+    await until(async () => (await itemOf('s600')).curSeason === 3, 4000, 'advanced');
+    let it = await itemOf('s600');
+    assert.deepEqual([it.curSeason, it.curEp, it.resume], [3, 0, undefined]);
+    assert.equal(await app.ev(`${frame}.src`), src, 'still showing the credits of the same episode');
+    assert.match(await app.ev(`document.querySelector('.pbar [data-act=playerNext]').textContent`), /شغّل الجاية/);
+    await fakeEv('playing', 2600); await sleep(500);
+    it = await itemOf('s600');
+    assert.deepEqual([it.curSeason, it.curEp], [3, 0], 'no double count');
+    // "شغّل الجاية" بيحمّل S3E1 من غير ما يعدّ تاني
+    await app.ev(`document.querySelector('.pbar [data-act=playerNext]').click();1`);
+    await until(() => app.ev(`${frame}.src.includes('season=3&episode=1')`), 4000, 'next episode loaded');
+    assert.equal((await itemOf('s600')).curEp, 0);
+  });
+  await check('auto-track: film in queue → watched at 90%; short ad videos ignored', async () => {
+    await openFake({ id: 'f700', title: 'Film G', type: 'film', status: 'queue', tmdbId: 700, imdbID: 'tt700' });
+    await app.ev(`${frame}.contentWindow.postMessage({fake:'playing',pos:29,dur:30},'*');1`);
+    await sleep(500);
+    assert.equal((await itemOf('f700')).status, 'queue', '30s ad does not count');
+    await fakeEv('playing', 2500);
+    await until(async () => (await itemOf('f700')).status === 'watched', 4000, 'film watched');
+  });
+  await check('auto-track: Watch Party temporary item is never changed', async () => {
+    await app.ev(`items.push({id:'party-800',title:'P',type:'tv',status:'party',_party:true,tmdbId:800,imdbID:'tt800',curSeason:1,curEp:0});playerSrv=0;openPlayer('party-800').then(()=>1)`);
+    await app.ev(`window.__pe=0;addEventListener('message',e=>{if(e.data&&e.data.type==='PLAYER_EVENT')__pe++});1`);
+    // الأحداث وصلت للصفحة فعلاً (مش التست عدّى عشان البلاير لسه متحمّلش)
+    await until(async () => { await fakeEv('playing', 2650); return (await app.ev('__pe')) >= 3; }, 8000, 'party player events');
+    const it = await itemOf('party-800');
+    assert.deepEqual([it.curEp, it.resume], [0, undefined]);
+    await app.ev(`closeModal();1`);
+  });
   await check('offline: failed check is not recorded, retried next hour', async () => {
     tmdbMode = 'offline';
     await runCheck();
@@ -353,10 +414,6 @@ try {
     v.src=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));document.body.appendChild(v);
     return new Promise(r=>v.onloadedmetadata=()=>r(v.duration))})()`;
   const IFRAME = `new Promise(r=>{const f=document.createElement('iframe');f.style='position:fixed;bottom:0;left:0;width:400px;height:300px;z-index:99999';f.src='https://example.com';f.onload=r;document.body.appendChild(f)}).then(()=>1)`;
-  const until = async (fn, ms = 6000, what = 'condition') => {
-    const end = Date.now() + ms;
-    for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error('timeout: ' + what); await sleep(200); }
-  };
   const vstate = fr => fr.ev(`JSON.stringify({p:fv.paused,t:+fv.currentTime.toFixed(2)})`).then(JSON.parse);
   // ضغطة حقيقية (isTrusted) جوه الفريم — الكنترولر بيبعت بس اللي بعد ضغطة من المستخدم
   const gesture = async fr => { for (const type of ['mousePressed', 'mouseReleased']) await fr('Input.dispatchMouseEvent', { type, x: 5, y: 5, button: 'left', clickCount: 1 }); };
@@ -657,10 +714,6 @@ try {
 {
   const ud6 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-'));
   const GOOD_TMDB = '0123456789abcdef0123456789abcdef', GOOD_OMDB = 'good1234';
-  const until = async (fn, ms = 6000, what = 'condition') => {
-    const end = Date.now() + ms;
-    for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error('timeout: ' + what); await sleep(200); }
-  };
   proc = await launch(ud6);
   try {
     console.log('run 6: first run (terms + key guide) and settings');

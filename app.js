@@ -21,7 +21,7 @@ let items=[], sites=[], tab='queue';
 let sortDesc=true, queueSort='manual', modalId=null;
 let selfWrites=0;
 let filterType='all', filterGenre=null, statsOpen=false, impCands=[], playerOpen=false, genresOpen=false;
-let mysteryMode=false, mysteryId=null;
+let mysteryMode=false, mysteryId=null, track=null; // track = تتبع الحلقة اللي في البلاير
 const DEFAULT_PLAYER='https://vidsrc-embed.ru/embed/{type}?tmdb={tmdbID}&season={season}&episode={episode}';
 const PLAYER_SERVERS=[
   {name:'سيرفر 1', tpl:'https://vsembed.ru/embed/{type}?tmdb={tmdbID}&season={season}&episode={episode}'},
@@ -134,6 +134,8 @@ function cleanItem(it){
   out.recWhy=str(it.recWhy).slice(0,300)||undefined;
   out.recFrom=Array.isArray(it.recFrom)?it.recFrom.filter(t=>typeof t==='string'&&t).slice(0,5).map(t=>t.slice(0,120)):[];
   if(!out.recFrom.length)out.recFrom=undefined;
+  // مكان الوقوف في البلاير: {pos} للفيلم، {s,e,pos} للحلقة — أرقام بس
+  {const r=it.resume;out.resume=r&&typeof r==='object'&&num(r.pos)!=null?{pos:num(r.pos),s:num(r.s),e:num(r.e)}:undefined;}
   if(it.seasonEps&&typeof it.seasonEps==='object'){
     out.seasonEps={};
     for(const [s,n] of Object.entries(it.seasonEps))if(/^\d+$/.test(s)&&num(n)!=null)out.seasonEps[s]=num(n);
@@ -1119,7 +1121,7 @@ async function loadSeasonEps(it){
     if(modalId===it.id)renderModal();
   }catch(e){}
 }
-async function epPlus(id){
+async function epPlus(id,keepPlayer){
   const it=items.find(i=>i.id===id);if(!it)return;
   it.curEp=(it.curEp||0)+1;
   const total=it.seasonEps?it.seasonEps[it.curSeason||1]:null;
@@ -1132,7 +1134,8 @@ async function epPlus(id){
       toast('خلصت المسلسل كله — دوس "خلصته" وقيّمه');
     }
   }
-  await persist();render();if(modalId)renderModal();
+  // keepPlayer: التتبع التلقائي — منعيدش تحميل البلاير وهو لسه بيتفرج على التترات
+  await persist();render();if(modalId&&!keepPlayer)renderModal();
 }
 async function stepProg(id,field,delta){
   const it=items.find(i=>i.id===id);if(!it)return;
@@ -1414,7 +1417,43 @@ function mysteryReveal(id){
   if(it)toast(it.title);
 }
 async function playerNext(id){
+  // الحلقة اتحسبت تلقائي خلاص — نحمّل الجاية بس من غير ما نعدّ تاني
+  if(track&&track.id===id&&track.done){renderModal();return;}
   await epPlus(id); // بيعمل persist + renderModal فالبلاير بيتحمّل بالحلقة الجديدة
+}
+
+/* ================= تتبع الحلقات تلقائي =================
+   سيرفر 1 (vsembed) و4 (vidlink) بيبعتوا مكانهم ومدتهم للصفحة. عند 90% الحلقة بتتعلّم اتشافت والعدّاد يتقدم،
+   ومكان الوقوف بيتحفظ. track = الحلقة اللي في البلاير دلوقتي (بيتعمل في renderPlayer) */
+const mmss=s=>Math.floor(s/60)+':'+pad(Math.floor(s%60));
+addEventListener('message',e=>{
+  const f=document.querySelector('.playerbox iframe');
+  // بس من iframe البلاير نفسه ومن دومين السيرفر المختار (إعلان في فريم تاني ميقدرش يعلّم حلقات)
+  if(!track||!playerOpen||!f||e.source!==f.contentWindow||e.origin!==track.origin)return;
+  const ev=WlProgress.parse(track.srv,e.data);
+  const it=ev&&items.find(i=>i.id===track.id);
+  if(!it||it._party)return; // نسخة الـ Watch Party المؤقتة مبتتغيرش
+  const r=WlProgress.step(track,ev);
+  if(r==='save'){it.resume=it.type==='tv'?{s:track.s,e:track.e,pos:Math.floor(ev.pos)}:{pos:Math.floor(ev.pos)};persist();}
+  else if(r==='done')autoDone(it,track);
+});
+async function autoDone(it,t){
+  it.resume=undefined;
+  if(it.type!=='tv'){
+    if(it.status==='queue'||it.status==='watching'){
+      it.status='watched';if(!it.watchedAt)it.watchedAt=Date.now();
+      toast('اتعلّم إنك شفته ✔ قيّمه لما تخلص');
+    }
+    await persist();render();return;
+  }
+  // لسه على نفس الحلقة؟ (لو غيّر العدّاد بإيده وهو بيتفرج منلمسوش). مسلسل خلص/اتساب منغيرش حالته
+  const same=(it.curSeason||1)===t.s&&(it.curEp||0)+1===t.e;
+  if(!same||(it.status!=='watching'&&it.status!=='queue')){await persist();return;}
+  if(it.status==='queue'){it.status='watching';it.curSeason=t.s;it.curEp=t.e-1;loadSeasonEps(it);}
+  toast(`حلقة ${t.e} اتعلّمت ✔`);
+  await epPlus(it.id,true);
+  const b=document.querySelector('.pbar [data-act="playerNext"], .pbar [data-act="startWatch"]');
+  if(b)b.outerHTML=`<button class="btn btn-ep" data-act="playerNext" data-id="${it.id}">${ic('play','fill sm')}شغّل الجاية</button>`;
 }
 function playerSrc(it){
   if(!it.tmdbId)return null;
@@ -1439,7 +1478,18 @@ async function saveSubLang(v){
 function renderPlayer(it){
   const src=playerSrc(it);
   const mystery=mysteryMode&&mysteryId===it.id;
-  const epTxt=it.type==='tv'?`<span class="ep">S${pad(it.curSeason||1)} · E${pad((it.curEp||0)+1)}</span>`:'';
+  const s=it.curSeason||1, e=(it.curEp||0)+1;
+  const epTxt=it.type==='tv'?`<span class="ep">S${pad(s)} · E${pad(e)}</span>`:'';
+  // حلقة/سيرفر جديد = تتبع جديد. نفس الحلقة (إعادة رسم عادية) = نكمّل بنفس الحالة عشان متتحسبش مرتين
+  const key=[it.id,s,e,playerSrv].join('|');
+  if(src&&(!track||track.key!==key)){
+    let origin=null;
+    try{if(playerSrv<PLAYER_SERVERS.length)origin=new URL(src).origin;}catch(x){}
+    track={key,id:it.id,s,e,srv:playerSrv,origin,done:false,savedAt:null};
+  }
+  const rs=it.resume;
+  const resumeTxt=!mystery&&rs&&rs.pos>=60&&(it.type!=='tv'||(rs.s===s&&rs.e===e))
+    ?`<span class="srv" title="آخر مرة وقفت هنا — قدّم البلاير للمكان ده">${ic('clock','sm')}وقفت عند ${mmss(rs.pos)}</span>`:'';
   const custom=$('playerTpl').value.trim();
   const nSrv=PLAYER_SERVERS.length+((custom&&custom!==DEFAULT_PLAYER)?1:0);
   const srvName=playerSrv<PLAYER_SERVERS.length?PLAYER_SERVERS[playerSrv].name:'مخصص';
@@ -1453,6 +1503,7 @@ function renderPlayer(it){
       <button class="mclose plain" data-act="playerClose" title="رجوع للتفاصيل" aria-label="رجوع للتفاصيل">${ic('x','sm')}</button>
       <div class="pt">${mystery?`<b>فيلم غامض</b>`:`<b dir="auto">${esc(it.title)}</b>${epTxt}`}</div>
       ${mystery?'':srvChips}
+      ${resumeTxt}
       ${mystery?'':`<span id="partyBadge">${partyBadgeHtml()}</span>`}
       <button class="srv" data-act="playerFs" title="ملء الشاشة">${ic('expand','sm')}ملء الشاشة</button>
       ${mystery
