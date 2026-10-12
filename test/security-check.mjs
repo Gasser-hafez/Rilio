@@ -3,6 +3,7 @@
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -13,7 +14,9 @@ const PORT = 9333;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function launch(userData) {
-  const proc = spawn(electron, [root, `--remote-debugging-port=${PORT}`, `--user-data-dir=${userData}`], { stdio: 'ignore' });
+  // من غير الفلاجات دي لو الشاشة عليها نوافذ تانية ويندوز بيعتبر نافذة التست مستخبية والكليكات الوهمية متوصلش للـ iframe
+  const proc = spawn(electron, [root, `--remote-debugging-port=${PORT}`, `--user-data-dir=${userData}`,
+    '--disable-features=CalculateNativeWinOcclusion', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'], { stdio: 'ignore' });
   for (let i = 0; i < 40; i++) {
     await sleep(500);
     try {
@@ -65,7 +68,7 @@ fs.writeFileSync(path.join(ud2, 'storage.json'), JSON.stringify({
   'watchlist:seeded': '1',
   'watchlist:data': JSON.stringify([
     { id: '"><img src=x id=pwn>', title: 'Evil', type: 'film', status: 'queue', year: '<b id=pwn2>', poster: 'javascript:alert(1)', backdrop: '"><i id=pwn3>' },
-    { id: 'ok1', title: 'Good', type: 'tv', status: 'watched', rating: 8 },
+    { id: 'ok1', title: 'Good', type: 'tv', status: 'watched', rating: 8, recWhy: '<img src=x id=pwn4>', recFrom: [{}, '<b id=pwn5>', 7] },
     { title: '' },
   ]),
   'watchlist:sites': JSON.stringify([{ name: 'bad', url: 'javascript:alert(1)' }, { name: 'good', url: 'https://example.org/{q}' }]),
@@ -87,6 +90,12 @@ try {
     assert.ok(r.ids.every(id => /^[\w-]{1,40}$/.test(id)), r.ids.join(','));
     assert.equal(r.poster, null); assert.equal(r.year, null); assert.equal(r.bd, null);
     assert.equal(r.injected, false);
+  });
+  await check('recommendation reason from a backup is sanitized and rendered as text', async () => {
+    const r = await app.ev(`(()=>{const it=items.find(i=>i.id==='ok1');openModal('ok1');
+      const out={from:it.recFrom,injected:!!document.querySelector('#pwn4,#pwn5'),shown:$('modal').innerText.includes('<img src=x id=pwn4>')};
+      closeModal();return out})()`);
+    assert.deepEqual(r, { from: ['<b id=pwn5>'], injected: false, shown: true });
   });
   await check('javascript: sites dropped, javascript: player template rejected', async () => {
     assert.deepEqual(await app.ev('sites.map(s=>s.name)'), ['good']);
@@ -139,7 +148,153 @@ try {
     child.close();
   });
   app.close();
-} finally { proc.kill(); }
+} finally { proc.kill(); await sleep(1000); }
+
+// ---------- تشغيل 3: ترشيحات الـ AI ضد سيرفر وهمي محلي ----------
+const hits = [];
+const mock = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', c => { body += c; });
+  req.on('end', () => {
+    hits.push({ path: req.url, auth: req.headers.authorization, xkey: req.headers['x-api-key'], body });
+    if (req.url.startsWith('/redir')) { res.writeHead(302, { location: `http://${req.headers.host}/steal` }); return res.end(); }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (req.method === 'GET' && req.url.includes('/models')) return res.end(JSON.stringify({ data: [{ id: 'zeta' }, { id: 'alpha' }, { id: 'text-embedding-3-small' }, { id: 'alpha' }, { id: 5 }] }));
+    if (req.url.startsWith('/ant')) return res.end(JSON.stringify({ content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: '1. Heat (1995) — سبب' }], stop_reason: 'end_turn' }));
+    res.end(JSON.stringify({ choices: [{ message: { content: '<think>hmm</think>\n1. Dark (TV, 2017) — مسلسل ألماني\n2. Sicario (2015) — توتر' } }] }));
+  });
+});
+await new Promise(r => mock.listen(0, '127.0.0.1', r));
+const base = `http://127.0.0.1:${mock.address().port}`;
+const ud3 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-'));
+proc = await launch(ud3);
+try {
+  console.log('run 3: AI recommendations');
+  const app = await conn('app://local/');
+  const set = cfg => app.ev(`__wlAi.set(${JSON.stringify(cfg)})`);
+  const SECRET = 'sk-test-SECRET-123';
+
+  await check('AI endpoint must be https, or http only for local/LAN hosts', async () => {
+    assert.equal((await set({ kind: 'openai', url: 'http://evil.example.com/v1', model: 'm', key: SECRET })).error, 'BAD_URL');
+    assert.equal((await set({ kind: 'openai', url: 'file:///C:/x', model: 'm' })).error, 'BAD_URL');
+    assert.equal((await set({ kind: 'openai', url: base + '/v1', model: 'm', key: 'a\nb' })).error, 'BAD_KEY');
+    assert.deepEqual(await set({ kind: 'openai', url: base + '/v1', model: 'm', key: SECRET }), { ok: true, hasKey: true });
+  });
+  await check('AI key is never returned to the page, not in backups, not plaintext on disk', async () => {
+    const g = await app.ev('__wlAi.get()');
+    assert.equal(g.hasKey, true); assert.equal('key' in g, false);
+    assert.equal(await app.ev(`chrome.storage.local.get(null).then(a=>'watchlist:ai' in a)`), false);
+    assert.equal(await app.ev(`chrome.storage.local.get('watchlist:ai').then(a=>'watchlist:ai' in a)`), false);
+    assert.ok(!fs.readFileSync(path.join(ud3, 'storage.json'), 'utf8').includes(SECRET));
+  });
+  await check('restoring a backup cannot redirect the AI endpoint', async () => {
+    await app.ev(`chrome.storage.local.set({'watchlist:ai':{kind:'openai',url:'https://evil.example.com/v1',model:'m',key:''}})`);
+    assert.equal((await app.ev('__wlAi.get()')).url, base + '/v1');
+  });
+  await check('model list: fetched with saved key on same server only, cleaned and sorted', async () => {
+    const r = await app.ev(`__wlAi.models({kind:'openai',url:${JSON.stringify(base + '/v1/chat/completions')}})`);
+    assert.deepEqual(r.models, ['alpha', 'text-embedding-3-small', 'zeta']);
+    assert.equal(hits.at(-1).path, '/v1/models'); assert.equal(hits.at(-1).auth, 'Bearer ' + SECRET);
+    // localhost ≠ 127.0.0.1 كـ origin: المفتاح المحفوظ ميتبعتش
+    const other = base.replace('127.0.0.1', 'localhost');
+    assert.equal((await app.ev(`__wlAi.models({kind:'openai',url:${JSON.stringify(other + '/v1')}})`)).ok, true);
+    assert.equal(hits.at(-1).auth, undefined);
+  });
+  await check('UI: model dropdown fills itself, hides non-chat models', async () => {
+    const r = await app.ev(`(async()=>{await aiLoad();await aiFetchModels();return [...$('aiModel').options].map(o=>o.value)})()`);
+    assert.deepEqual(r, ['', 'alpha', 'zeta']);
+    const s = await app.ev(`(()=>{const q=$('aiModelQ');q.value='ZE';q.dispatchEvent(new Event('input'));
+      const r={opts:[...$('aiModel').options].map(o=>o.value),sel:$('aiModel').value};q.value='';q.dispatchEvent(new Event('input'));return r})()`);
+    assert.deepEqual(s, { opts: ['', 'zeta'], sel: 'zeta' });
+  });
+  await check('connection test sends a real tiny chat and reports the reply', async () => {
+    const r = await app.ev(`__wlAi.test({kind:'openai',url:${JSON.stringify(base + '/v1')},model:'alpha'})`);
+    assert.equal(r.ok, true); assert.equal(typeof r.ms, 'number');
+    assert.equal(hits.at(-1).auth, 'Bearer ' + SECRET);
+    assert.equal(JSON.parse(hits.at(-1).body).model, 'alpha');
+    assert.equal((await app.ev(`__wlAi.test({kind:'openai',url:'http://127.0.0.1:1/v1',model:'x'})`)).error, 'UNREACHABLE');
+  });
+  await check('run sends key to configured endpoint, strips <think>, output parses into titles', async () => {
+    const r = await app.ev(`__wlAi.run(tasteProfile())`);
+    assert.equal(r.ok, true, JSON.stringify(r));
+    const h = hits.at(-1);
+    assert.equal(h.path, '/v1/chat/completions'); assert.equal(h.auth, 'Bearer ' + SECRET);
+    assert.match(JSON.parse(h.body).messages[0].content, /numbered list/);
+    assert.ok(!r.text.includes('think'));
+    assert.deepEqual(await app.ev(`parseRecs(${JSON.stringify(r.text)}).map(c=>[c.title,c.year,c.why])`),
+      [['Dark', 2017, 'مسلسل ألماني'], ['Sicario', 2015, 'توتر']]);
+  });
+  await check('redirects are refused (key never follows a redirect)', async () => {
+    await set({ kind: 'openai', url: base + '/redir', model: 'm' }); // نفس الـ origin فالمفتاح بيفضل
+    const n = hits.length;
+    assert.equal((await app.ev(`__wlAi.run('hi')`)).ok, false);
+    assert.equal(hits.length, n + 1);
+  });
+  await check('anthropic format: x-api-key header, text blocks only', async () => {
+    await set({ kind: 'anthropic', url: base + '/ant', model: 'claude-opus-5-5', key: SECRET });
+    const r = await app.ev(`__wlAi.run('hi')`);
+    assert.equal(r.text, '1. Heat (1995) — سبب');
+    assert.equal(hits.at(-1).xkey, SECRET); assert.equal(hits.at(-1).auth, undefined);
+  });
+  await check('UI: "رشّحلي" button fills the pick list with titles and reasons', async () => {
+    const r = await app.ev(`(async()=>{await aiLoad();$('tasteBtn').click();
+      const shown=getComputedStyle($('aiRunBtn')).display!=='none'&&getComputedStyle($('aiSec')).display!=='none';
+      await aiRun();return {shown,rows:[...document.querySelectorAll('#impList .impRow')].map(x=>x.innerText.replace(/\\s+/g,' ').trim())}})()`);
+    assert.equal(r.shown, true);
+    assert.equal(r.rows.length, 1); assert.match(r.rows[0], /Heat.*سبب/);
+  });
+  await check('pick list shows TMDB posters, marks owned titles by TMDB id, rejects hostile poster paths', async () => {
+    const r = await app.ev(`(async()=>{
+      await chrome.storage.local.set({'watchlist:tmdbkey':'x'});
+      items.push({id:'own1',title:'Totally Different Name',type:'film',status:'watched',tmdbId:99});
+      tmdbFetch=async p=>({results:p.includes('Dark')
+        ?[{media_type:'tv',id:5,name:'Dark',first_air_date:'2017-12-01',poster_path:'/dark.jpg'}]
+        :[{media_type:'movie',id:99,title:'Sicario',release_date:'2015-01-01',poster_path:'"><b id=pwn>'}]});
+      $('impText').value='1. Dark (2017) — x\\n2. Sicario (2015) — y';
+      await importParse();
+      const rows=[...document.querySelectorAll('#impList .impRow')];
+      return rows.map(row=>({img:row.querySelector('.impP img')?.src||null,on:!row.querySelector('input').disabled}))
+        .concat([{pwn:!!document.querySelector('#pwn')}]);
+    })()`);
+    assert.deepEqual(r, [{ img: 'https://image.tmdb.org/t/p/w92/dark.jpg', on: true }, { img: null, on: false }, { pwn: false }]);
+  });
+  await check('"شفته ★9" on a recommendation adds it to watched with that rating, and it feeds the next taste profile', async () => {
+    const r = await app.ev(`(async()=>{
+      const sel=document.querySelector('#impList .impRow .impSeen');
+      sel.value='9';sel.dispatchEvent(new Event('change',{bubbles:true}));
+      const nr=document.querySelector('.impNoteRow[data-ix="0"]'), noteShown=!nr.hidden;
+      nr.querySelector('input').value='  تحفة بس بطيء  ';
+      await importAdd();
+      const it=items.find(i=>i.title==='Dark');
+      return {status:it.status,rating:it.rating,type:it.type,tab,noteShown,note:it.recWhy&&it.note,
+        liked:/LIKED[^]*- Dark \\(TV, 2017[^\\n]*my rating 9\\/10 — تحفة بس بطيء/.test(tasteProfile().split('DISLIKED')[0])};
+    })()`);
+    assert.deepEqual(r, { status: 'watched', rating: 9, type: 'tv', tab: 'watched', noteShown: true, note: 'تحفة بس بطيء', liked: true });
+  });
+  await check('💡 shows why: reason + the titles from your list it was based on (with your rating)', async () => {
+    const r = await app.ev(`(async()=>{
+      tmdbFetch=async()=>({results:[]}); // الـ stub بتاع التست اللي فات كان بيرجّع رقم TMDB لعنوان موجود
+      const p=parseRecs('1. Heat (1995) — سبب الترشيح [because: Se7en (1995); The Departed]')[0];
+      $('impText').value='1. Heat (1995) — سبب الترشيح [because: peaky blinders!; Unknown Show]';
+      await importParse();
+      document.querySelector('[data-act=impWhy]').click();
+      const box=document.querySelector('.impWhyBox');
+      return {p:[p.title,p.year,p.why,p.from],open:!box.hidden,text:box.innerText.replace(/\\s+/g,' '),
+        stillChecked:document.querySelector('#impList input[data-ix="0"]').checked};
+    })()`);
+    assert.deepEqual(r.p, ['Heat', 1995, 'سبب الترشيح', ['Se7en (1995)', 'The Departed']]);
+    assert.equal(r.open, true); assert.equal(r.stillChecked, true);
+    assert.match(r.text, /سبب الترشيح.*Peaky Blinders.*★9.*Unknown Show/);
+  });
+  await check('switching to another server drops the stored key', async () => {
+    assert.equal((await set({ kind: 'openai', url: 'https://api.example.com/v1', model: 'm' })).hasKey, false);
+  });
+  await check('unreachable server gives a clean error', async () => {
+    await set({ kind: 'openai', url: 'http://127.0.0.1:1/v1', model: 'm' });
+    assert.equal((await app.ev(`__wlAi.run('hi')`)).error, 'UNREACHABLE');
+  });
+  app.close();
+} finally { proc.kill(); mock.close(); }
 
 console.log(`\n${passed} checks passed`);
 process.exit(0);

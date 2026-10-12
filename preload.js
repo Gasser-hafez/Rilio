@@ -11,6 +11,14 @@ if (process.isMainFrame && location.origin === 'app://local') {
     },
     onChanged: { addListener: fn => listeners.push(fn) },
   });
+  // ترشيحات الـ AI — الطلب بيتعمل في main، والمفتاح مبيرجعش للواجهة
+  contextBridge.exposeInMainWorld('__wlAi', {
+    get: () => ipcRenderer.invoke('wl:aiGet'),
+    set: cfg => ipcRenderer.invoke('wl:aiSet', cfg),
+    run: prompt => ipcRenderer.invoke('wl:aiRun', prompt),
+    models: cfg => ipcRenderer.invoke('wl:aiModels', cfg),
+    test: cfg => ipcRenderer.invoke('wl:aiTest', cfg),
+  });
   contextBridge.exposeInMainWorld('__wlAllowOpen', () => ipcRenderer.sendSync('wl:allowOpen'));
   contextBridge.executeInMainWorld({
     func: () => {
