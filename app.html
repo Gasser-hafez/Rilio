@@ -669,8 +669,9 @@
   #lpSeek{width:100%;height:18px;display:block}
   #lpVol{width:90px}
   .lp-next{position:absolute;bottom:110px;inset-inline-end:28px;z-index:2;box-shadow:0 10px 30px -8px rgba(0,0,0,.8)}
+  .lp-warn{transition:opacity .35s;position:absolute;top:86px;inset-inline:22px;z-index:2;max-width:720px;margin-inline:auto;padding:10px 14px;border-radius:12px;background:rgba(120,30,20,.88);color:#fff;font-size:14px;text-align:center}
   .lp.idle{cursor:none}
-  .lp.idle .lp-top,.lp.idle .lp-bar{opacity:0;pointer-events:none}
+  .lp.idle .lp-top,.lp.idle .lp-bar,.lp.idle .lp-warn{opacity:0;pointer-events:none}
   .dlrow .dlfile{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
   .dlmeta{display:flex;flex-wrap:wrap;gap:2px 8px;font-size:12.5px;color:var(--muted)}
   .dlmeta>*+*::before{content:'·';margin-inline-end:8px;color:var(--faint)}
@@ -686,7 +687,6 @@
   .dlrow .dlname{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dlrow progress{width:100%;height:6px;accent-color:var(--accent)}
   #dlBody h3{margin:16px 0 4px;font-size:15px}
-  #dlVideo{width:100%;max-height:70vh;margin-top:10px;border-radius:12px;background:#000}
   .site-row .site-url{flex:1;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
   .sublangs{display:flex;gap:8px;flex-wrap:wrap}
   .sublangs .sl{height:40px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line-2);background:transparent;color:var(--muted);font-size:14px}
@@ -954,6 +954,7 @@
     <button class="lp-btn" data-act="lpClose" title="رجوع (Esc)" aria-label="رجوع"><i data-ic="x"></i></button>
     <div class="lp-title"><b id="lpTitle" dir="auto"></b><span id="lpSub" dir="auto"></span></div>
   </div>
+  <div class="lp-warn" id="lpWarn" role="alert" hidden>⚠ الملف ده اتنزل بايظ — أجزاء منه متكررة، فالصورة والترجمة هيتكرروا. امسحه ونزّله تاني (ويُفضّل من سيرفر تاني).</div>
   <button class="btn btn-amber lp-next" id="lpNext" data-act="lpNext" hidden><i data-ic="play" class="fill sm"></i>الحلقة الجاية</button>
   <div class="lp-bar">
     <input type="range" id="lpSeek" min="0" max="1000" value="0" aria-label="مكان الفيديو" dir="ltr">

@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { randomBytes } = require('crypto');
 const { Readable } = require('stream');
-const { extractSubs } = require('./mkvsubs');
+const { extractSubs, spliced } = require('./mkvsubs');
 
 // اللي بيتشغّل جوه البرنامج (Chromium بيشغّله)
 const MEDIA = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.mov': 'video/quicktime',
@@ -95,20 +95,26 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     item.once('done', (ev, st) => {
       d.state = st; push();
       if (!quitting) try { fs.rmSync(d.file + PART, { force: true }); } catch (e) {}
-      if (st !== 'completed') return;
-      toApp('wl:dl:event', { kind: 'done', name: d.name });
-      // البرنامج مش قدامك (في الـ tray أو بتتفرج على حاجة تانية) → إشعار ويندوز؛ الضغط عليه بيفتح تنزيلاتي
-      const w = getWindow();
-      if (Notification.isSupported() && !(w && !w.isDestroyed() && w.isVisible() && w.isFocused())) {
-        const n = new Notification({ title: '✔ خلص التنزيل', body: d.name.slice(0, 200) });
-        liveNotes.add(n);
-        n.on('click', () => { liveNotes.delete(n); if (w && !w.isDestroyed()) { w.show(); w.focus(); } toApp('wl:dl:event', { kind: 'open' }); });
-        n.on('close', () => liveNotes.delete(n));
-        n.show();
-      }
+      // ملف صغير ممكن يخلص قبل ما المستخدم يوافق (الإيقاف مبيوقفش اللي وصل خلاص) — يستنى الموافقة، و"لأ" بتمسحه
+      if (d.asking) { d.doneEarly = st; return; }
+      finish(d);
     });
   }
-
+  async function finish(d) {
+    if (d.state !== 'completed') return;
+    // سيرفرات بتقول إنها بتكمّل من النص وهي بتبعت الفيلم من الأول → ملف متكرر جواه. بنقول بدل ما المستخدم يتفاجئ وهو بيتفرج
+    if (await isSpliced(d.file)) { d.state = 'broken'; push(); toApp('wl:dl:event', { kind: 'broken', name: d.name }); return; }
+    toApp('wl:dl:event', { kind: 'done', name: d.name });
+    // البرنامج مش قدامك (في الـ tray أو بتتفرج على حاجة تانية) → إشعار ويندوز؛ الضغط عليه بيفتح تنزيلاتي
+    const w = getWindow();
+    if (Notification.isSupported() && !(w && !w.isDestroyed() && w.isVisible() && w.isFocused())) {
+      const n = new Notification({ title: '✔ خلص التنزيل', body: d.name.slice(0, 200) });
+      liveNotes.add(n);
+      n.on('click', () => { liveNotes.delete(n); if (w && !w.isDestroyed()) { w.show(); w.focus(); } toApp('wl:dl:event', { kind: 'open' }); });
+      n.on('close', () => liveNotes.delete(n));
+      n.show();
+    }
+  }
   session.on('will-download', (e, item, wc) => {
     // تنزيل راجع من تشغيل قبل كده (createInterruptedDownload) — المستخدم وافق عليه ساعتها
     const rec = restoring.get(item.getSavePath());
@@ -259,7 +265,12 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     guard(e);
     const d = dls.get(id);
     if (!d) return false;
-    if (act === 'start' && d.asking) { d.asking = false; d.item.resume(); toApp('wl:dl:event', { kind: 'started', name: d.name }); }
+    if (act === 'start' && d.asking) {
+      d.asking = false;
+      toApp('wl:dl:event', { kind: 'started', name: d.name });
+      if (d.doneEarly) finish(d); else d.item.resume();
+    }
+    else if (act === 'cancel' && d.asking && d.doneEarly) { d.asking = false; d.state = 'cancelled'; try { fs.rmSync(d.file, { force: true }); } catch (err) {} }
     else if (d.asking && act !== 'cancel') return false; // لازم موافقة الأول
     else if (act === 'pause' && d.state === 'progressing' && !d.item.isPaused()) { d.item.pause(); d.speed = null; }
     else if (act === 'resume' && (d.item.isPaused() || d.state === 'interrupted') && d.item.canResume()) d.item.resume();
@@ -273,6 +284,21 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     push();
     return true;
   });
+  // فحص الملف المتلزّق مرة واحدة لكل نسخة من الملف (الحجم + وقت التعديل)
+  const splicedCache = new Map();
+  async function isSpliced(file) {
+    try {
+      const st = await fs.promises.stat(file), key = file + '|' + st.size + '|' + st.mtimeMs;
+      if (!splicedCache.has(key)) splicedCache.set(key, await spliced(file));
+      return splicedCache.get(key);
+    } catch (e) { return false; }
+  }
+  ipcMain.handle('wl:dl:check', async (e, rel) => {
+    guard(e);
+    const file = libFile(rel, x => !!MEDIA[x]);
+    return file ? isSpliced(file) : false;
+  });
+
   /* ---------- الترجمة: جنب الفيلم ← جوه الملف (MKV) ← أونلاين (OpenSubtitles) ---------- */
   // ترجمات جنب ملف (نفس الفولدر، الاسم بيبدأ باسمه) — نفس اللي المكتبة بتعرضه
   async function sidecars(file) {
@@ -323,6 +349,22 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     if (!r.ok) throw new Error('HTTP_' + r.status);
     return r;
   }
+  // بصمة الملف بتاعة OpenSubtitles (moviehash): الحجم + مجموع أول وآخر 64KB كأرقام 64 بت — بتلاقي ترجمة معمولة على نفس النسخة بالظبط
+  function osHash(file) {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const size = fs.fstatSync(fd).size, CH = 65536;
+      if (size < CH * 2) return null;
+      let h = BigInt(size);
+      const buf = Buffer.alloc(CH);
+      for (const at of [0, size - CH]) {
+        fs.readSync(fd, buf, 0, CH, at);
+        for (let i = 0; i < CH; i += 8) h = (h + buf.readBigUInt64LE(i)) & 0xffffffffffffffffn;
+      }
+      return h.toString(16).padStart(16, '0');
+    } finally { fs.closeSync(fd); }
+  }
+  // q: { tmdbId?, type?, s?, e?, lang? } — أرقام وكود لغة بس. من غير عنوان مربوط: بالبصمة، وبعدين باسم الملف
   ipcMain.handle('wl:dl:subsOnline', async (e, rel, q) => {
     guard(e);
     const file = libFile(rel, x => !!MEDIA[x]);
@@ -330,21 +372,32 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
     const int = v => (Number.isInteger(v) && v > 0 && v < 1e9 ? v : null);
     if (!file || !q || typeof q !== 'object') return { error: 'BAD' };
     if (!/^[A-Za-z0-9]{16,64}$/.test(key)) return { error: 'NO_KEY' };
+    const langs = OS_LANGS.includes(q.lang) ? [q.lang] : OS_LANGS;
     const tmdb = int(q.tmdbId), s = int(q.s), ep = int(q.e), tv = q.type === 'tv';
-    if (!tmdb || (tv && !(s && ep))) return { error: 'BAD' };
     try {
-      const params = new URLSearchParams(tv ? { parent_tmdb_id: tmdb, season_number: s, episode_number: ep } : { tmdb_id: tmdb });
-      params.set('languages', OS_LANGS.join(','));
-      const res = await (await osFetch(`${osBase}/subtitles?${params}`, { headers: osHeaders(key) })).json();
-      // الأحسن: عربي قبل إنجليزي، وبعدين اللي اسم الـ release بتاعه أقرب لاسم الملف (التوقيت بيبقى مظبوط)، وبعدين الأكتر تنزيلاً
+      const search = async extra => {
+        const params = new URLSearchParams(extra);
+        params.set('languages', langs.join(','));
+        params.sort(); // OpenSubtitles بيرد 301 لو البارامترات مش بالترتيب الأبجدي (ومش بنتبع redirects بالمفتاح)
+        const res = await (await osFetch(`${osBase}/subtitles?${params}`, { headers: osHeaders(key) })).json();
+        return Array.isArray(res && res.data) ? res.data : [];
+      };
+      const hash = osHash(file);
+      let data = hash ? (await search({ moviehash: hash })).filter(d => d && d.attributes && d.attributes.moviehash_match) : [];
+      if (!data.length) {
+        const byId = tmdb && (!tv || (s && ep)) ? (tv ? { parent_tmdb_id: tmdb, season_number: s, episode_number: ep } : { tmdb_id: tmdb }) : null;
+        // اسم الملف من غير الامتداد ولا النقط — بس الحروف والأرقام (مفيش أي حاجة تانية من برا في الطلب)
+        data = await search(byId || { query: stem(path.basename(file)).replace(/[^\p{L}\p{N}]+/gu, ' ').trim().slice(0, 120) });
+      }
+      // الأحسن: نفس النسخة (البصمة) ← اللغة (عربي قبل إنجليزي) ← اسم الـ release الأقرب لاسم الملف ← الأكتر تنزيلاً
       const mine = tokens(path.basename(file));
-      const cands = (Array.isArray(res && res.data) ? res.data : []).map(d => {
+      const cands = data.map(d => {
         const a = d && d.attributes || {}, f = Array.isArray(a.files) ? a.files[0] : null;
-        if (!f || !int(f.file_id) || !OS_LANGS.includes(a.language)) return null;
+        if (!f || !int(f.file_id) || !langs.includes(a.language)) return null;
         const rels = tokens(`${a.release || ''} ${f.file_name || ''}`);
         let match = 0; for (const t of mine) if (rels.has(t)) match++;
-        return { id: f.file_id, lang: a.language, match, dl: Number(a.download_count) || 0, hi: !!a.hearing_impaired };
-      }).filter(Boolean).sort((x, y) => OS_LANGS.indexOf(x.lang) - OS_LANGS.indexOf(y.lang) || y.match - x.match || x.hi - y.hi || y.dl - x.dl);
+        return { id: f.file_id, lang: a.language, exact: !!a.moviehash_match, match, dl: Number(a.download_count) || 0, hi: !!a.hearing_impaired };
+      }).filter(Boolean).sort((x, y) => y.exact - x.exact || langs.indexOf(x.lang) - langs.indexOf(y.lang) || y.match - x.match || x.hi - y.hi || y.dl - x.dl);
       if (!cands.length) return { error: 'NOT_FOUND' };
       const best = cands[0];
       const dl = await (await osFetch(`${osBase}/download`, { method: 'POST', headers: osHeaders(key), body: JSON.stringify({ file_id: best.id, sub_format: 'srt' }) })).json();
@@ -353,13 +406,14 @@ function initDownloads({ session, protocol, getWindow, fromApp, isSiteWindow, se
       if (!r.ok) throw new Error('HTTP_' + r.status);
       const buf = Buffer.from(await r.arrayBuffer());
       if (!buf.length || buf.length > 5e6) return { error: 'NOT_FOUND' };
-      fs.writeFileSync(subPath(file, best.lang), buf);
-      return { ok: true, lang: best.lang, subs: await sidecars(file) };
+      const out = subPath(file, best.lang);
+      fs.writeFileSync(out, buf);
+      const label = stem(path.basename(out)).slice(stem(path.basename(file)).length).replace(/^[.\s_-]+/, '');
+      return { ok: true, lang: best.lang, label, exact: best.exact, subs: await sidecars(file) };
     } catch (err) {
       return { error: ['BAD_KEY', 'LIMIT'].includes(err.message) ? err.message : 'NET' };
     }
-  });
-  // فحص المفتاح قبل ما يتحفظ (زي TMDB/OMDb)
+  });  // فحص المفتاح قبل ما يتحفظ (زي TMDB/OMDb)
   ipcMain.handle('wl:os:check', async (e, key) => {
     guard(e);
     if (typeof key !== 'string' || !/^[A-Za-z0-9]{16,64}$/.test(key)) return { ok: false, error: 'BAD_KEY' };

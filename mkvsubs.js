@@ -86,7 +86,10 @@ async function extractSubs(file, { yieldEvery = 4000 } = {}) {
       if (t.ass) text = assText(text);
       const start = (cluster + rel) * scale / 1e6;
       const dur = durTicks != null ? durTicks * scale / 1e6 : 3000;
-      if (text.trim()) t.cues.push({ start, end: start + dur, text: text.replace(/\r/g, '').trim() });
+      text = text.replace(/\r/g, '').trim();
+      // نفس السطر بنفس التوقيت مرتين = ملف متكرر جواه (شوف spliced تحت) — مرة واحدة كفاية
+      const k = start + '|' + dur + '|' + text;
+      if (text && !t.seen.has(k)) { t.seen.add(k); t.cues.push({ start, end: start + dur, text }); }
     };
     while (pos < size) {
       if (++steps % yieldEvery === 0) await new Promise(r => setImmediate(r));
@@ -140,7 +143,7 @@ async function extractSubs(file, { yieldEvery = 4000 } = {}) {
       // أول ما التراكات تخلص: نحدد تراكات الترجمة النصية
       if (h.id === ID.CodecID || h.id === ID.TrackType || h.id === ID.TrackNumber) {
         for (const t of tracks) if (t.type === 0x11 && TEXT_CODECS.has(t.codec) && t.num && !subs.has(t.num))
-          subs.set(t.num, Object.assign(t, { ass: /ASS|SSA/.test(t.codec), cues: [] }));
+          subs.set(t.num, Object.assign(t, { ass: /ASS|SSA/.test(t.codec), cues: [], seen: new Set() }));
       }
       pos = body + h.size;
     }
@@ -153,4 +156,34 @@ async function extractSubs(file, { yieldEvery = 4000 } = {}) {
   } finally { fs.closeSync(fd); }
 }
 
-module.exports = { extractSubs, assText };
+// ملف اتنزل "متلزّق": سيرفر بيقول إنه بيكمّل التنزيل من النص (Range) وهو بيبعت الفيلم من الأول، فرأس الملف بيتكرر جواه
+// والصورة والترجمة بيتكرروا. بندوّر على رأس الحاوية بتوقيع طويل (مش 4 بايت بس) عشان ميطلعش بالصدفة جوه بيانات الفيديو:
+//  MKV/WebM: 1A45DFA3 + بعدها بشوية EBMLVersion (42 86 81 01)
+//  MP4/MOV: [حجم 16..512]['ftyp'][نوع 4 حروف/أرقام]
+async function spliced(file) {
+  const ext = (file.match(/\.[^.\\/]+$/) || [''])[0].toLowerCase();
+  const kind = /^\.(mkv|webm)$/.test(ext) ? 'ebml' : /^\.(mp4|m4v|mov)$/.test(ext) ? 'ftyp' : null;
+  if (!kind) return false;
+  const fd = fs.openSync(file, 'r');
+  try {
+    const size = fs.fstatSync(fd).size, CH = 8 << 20, buf = Buffer.alloc(CH + 16);
+    const sig = kind === 'ebml' ? Buffer.from([0x1a, 0x45, 0xdf, 0xa3]) : Buffer.from('ftyp');
+    const ok = (b, i) => {
+      if (kind === 'ebml') { for (let j = i + 4; j < i + 14; j++) if (b[j] === 0x42 && b[j + 1] === 0x86 && b[j + 2] === 0x81 && b[j + 3] === 0x01) return true; return false; }
+      if (i < 4) return false;
+      const box = b.readUInt32BE(i - 4);
+      return box >= 16 && box <= 512 && /^[A-Za-z0-9 ]{4}$/.test(b.toString('latin1', i + 4, i + 8));
+    };
+    for (let p = 0; p < size; p += CH) {
+      const n = fs.readSync(fd, buf, 0, Math.min(CH + 16, size - p), p);
+      for (let i = buf.subarray(0, n).indexOf(sig); i >= 0 && i < n; i = buf.subarray(0, n).indexOf(sig, i + 1)) {
+        const at = p + i;
+        if (at > (kind === 'ebml' ? 0 : 8) && i + 16 <= n && ok(buf, i)) return true;
+      }
+      await new Promise(r => setImmediate(r));
+    }
+    return false;
+  } finally { fs.closeSync(fd); }
+}
+
+module.exports = { extractSubs, assText, spliced };

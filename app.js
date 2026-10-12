@@ -2245,14 +2245,14 @@ function libFileFor(it){
 const fmtSize=b=>!(b>0)?'':b>=1e9?(b/1e9).toFixed(2)+' GB':(b/1e6).toFixed(1)+' MB';
 // الوقت الفاضل: ثواني → "45 ث" / "12 د" / "1 س 20 د"
 const fmtEta=s=>s<60?Math.ceil(s)+' ث':s<3600?Math.ceil(s/60)+' د':Math.floor(s/3600)+' س '+Math.round(s%3600/60)+' د';
-const DL_STATE={confirm:'مستني موافقتك',progressing:'بيتنزّل',paused:'متوقف',interrupted:'اتقطع',completed:'خلص',cancelled:'اتلغى'};
+const DL_STATE={broken:'⚠ اتنزل بايظ — نزّله تاني',confirm:'مستني موافقتك',progressing:'بيتنزّل',paused:'متوقف',interrupted:'اتقطع',completed:'خلص',cancelled:'اتلغى'};
 function dlActs(d){
   const b=(a,t)=>`<button class="srv" data-act="dlAct" data-id="${Number(d.id)}" data-a="${a}">${t}</button>`;
   if(d.state==='confirm')return b('start','نزّل')+b('cancel','إلغاء');
   if(d.state==='progressing')return b('pause','إيقاف مؤقت')+b('cancel','إلغاء');
   if(d.state==='paused')return b('resume','كمّل')+b('cancel','إلغاء');
   if(d.state==='interrupted')return b('resume','كمّل');
-  if(d.state==='completed')return b('show','الفولدر');
+  if(d.state==='completed'||d.state==='broken')return b('show','الفولدر');
   return '';
 }
 function renderDl(){
@@ -2335,6 +2335,9 @@ function dlPlayFile(f){
   for(const ev of ['timeupdate','play','pause','volumechange','durationchange','ended'])v.addEventListener(ev,lpUi,sig);
   v.addEventListener('pause',()=>$('lp').classList.remove('idle'),sig);
   lpUi();
+  $('lpWarn').hidden=true;
+  // ملف متلزّق (اتنزل من سيرفر بيبعت من الأول وهو بيكمّل): نقول بدل ما المستخدم يستغرب التكرار
+  dlApi.check(f.name).then(bad=>{if(bad&&lpFile===f)$('lpWarn').hidden=false;}).catch(()=>{});
   lpEnsureSubs(f,l);
   if(!it||it._party)return;
   const tv=it.type==='tv', s=l.s, e=l.e;
@@ -2354,14 +2357,21 @@ function dlPlayFile(f){
   v.addEventListener('timeupdate',onTime,sig);v.addEventListener('pause',onTime,sig);
 }
 // الترجمة في البلاير: العربي الأول لو موجود
-function lpSetSubs(list){
+// الترجمة اللي المستخدم اختارها — Chromium بيختار ترجمة لوحده لما تراكات جديدة تتضاف (حسب اللغة) فبنرجّع اختيارنا
+let lpSubPick=-1;
+function lpApplySub(){const t=$('dlVideo').textTracks;for(let i=0;i<t.length;i++){const m=i===lpSubPick?'showing':'disabled';if(t[i].mode!==m)t[i].mode=m;}}
+$('dlVideo').textTracks.addEventListener('change',lpApplySub);
+$('dlVideo').textTracks.addEventListener('addtrack',()=>setTimeout(lpApplySub));
+function lpSetSubs(list,want){
   const v=$('dlVideo');
   v.querySelectorAll('track').forEach(t=>t.remove());
   for(const s of list){const t=document.createElement('track');t.kind='subtitles';t.src=s.url;t.label=s.label;if(/^[a-z]{2,3}$/i.test(s.label))t.srclang=s.label;v.appendChild(t);}
-  const pick=list.length?Math.max(0,list.findIndex(s=>/^ar\b/i.test(s.label))):-1;
-  for(let i=0;i<v.textTracks.length;i++)v.textTracks[i].mode=i===pick?'showing':'disabled';
-  $('lpSubs').innerHTML='<option value="-1">بدون ترجمة</option>'+list.map((s,i)=>`<option value="${i}"${i===pick?' selected':''}>${esc(s.label)}</option>`).join('');
-  $('lpSubs').hidden=!list.length;
+  const pick=!list.length?-1:want!=null&&list.some(s=>s.label===want)?list.findIndex(s=>s.label===want):Math.max(0,list.findIndex(s=>/^ar\b/i.test(s.label)));
+  lpSubPick=pick;lpApplySub();
+  // + اختيار ترجمة أونلاين دايماً (حتى لو الملف ليه ترجمة — ممكن تكون مش متظبطة أو لغة تانية)
+  $('lpSubs').innerHTML='<option value="-1">بدون ترجمة</option>'+list.map((s,i)=>`<option value="${i}"${i===pick?' selected':''}>${esc(s.label)}</option>`).join('')
+    +(dlApi?'<option disabled>──────</option><option value="os-ar">🔎 ترجمة عربي أونلاين</option><option value="os-en">🔎 ترجمة إنجليزي أونلاين</option>':'');
+  $('lpSubs').hidden=!list.length&&!dlApi;
 }
 // مفيش ملف ترجمة جنب الفيلم: نطلّع اللي جوه الملف (MKV) — ولو مفيش، أونلاين من OpenSubtitles (لو فيه مفتاح)
 const OS_ERR={NOT_FOUND:'ملقتش ترجمة عربي ولا إنجليزي ليه على OpenSubtitles',LIMIT:'خلص حد التنزيل اليومي في OpenSubtitles — جرّب بكرة',
@@ -2373,16 +2383,25 @@ async function lpEnsureSubs(f,l){
   let list=await dlApi.subs(f.name).catch(()=>[]);
   if(lpFile!==f)return;
   const it=l&&l.it;
-  if(!list.length&&it&&it.tmdbId&&(it.type!=='tv'||(l.s&&l.e))){
-    if(!(await sget('watchlist:oskey'))){toast('مفيش ترجمة للملف ده — ضيف مفتاح OpenSubtitles من الإعدادات وأنا أجيبلك ترجمة أونلاين');return;}
-    toast('بجيب ترجمة أونلاين…');
-    const r=await dlApi.subsOnline(f.name,{tmdbId:it.tmdbId,type:it.type,s:l.s||null,e:l.e||null}).catch(()=>({error:'NET'}));
-    if(lpFile!==f)return;
-    if(r.error){toast(OS_ERR[r.error]||'معرفتش أجيب ترجمة');return;}
-    list=Array.isArray(r.subs)?r.subs:[];
+  if(!list.length){
+    if(!(await sget('watchlist:oskey'))){toast('مفيش ترجمة للملف ده — اختار "ترجمة أونلاين" من قايمة الترجمة تحت');return;}
+    return lpOnlineSubs(f,l);
   }
-  if(!list.length){if(mkv)toast('مفيش ترجمة جوه الملف ده');return;}
   f.subs=list;lpSetSubs(list);toast('الترجمة جاهزة ✔');
+}
+// ترجمة أونلاين (تلقائي لو الملف مالوش ترجمة، أو من القايمة باللغة اللي تختارها)
+async function lpOnlineSubs(f,l,lang){
+  if(!(await sget('watchlist:oskey'))){
+    if(await uiConfirm('الترجمة الأونلاين بتيجي من OpenSubtitles ومحتاجة مفتاح ببلاش (دقيقتين). تفتح صفحة المفاتيح وفيها الخطوات؟',{yes:'افتح الإعدادات',no:'بعدين'})){lpClose();openSettings('pgKeys');}
+    return;
+  }
+  const it=l&&l.it;
+  toast(lang==='en'?'بدوّر على ترجمة إنجليزي…':lang==='ar'?'بدوّر على ترجمة عربي…':'بجيب ترجمة أونلاين…');
+  const r=await dlApi.subsOnline(f.name,{...(it&&it.tmdbId?{tmdbId:it.tmdbId,type:it.type,s:l.s||null,e:l.e||null}:{}),...(lang?{lang}:{})}).catch(()=>({error:'NET'}));
+  if(lpFile!==f)return;
+  if(r.error){toast(OS_ERR[r.error]||'معرفتش أجيب ترجمة');lpSetSubs(f.subs||[]);return;}
+  f.subs=Array.isArray(r.subs)?r.subs:[];lpSetSubs(f.subs,r.label);
+  toast(r.exact?'الترجمة جاهزة ✔ (متعملة على نفس نسخة الفيلم بالظبط)':'الترجمة جاهزة ✔ — لو التوقيت مش مظبوط جرّب لغة تانية أو نسخة تانية');
 }
 function lpClose(keepOpen){
   const v=$('dlVideo');
@@ -2401,7 +2420,11 @@ function lpFs(){const p=$('lp');if(document.fullscreenElement)document.exitFulls
 $('lpSeek').addEventListener('input',e=>{const v=$('dlVideo');$('lp').classList.add('seeking');if(v.duration)v.currentTime=e.target.value/1000*v.duration;});
 $('lpSeek').addEventListener('change',()=>$('lp').classList.remove('seeking'));
 $('lpVol').addEventListener('input',e=>{const v=$('dlVideo');v.volume=+e.target.value;v.muted=v.volume===0;});
-$('lpSubs').addEventListener('change',e=>{const t=$('dlVideo').textTracks;for(let i=0;i<t.length;i++)t[i].mode=i===+e.target.value?'showing':'disabled';});
+$('lpSubs').addEventListener('change',e=>{
+  const v=e.target.value;
+  if(/^os-/.test(v)){if(lpFile)lpOnlineSubs(lpFile,libInfo(lpFile),v.slice(3));return;}
+  lpSubPick=+v;lpApplySub();
+});
 $('lpRate').addEventListener('change',e=>{$('dlVideo').playbackRate=+e.target.value||1;});
 $('lp').addEventListener('mousemove',lpWake);
 // دوسة على الصورة نفسها = تشغيل/إيقاف، ودوستين = ملء الشاشة
@@ -2455,6 +2478,8 @@ if(dlApi){
     else if(ev.kind==='blocked')toast('اتمنع تنزيل '+n+' — نوع الملف ده ممكن يكون برنامج ضار');
     else if(ev.kind==='done'){toast('خلص تنزيل '+n+' ✔');dlRefresh();}
     else if(ev.kind==='open')dlOpen();
+    // مينفعش يقفل سؤال موافقة مفتوح (uiConfirm بيلغي اللي قبله = "لأ") — لو فيه سؤال، تنبيه صغير والحالة باينة في تنزيلاتي
+    else if(ev.kind==='broken'){dlRefresh();if(confirmResolve){toast('⚠ '+n+' اتنزل بايظ — شوف تنزيلاتي');return;}uiConfirm('الملف '+n+' اتنزل بايظ: السيرفر كان بيبعت الفيلم من الأول وهو بيكمّل، فأجزاء منه متكررة (الصورة والترجمة هيتكرروا). امسحه ونزّله تاني — ويُفضّل من سيرفر تاني.',{yes:'تمام',no:'إغلاق'});}
   });
 }
 

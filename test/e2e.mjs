@@ -12,6 +12,10 @@ const electron = createRequire(import.meta.url)('electron');
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, '$1')), '..');
 const PORT = 9333;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// الفولدرات المؤقتة (بيانات البرنامج + تنزيلات التست) بتتمسح في الآخر — من غيرها الديسك بيتملي مع كل تشغيل
+const tmpDirs = [];
+const tmpDir = prefix => { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); tmpDirs.push(d); return d; };
+process.on('exit', () => { for (const d of tmpDirs) try { fs.rmSync(d, { recursive: true, force: true, maxRetries: 3 }); } catch (e) {} });
 
 async function launch(userData, { port = PORT, env = {}, args = [] } = {}) {
   // لو نافذة التست متغطية بنافذة تانية، ويندوز بيعلّمها hidden وChromium بيوقف توصيل الضغطات —
@@ -66,7 +70,7 @@ const until = async (fn, ms = 6000, what = 'condition') => {
 };
 
 // ---------- تشغيل 1: ملف تخزين بايظ ----------
-const ud1 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-'));
+const ud1 = tmpDir('wl-test-');
 fs.writeFileSync(path.join(ud1, 'storage.json'), '{not json');
 let proc = await launch(ud1);
 try {
@@ -78,7 +82,7 @@ try {
 } finally { proc.kill(); await sleep(1000); }
 
 // ---------- تشغيل 2: نسخة احتياطية متلغّمة ----------
-const ud2 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-'));
+const ud2 = tmpDir('wl-test-');
 fs.writeFileSync(path.join(ud2, 'storage.json'), JSON.stringify({
   'watchlist:seeded': '1',
   'watchlist:data': JSON.stringify([
@@ -98,13 +102,16 @@ const osSrv = http.createServer((req, res) => {
   const json = o => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
   const u = new URL(req.url, 'http://x');
   if (u.pathname === '/file/22.srt') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('1\n00:00:01,000 --> 00:00:04,000\nأهلاً\n'); }
+  if (u.pathname === '/file/11.srt') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('1\n00:00:01,000 --> 00:00:04,000\nHello there\n'); }
   if (req.headers['api-key'] !== OS_KEY) { res.writeHead(403); return res.end('{}'); }
+  // زي السيرفر الحقيقي: بارامترات مش بالترتيب الأبجدي = 301 (البرنامج مبيتبعش redirects بالمفتاح فلازم يبعتها مترتبة)
+  { const sorted = new URLSearchParams(u.search); sorted.sort(); if (u.search && sorted.toString() !== u.search.slice(1)) { res.writeHead(301, { Location: u.pathname + '?' + sorted }); return res.end(); } }
   if (u.pathname === '/infos/formats') return json({ data: {} });
   if (u.pathname === '/subtitles') return json({ data: [
     { attributes: { language: 'en', download_count: 9999, release: 'Other.Release', files: [{ file_id: 11, file_name: 'x.srt' }] } },
     { attributes: { language: 'ar', download_count: 5, release: 'ep', files: [{ file_id: 22, file_name: 'ep.srt' }] } }] });
   if (u.pathname === '/download' && req.method === 'POST') {
-    let b = ''; req.on('data', c => b += c); req.on('end', () => json(JSON.parse(b).file_id === 22 ? { link: `http://127.0.0.1:${osSrv.address().port}/file/22.srt` } : {}));
+    let b = ''; req.on('data', c => b += c); req.on('end', () => { const id = JSON.parse(b).file_id; json([11, 22].includes(id) ? { link: `http://127.0.0.1:${osSrv.address().port}/file/${id}.srt` } : {}); });
     return;
   }
   res.writeHead(404); res.end();
@@ -249,6 +256,8 @@ try {
       if (req.url.split('?')[0] === '/dlpage') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end('<a id=file href="/popfile.wav" target=_blank>Download</a><a id=ad href="/wl-adpop" target=_blank>AD</a>'); }
       if (req.url === '/wl-adpop') { adpop++; res.writeHead(200); return res.end('ad'); }
       if (req.url === '/popfile.wav') { res.writeHead(200, { ...att('popfile.wav'), 'Content-Length': 44 }); return res.end(wav.subarray(0, 44)); }
+      if (req.url === '/spl.mkv') { const m = fs.readFileSync(path.join(root, 'test', 'fixtures', 'subs.mkv')), b = Buffer.concat([m, Buffer.alloc(4096, 9), m]); res.writeHead(200, { ...att('spl.mkv'), 'Content-Length': b.length }); return res.end(b); }
+      if (req.url === '/tiny.mp4') { res.writeHead(200, { ...att('tiny.mp4'), 'Content-Length': 44 }); return res.end(wav.subarray(0, 44)); }
       if (req.url === '/evil.exe') { res.writeHead(200, { ...att('evil.exe'), 'Content-Length': 2 }); return res.end('MZ'); }
       if (req.url.split('?')[0] === '/ep.wav') { res.writeHead(200, { ...att('ep.wav'), 'Content-Length': wav.length }); return res.end(wav); }
       if (req.url === '/movie.mp4') { res.writeHead(200, { ...att('movie.mp4'), 'Content-Type': 'application/x-msdownload', 'Content-Length': 2 }); return res.end('MZ'); }
@@ -289,6 +298,15 @@ try {
         await sleep(2000);
         assert.equal(await item('movie.mp4'), undefined);
         assert.equal(fs.existsSync(path.join(dlDir, 'movie.mp4')), false);
+      });
+      await check('downloads: a small file that arrives before you answer still waits; "no" deletes it', async () => {
+        await siteOpen(base + '/tiny.mp4');
+        await until(() => app.ev(`confirmOverlay.classList.contains('show')&&confirmMsg.textContent.includes('tiny.mp4')`), 8000, 'asked');
+        await sleep(800); // الملف وصل كله وهو لسه مستني
+        assert.equal((await item('tiny.mp4')).state, 'confirm', 'still waiting for approval');
+        await app.ev(`confirmNo.click();1`);
+        await until(async () => (await item('tiny.mp4'))?.state === 'cancelled', 5000, 'cancelled');
+        assert.equal(fs.existsSync(path.join(dlDir, 'tiny.mp4')), false, 'deleted');
       });
       await check('downloads: saying no cancels it — nothing saved; tiny "video" gets a warning', async () => {
         await siteOpen(base + '/nope.mp4');
@@ -394,10 +412,21 @@ try {
         await app.ev(`dlClose();1`);
       });
       const showingCue = `(t=>t&&t.cues&&t.cues.length?t.cues[0].text:'')([...document.getElementById('dlVideo').textTracks].find(t=>t.mode==='showing'))`;
+      await check('download that came out spliced (file restarted inside) is flagged, with a warning in the player', async () => {
+        await siteOpen(base + '/spl.mkv');
+        await approve('spl.mkv');
+        try { await until(async () => (await item('spl.mkv'))?.state === 'broken', 10000, 'flagged broken'); }
+        catch (e) { throw new Error(e.message + ' — ' + JSON.stringify(await st())); }
+        assert.match(await until(() => app.ev(`confirmOverlay.classList.contains('show')&&confirmMsg.textContent`), 5000, 'warning shown'), /اتنزل بايظ/);
+        await app.ev(`confirmNo.click();1`);
+        await app.ev(`dlRefresh().then(()=>dlPlayFile(dl.library.find(f=>f.name==='spl.mkv'))).then(()=>1)`);
+        await until(() => app.ev(`!lpWarn.hidden`), 5000, 'player warning');
+        await app.ev(`dlClose();1`);
+      });
       await check('subtitles inside an MKV are pulled out, saved next to it and shown (Arabic first)', async () => {
         fs.copyFileSync(path.join(root, 'test', 'fixtures', 'subs.mkv'), path.join(dlDir, 'Emb Movie.mkv'));
         await app.ev(`dlRefresh().then(()=>dlPlayFile(dl.library.find(f=>f.name==='Emb Movie.mkv'))).then(()=>1)`);
-        await until(() => app.ev(`document.querySelectorAll('#lpSubs option').length===3`), 10000, 'two tracks in the picker');
+        await until(() => app.ev(`[...document.querySelectorAll('#lpSubs option')].filter(o=>/^\\d+$/.test(o.value)).length===2`), 10000, 'two tracks in the picker');
         assert.equal(await until(() => app.ev(showingCue), 8000, 'Arabic cues'), 'مرحبا');
         assert.ok(fs.existsSync(path.join(dlDir, 'Emb Movie.ar.srt')) && fs.existsSync(path.join(dlDir, 'Emb Movie.en.srt')), fs.readdirSync(dlDir).join(','));
         await app.ev(`dlClose();1`);
@@ -409,9 +438,15 @@ try {
         await app.ev(`sset('watchlist:oskey',${JSON.stringify(OS_KEY)}).then(()=>dlRefresh()).then(()=>dlPlayFile(dl.library.find(f=>f.name==='ep.wav'))).then(()=>1)`);
         assert.equal(await until(() => app.ev(showingCue), 10000, 'online cues'), 'أهلاً');
         assert.ok(fs.existsSync(path.join(dlDir, 'ep.ar.srt')));
-        const search = osHits.find(h => h.url.startsWith('/subtitles'));
+        assert.ok(osHits.some(h => /^\/subtitles\?languages=[^&]+&moviehash=[0-9a-f]{16}$/.test(h.url)), 'searched by the file fingerprint (params in alphabetical order)');
+        const search = osHits.find(h => h.url.includes('parent_tmdb_id'));
         assert.match(search.url, /parent_tmdb_id=55/); assert.match(search.url, /season_number=1/); assert.match(search.url, /episode_number=3/);
         assert.equal(search.key, OS_KEY); assert.match(search.ua, /^rilio v\d/);
+        // من القايمة: "ترجمة إنجليزي أونلاين" — حتى والملف ليه ترجمة خلاص
+        assert.equal(await app.ev(`[...$('lpSubs').options].some(o=>o.value==='os-en')`), true);
+        await app.ev(`(s=>{s.value='os-en';s.dispatchEvent(new Event('change'))})($('lpSubs'));1`);
+        assert.equal(await until(() => app.ev(showingCue).then(c => c === 'Hello there' && c), 10000, 'English online cues'), 'Hello there');
+        assert.ok(fs.existsSync(path.join(dlDir, 'ep.en.srt')));
         await app.ev(`dlClose();1`);
       });
     } finally { srv.close(); }
@@ -470,7 +505,7 @@ try {
 } finally { proc.kill(); osSrv.close(); }
 
 // ---------- تشغيل 3: إشعارات المواسم الجديدة (TMDB متزيّف عن طريق CDP) ----------
-const ud3 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-'));
+const ud3 = tmpDir('wl-test-');
 const tv = (id, title, status, extra = {}) => ({ id, title, type: 'tv', status, tmdbId: Number(id.slice(1)), ...extra });
 fs.writeFileSync(path.join(ud3, 'storage.json'), JSON.stringify({
   'watchlist:seeded': '1',
@@ -707,7 +742,7 @@ try {
   const RELAY_PORT = 8798;
   const partyDir = path.join(root, 'party-server');
   const relay = spawn(process.execPath, [path.join(partyDir, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--port', String(RELAY_PORT), '--ip', '127.0.0.1',
-    '--persist-to', fs.mkdtempSync(path.join(os.tmpdir(), 'wl-relay-'))], { cwd: partyDir, stdio: 'ignore' });
+    '--persist-to', tmpDir('wl-relay-')], { cwd: partyDir, stdio: 'ignore' });
   const killTree = p => { if (process.platform === 'win32') { try { execSync(`taskkill /pid ${p.pid} /T /F`, { stdio: 'ignore' }); } catch (e) {} } else p.kill(); };
   // فيديو تست: WAV صامت 15 دقيقة (أطول من حد الإعلانات 60 ثانية، وأطول من مدة التست كلها عشان مايخلصش في النص) جوه iframe من دومين تاني
   const FAKE_VIDEO = `(()=>{const sr=8000,secs=900,n=sr*secs,b=new ArrayBuffer(44+n*2),d=new DataView(b);
@@ -726,8 +761,8 @@ try {
   try {
     for (let i = 0; i < 60; i++) { await sleep(500); try { if ((await fetch(`http://127.0.0.1:${RELAY_PORT}/room/AAAAAAAA`)).status === 426) break; } catch (e) {} }
     const env = { WL_PARTY_URL: `ws://127.0.0.1:${RELAY_PORT}` };
-    pa = await launch(fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-')), { port: 9341, env });
-    pb = await launch(fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-')), { port: 9342, env });
+    pa = await launch(tmpDir('wl-test-'), { port: 9341, env });
+    pb = await launch(tmpDir('wl-test-'), { port: 9342, env });
     console.log('run 4: watch party between two app instances');
     const A = await conn('app://local/', 9341);
     const B = await conn('app://local/', 9342);
@@ -808,7 +843,7 @@ try {
       const edgePath = ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe'].find(p => fs.existsSync(p));
       assert.ok(edgePath, 'Edge not found');
       // من غير site isolation الـ iframe بيبقى في نفس الـ process، فـ Fetch بتاع الصفحة بيمسك طلب البلاير
-      edge = spawn(edgePath, ['--headless=new', '--remote-debugging-port=9343', `--user-data-dir=${fs.mkdtempSync(path.join(os.tmpdir(), 'wl-edge-'))}`,
+      edge = spawn(edgePath, ['--headless=new', '--remote-debugging-port=9343', `--user-data-dir=${tmpDir('wl-edge-')}`,
         '--disable-features=IsolateOrigins,site-per-process', '--no-first-run', 'about:blank'], { stdio: 'ignore' });
       W = await until(async () => { try { return await conn('about:blank', 9343); } catch (e) { return null; } }, 15000, 'edge up');
       W.on('Fetch.requestPaused', ({ requestId }) => W('Fetch.fulfillRequest', {
@@ -884,7 +919,7 @@ const mock = http.createServer((req, res) => {
 });
 await new Promise(r => mock.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${mock.address().port}`;
-const ud5 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-'));
+const ud5 = tmpDir('wl-test-');
 proc = await launch(ud5);
 try {
   console.log('run 5: AI recommendations');
@@ -1017,7 +1052,7 @@ try {
 
 // ---------- تشغيل 6: أول تشغيل (الشروط + شرح المفاتيح) والإعدادات الجديدة ----------
 {
-  const ud6 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-'));
+  const ud6 = tmpDir('wl-test-');
   const GOOD_TMDB = '0123456789abcdef0123456789abcdef', GOOD_OMDB = 'good1234';
   proc = await launch(ud6);
   try {
@@ -1122,7 +1157,7 @@ try {
 
 // ---------- تشغيل 7: التنزيلات بتكمّل بعد قفل البرنامج + المكتبة بفولدرات فرعية ----------
 {
-  const ud7 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-')), dl7 = path.join(ud7, 'dl');
+  const ud7 = tmpDir('wl-test-'), dl7 = path.join(ud7, 'dl');
   fs.writeFileSync(path.join(ud7, 'storage.json'), JSON.stringify({ 'watchlist:seeded': '1' }));
   // سيرفر بيدعم Range (زي أغلب مواقع التحميل)، محتوى معروف عشان نتأكد إن الملف اتكمّل صح مش اتلخبط
   const SIZE = 96 * 65536, body = Buffer.from(Uint8Array.from({ length: SIZE }, (_, k) => k % 251));
