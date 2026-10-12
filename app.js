@@ -352,20 +352,27 @@ function rtOf(m){
 }
 const rtHtml=(it,cls)=>it.rt!=null?`<span class="${cls}" title="Rotten Tomatoes">🍅 ${it.rt}%</span>`:'';
 // العناصر القديمة: تقييم RT بيتجاب في الخلفية واحدة واحدة — OMDb المجاني محدود (1000 طلب في اليوم)
-const RT_BACKFILL_MAX=40, RT_BACKFILL_GAP_MS=1500;
+// العناصر اللي جت من TMDB من غير رقم IMDb: بنجيب الرقم من TMDB الأول (OMDb محتاجه)
+const RT_BACKFILL_MAX=150, RT_BACKFILL_GAP_MS=1500;
 async function rtBackfill(){
-  const todo=items.filter(i=>i.imdbID&&!i.rtChecked&&!i._party).slice(0,RT_BACKFILL_MAX);
+  const todo=items.filter(i=>!i.rtChecked&&!i._party&&(i.imdbID||i.tmdbId)).slice(0,RT_BACKFILL_MAX);
   if(!todo.length)return;
   const key=await omdbKey();
   let changed=0;
   for(const it of todo){
     try{
-      const m=await(await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(key)}&i=${encodeURIComponent(it.imdbID)}`,{signal:AbortSignal.timeout(20000)})).json();
-      if(m.Response==='False'&&/key|limit/i.test(str(m.Error)))break; // مفتاح غلط أو الحد اليومي خلص
       const cur=items.find(i=>i.id===it.id);if(!cur)continue;
+      if(!cur.imdbID&&cur.tmdbId){
+        const ex=await tmdbFetch(`/${cur.type==='tv'?'tv':'movie'}/${cur.tmdbId}/external_ids`).catch(e=>{if(e.message==='NO_KEY'||e.message==='BAD_KEY')throw e;return {};});
+        if(/^tt\d+$/.test(str(ex.imdb_id)))cur.imdbID=ex.imdb_id;
+        else{cur.rtChecked=true;changed++;continue;} // مفيش رقم IMDb خالص — منسألش تاني
+      }
+      const m=await(await fetch(`https://www.omdbapi.com/?apikey=${encodeURIComponent(key)}&i=${encodeURIComponent(cur.imdbID)}`,{signal:AbortSignal.timeout(20000)})).json();
+      if(m.Response==='False'&&/key|limit/i.test(str(m.Error)))break; // مفتاح غلط أو الحد اليومي خلص
       cur.rt=rtOf(m);cur.rtChecked=true;changed++;
       if(!cur.imdb&&parseFloat(m.imdbRating))cur.imdb=parseFloat(m.imdbRating);
-    }catch(e){break;} // من غير نت: نكمّل المرة الجاية
+      if(changed%10===0){await persist();render();} // يبان أول بأول مش في الآخر بس
+    }catch(e){break;} // من غير نت أو من غير مفتاح TMDB: نكمّل المرة الجاية
     await new Promise(r=>setTimeout(r,RT_BACKFILL_GAP_MS));
   }
   if(changed){await persist();render();}

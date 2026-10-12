@@ -242,14 +242,19 @@ try {
   app.on('Fetch.requestPaused', ({ requestId, request }) => {
     if (tmdbMode === 'offline') return app('Fetch.failRequest', { requestId, errorReason: 'InternetDisconnected' });
     const id = (request.url.match(/\/tv\/(\d+)/) || [])[1];
-    tmdbHits.push(id);
-    const body = Buffer.from(JSON.stringify(TMDB[id] || {})).toString('base64');
+    let json, ok;
+    if (request.url.startsWith('https://www.omdbapi.com/')) { // OMDb: تقييم RT لأي رقم IMDb
+      json = { Response: 'True', imdbRating: '7.4', Ratings: [{ Source: 'Internet Movie Database', Value: '7.4/10' }, { Source: 'Rotten Tomatoes', Value: '77%' }] }; ok = true;
+    } else if (request.url.includes('/external_ids')) { // رقم IMDb للعناصر اللي جت من TMDB بس
+      json = { imdb_id: id === '400' ? null : 'tt900' + id }; ok = true;
+    } else { tmdbHits.push(id); json = TMDB[id] || {}; ok = !!TMDB[id]; }
+    const body = Buffer.from(JSON.stringify(json)).toString('base64');
     app('Fetch.fulfillRequest', {
-      requestId, responseCode: TMDB[id] ? 200 : 404, body,
+      requestId, responseCode: ok ? 200 : 404, body,
       responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Access-Control-Allow-Origin', value: '*' }],
     });
   });
-  await app('Fetch.enable', { patterns: [{ urlPattern: 'https://api.themoviedb.org/*' }] });
+  await app('Fetch.enable', { patterns: [{ urlPattern: 'https://api.themoviedb.org/*' }, { urlPattern: 'https://www.omdbapi.com/*' }] });
   // spy بدل الإشعار الحقيقي عشان التست ميطلعش إشعارات على الجهاز
   await app.ev(`window.__notes=[]; notifyDesktop=p=>{__notes.push(p)}; 1`);
   const runCheck = () => app.ev(`chrome.storage.local.set({'watchlist:lastSeasonCheck':'0'}).then(()=>checkSeasons()).then(()=>1)`);
@@ -305,6 +310,13 @@ try {
     assert.match(r.afterActs, /data-act="qaAdd"/, 'row offers add again');
     // عنصر كان في القايمة من قبل: مفيش تراجع سريع (منمسحش حاجة قديمة بالغلط)
     assert.doesNotMatch(await app.ev(`qaActsHtml({key:'x',title:'Show A'},items.find(i=>i.id==='s100'))`), /qaUndo/);
+  });
+  await check('Rotten Tomatoes backfill: TMDB-only items get an IMDb id first, then the RT rating', async () => {
+    const r = JSON.parse(await app.ev(`rtBackfill().then(()=>JSON.stringify(Object.fromEntries(items.map(i=>[i.id,{imdbID:i.imdbID,rt:i.rt,checked:i.rtChecked}]))))`));
+    assert.deepEqual(r.s100, { imdbID: 'tt900100', rt: 77, checked: true });
+    assert.deepEqual(r.s400, { imdbID: null, rt: null, checked: true }, 'no IMDb id anywhere → marked checked, not retried');
+    const saved = await app.ev(`chrome.storage.local.get('watchlist:data').then(d=>JSON.parse(d['watchlist:data']).find(i=>i.id==='s200').rt)`);
+    assert.equal(saved, 77);
   });
   await check('offline: failed check is not recorded, retried next hour', async () => {
     tmdbMode = 'offline';
