@@ -46,6 +46,14 @@ async function conn(match, port = PORT) {
   };
   call.on = (method, fn) => { listeners[method] = fn; };
   call.close = () => ws.close();
+  // نافذة البرنامج: نستنى app.js يخلص تحميل — على GitHub Actions الجهاز أبطأ، والتست كان بيبدأ قبله
+  // (حصلت في 4.8.0: "checkSeasons is not defined")
+  if (t.url.startsWith('app://local')) {
+    for (let i = 0; i < 100; i++) {
+      try { if (await call.ev(`document.readyState==='complete'&&typeof render==='function'&&typeof checkSeasons==='function'`)) break; } catch (e) {}
+      await sleep(200);
+    }
+  }
   return call;
 }
 const pages = async () => (await targets()).filter(t => t.type === 'page').map(t => t.url);

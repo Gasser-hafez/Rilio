@@ -10,3 +10,8 @@ watchlist-settings-*.json
 party-server/node_modules/
 party-server/.wrangler/
 .wrangler/
+
+# skills وworktrees بتوع Claude — مش جزء من البرنامج
+.agents/
+.claude/
+skills-lock.json
