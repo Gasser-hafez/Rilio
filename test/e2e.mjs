@@ -374,6 +374,9 @@ try {
         assert.match(await app.ev(`document.getElementById('dlBody').innerText`), /Lib Show\s+S01E03/);
         // شارة "متحمّل" على كارت العنوان في الصفحة الرئيسية
         assert.equal(await app.ev(`tab='watching';render();!!document.querySelector('[data-itemid="lib1"] .dlb')`), true, 'downloaded badge on the card');
+        // متحمّل → الزرار الأساسي "كمّل المتحمّل" (على الكارت وفي التفاصيل)، والأونلاين اختيار تاني
+        assert.deepEqual(JSON.parse(await app.ev(`JSON.stringify([!!document.querySelector('[data-itemid="lib1"] .quick [data-act=localPlay]'),!!document.querySelector('[data-itemid="lib1"] .quick [data-act=player]'),
+          (openModal('lib1'),!!document.querySelector('#modal .mact [data-act=localPlay]')),(closeModal(),1)])`)), [true, true, true, 1]);
         await app.ev(`tab='queue';render();1`);
         // نقدّم لـ 5:00 → مكان الوقوف يتحفظ على S01E03
         await app.ev(`dlPlayFile(dl.library.find(f=>f.name==='ep.wav'));1`);

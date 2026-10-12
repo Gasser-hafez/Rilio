@@ -799,16 +799,21 @@ function pcardHtml(it,ix){
       </div>
     </article>`;
 }
+// متحمّل عندك (الفيلم، أو الحلقة اللي عليها الدور)؟ الزرار الأساسي يشغّل المتحمّل، والأونلاين اختيار تاني
+const hasLocal=it=>!!(dlApi&&libFileFor(it));
+const onlineBtn=(it,cls='btn')=>`<button class="${cls}" data-act="player" data-id="${it.id}" title="اتفرج من النت بدل الملف اللي عندك">${ic('ext','sm')}أونلاين</button>`;
 function quickHtml(it){
+  const local=hasLocal(it);
   if(it.status==='queue'){
     return `<div class="quick">
-      <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill sm')}شغّل</button>
+      ${local?`<button class="btn btn-amber" data-act="localPlay" data-id="${it.id}">${ic('play','fill sm')}شغّل المتحمّل</button>${onlineBtn(it)}`
+        :`<button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill sm')}شغّل</button>`}
       <button class="btn" data-act="watched" data-id="${it.id}">${ic('check','sm')}شفته</button>
     </div>`;
   }
   if(it.status==='watching'){
     return `<div class="quick">
-      <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill sm')}كمّل</button>
+      ${local?`<button class="btn btn-amber" data-act="localPlay" data-id="${it.id}">${ic('play','fill sm')}كمّل المتحمّل</button>${onlineBtn(it)}`:`<button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill sm')}كمّل</button>`}
       <button class="btn" data-act="epPlus" data-id="${it.id}">${ic('plus','sm')}حلقة</button>
     </div>`;
   }
@@ -834,13 +839,13 @@ function heroSlideHtml(it,i,n){
     <div class="hmeta"><span>${KIND(it)}${it.year?' · '+it.year:''}</span>${it.imdb?`<span class="dotsep"></span><span class="imdb">IMDb ★ ${it.imdb}</span>`:''}${it.rt!=null?`<span class="dotsep"></span>${rtHtml(it,'imdb prt')}`:''}${it.genre?`<span class="dotsep"></span><span dir="auto">${esc(it.genre)}</span>`:''}</div>
     ${it.desc?`<p class="hdesc" dir="auto">${esc(it.desc)}</p>`:''}
     <div class="hact">
-      <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل</button>
+      ${hasLocal(it)?`<button class="btn btn-amber" data-act="localPlay" data-id="${it.id}">${ic('play','fill')}شغّل المتحمّل</button>${onlineBtn(it,'btn btn-glass')}`:`<button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل</button>`}
       <button class="btn btn-glass" data-act="open" data-id="${it.id}">التفاصيل</button>
     </div></div>`;
 }
 const heroDotsHtml=n=>n<2?'':`<div class="hdots" role="group" aria-label="اختيارات الليلة">${Array.from({length:n},(_,i)=>
   `<button data-act="heroGo" data-ix="${i}" aria-label="اختيار ${i+1}"${i===heroIdx?' aria-current="true"':''}></button>`).join('')}</div>`;
-const heroSigOf=list=>{const c=list[heroIdx];return list.map(i=>i.id).join('|')+'#'+(c?[c.id,c.title,c.backdrop,c.poster,c.imdb,c.year,c.desc,c.genre].join('|'):'');};
+const heroSigOf=list=>{const c=list[heroIdx];return list.map(i=>i.id).join('|')+'#'+(c?[c.id,c.title,c.backdrop,c.poster,c.imdb,c.year,c.desc,c.genre,libHas.has(c.id)].join('|'):'');};
 // انتقال لعنوان تاني: بنحمّل صورته الأول، وبعدين الشريحة الجديدة بتظهر فوق القديمة ببطء
 function heroGo(ix,user){
   const list=heroList();
@@ -1150,7 +1155,7 @@ function renderModal(){
           ${it.genre?`<span class="mchip" dir="auto">${esc(it.genre)}</span>`:''}
         </div>
         <div class="mact">
-          <button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل هنا</button>
+          ${hasLocal(it)?`<button class="btn btn-amber" data-act="localPlay" data-id="${it.id}">${ic('play','fill')}شغّل المتحمّل</button><button class="btn" data-act="player" data-id="${it.id}">${ic('ext')}شغّل أونلاين</button>`:`<button class="btn btn-amber" data-act="player" data-id="${it.id}">${ic('play','fill')}شغّل هنا</button>`}
           ${it.status==='queue'?`<button class="btn" data-act="watched" data-id="${it.id}">${ic('check')}شفته — قيّمه</button>`:''}
           ${it.status==='queue'&&it.type==='tv'?`<button class="btn" data-act="startWatch" data-id="${it.id}">${ic('play','fill sm')}بدأته</button>`:''}
           ${it.status==='watching'?`<button class="btn" data-act="watched" data-id="${it.id}">${ic('check')}خلصته — قيّمه</button>`:''}
@@ -2606,7 +2611,7 @@ document.addEventListener('click',(e)=>{
     case 'dlClose': dlClose(); break;
     case 'dlAct': dlApi.act(parseInt(el.dataset.id),el.dataset.a); break;
     case 'dlPlay': {const f=dl.library[parseInt(el.dataset.ix)];if(f)dlPlayFile(f);} break;
-    case 'cwPlay': cwPlay(id); break;
+    case 'cwPlay': case 'localPlay': cwPlay(id); break;
     case 'lpClose': lpClose(); break;
     case 'lpToggle': lpToggle(); break;
     case 'lpSkip': lpSkip(parseInt(el.dataset.s)); break;
