@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>rilio — فيديو تعريفي</title>
+<!-- فيديو موشن جرافيك لـ rilio: كل مشهد بيتحسب من الوقت t بس (مفيش أنيميشن بيعتمد على الساعة)،
+     عشان render.mjs يلقط كل فريم بالظبط. للمعاينة في المتصفح: افتح الملف ده وهيشتغل لوحده. -->
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+:root{
+  --bg:#15111C; --solid:#211B2C; --raised:#2B2439; --surface:rgba(33,27,44,.74); --surface-2:rgba(33,27,44,.5);
+  --field:rgba(15,12,21,.6); --line:rgba(246,238,227,.10); --line-2:#3A3149;
+  --ink:#F6EEE3; --ink-2:#D9CFE6; --muted:#A99CB8; --faint:#8A7D9A;
+  --accent:#FF9466; --accent-ink:#2A1206; --accent-hi:#FFB48F;
+  --queue:#FFD36E; --watching:#6EE7C8; --watched:#B9A2FF; --dropped:#FF7A9A;
+  --glow-a:#FF9466; --glow-b:#B9A2FF;
+  --display:'Baloo Bhaijaan 2','Readex Pro',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#000}
+body{font-family:'Readex Pro',sans-serif;color:var(--ink)}
+#frame{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink)}
+.ltr{direction:ltr;unicode-bidi:isolate}
+
+/* كل عنصر متحرك بياخد التحويل من متغيرات عشان التوينز تشتغل على كل خاصية لوحدها */
+.a{transform:translate(var(--x,0px),var(--y,0px)) scale(var(--s,1)) rotate(var(--r,0deg))}
+
+/* الخلفية */
+#bg{position:absolute;inset:0;overflow:hidden}
+#bg i{position:absolute;border-radius:50%;filter:blur(130px)}
+#g1{width:900px;height:640px;background:var(--glow-a);opacity:.20}
+#g2{width:760px;height:560px;background:var(--glow-b);opacity:.16}
+#g3{width:620px;height:460px;background:#5b45ff;opacity:.12}
+#grain{position:absolute;inset:-200px;pointer-events:none;opacity:.10;mix-blend-mode:overlay;z-index:50;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+#vignette{position:absolute;inset:0;pointer-events:none;z-index:49;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.55) 100%)}
+
+.scene{position:absolute;inset:0;display:none}
+
+/* عناصر مشتركة */
+.glass{background:var(--surface);border:1px solid var(--line);border-radius:26px;backdrop-filter:blur(24px);
+  box-shadow:0 30px 80px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06)}
+.cap{position:absolute;right:130px;top:50%;width:640px;margin-top:-170px}
+.kick{display:inline-flex;align-items:center;gap:10px;padding:8px 18px;border-radius:999px;background:rgba(255,148,102,.14);
+  border:1px solid rgba(255,148,102,.35);color:var(--accent-hi);font-weight:600;font-size:22px}
+.kick b{font-family:var(--display);font-size:22px;opacity:.7;direction:ltr}
+.cap h2{font-family:var(--display);font-weight:800;font-size:76px;line-height:1.12;margin:22px 0 18px;letter-spacing:-.5px}
+.cap h2 em{font-style:normal;color:var(--accent)}
+.cap p{font-size:28px;line-height:1.6;color:var(--ink-2);font-weight:400}
+.cap .chips{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;background:var(--raised);
+  border:1px solid var(--line);font-size:21px;font-weight:500;color:var(--ink-2);white-space:nowrap}
+.chip svg{width:22px;height:22px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 24px;border-radius:14px;font-weight:600;font-size:21px;
+  background:var(--raised);border:1px solid var(--line);color:var(--ink);white-space:nowrap}
+.btn.acc{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn svg{width:22px;height:22px}
+.ic{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:9px;font-weight:700;font-size:19px;direction:ltr}
+.imdb{background:#F5C518;color:#111}
+.rt{background:#FA320A;color:#fff}
+.pill{display:inline-flex;align-items:center;gap:10px;padding:10px 20px;border-radius:999px;font-weight:700;font-size:22px}
+.pill i{width:12px;height:12px;border-radius:50%;background:currentColor}
+
+/* بوسترات مرسومة */
+.poster{position:relative;overflow:hidden;border-radius:16px;background:#222;flex:none;box-shadow:0 14px 34px rgba(0,0,0,.45)}
+.poster .pt{position:absolute;inset:auto 0 0 0;padding:14px 12px;font-family:var(--display);font-weight:800;color:#fff;direction:ltr;text-align:center;
+  font-size:22px;line-height:1.05;text-shadow:0 2px 10px rgba(0,0,0,.6);background:linear-gradient(transparent,rgba(0,0,0,.65))}
+.poster .art{position:absolute;inset:0}
+.poster::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+
+/* الماوس */
+#cursor{position:absolute;left:0;top:0;width:44px;height:44px;z-index:60;pointer-events:none;opacity:0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5))}
+#ripple{position:absolute;left:0;top:0;width:90px;height:90px;margin:-45px 0 0 -45px;border-radius:50%;border:3px solid var(--accent);z-index:59;opacity:0}
+
+/* ===== 1: البداية ===== */
+#s1 .logo{position:absolute;left:50%;top:50%;width:300px;height:300px;margin:-250px 0 0 -150px}
+#s1 .logo img{width:100%;height:100%}
+#s1 .sheen{position:absolute;inset:0;border-radius:68px;overflow:hidden;-webkit-mask:url(../build/icon.svg) center/contain no-repeat}
+#s1 .sheen::before{content:'';position:absolute;top:-50%;bottom:-50%;width:90px;left:var(--sx,-200px);background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);transform:rotate(20deg)}
+#s1 .word{position:absolute;left:0;right:0;top:600px;text-align:center;direction:ltr;font-family:var(--display);font-weight:800;font-size:150px;letter-spacing:2px;line-height:1}
+#s1 .word span{display:inline-block}
+#s1 .tag{position:absolute;left:0;right:0;top:800px;text-align:center;font-size:40px;color:var(--ink-2);font-weight:500}
+#s1 .tag .caret{display:inline-block;width:3px;height:42px;background:var(--accent);vertical-align:middle;margin-right:4px}
+
+/* ===== 2: المشكلة ===== */
+#s2 .mess{position:absolute;padding:18px 22px;font-size:26px;font-weight:600;border-radius:14px;white-space:nowrap}
+#s2 .note{background:#FFE58A;color:#3b2a00;box-shadow:0 14px 30px rgba(0,0,0,.4)}
+#s2 .lnk{background:#1d2333;color:#8fb6ff;font-family:monospace;font-size:22px;direction:ltr;border:1px solid #33405e}
+#s2 .shot{width:250px;height:160px;padding:0;background:linear-gradient(135deg,#3a3149,#211b2c);border:6px solid #f2f2f2;border-radius:6px}
+#s2 .shot::after{content:'📸';position:absolute;bottom:8px;left:10px;font-size:26px}
+#s2 .chat{background:#1f6f5a;color:#eafff8;border-radius:22px 22px 4px 22px}
+#s2 .q{position:absolute;left:0;right:0;top:420px;text-align:center;font-family:var(--display);font-weight:800;font-size:96px;line-height:1.2}
+#s2 .q em{font-style:normal;color:var(--accent)}
+#s2 .ans{position:absolute;left:0;right:0;top:560px;text-align:center;font-size:44px;color:var(--ink-2);font-weight:500}
+#s2 .ans b{font-family:var(--display);color:var(--ink);direction:ltr;unicode-bidi:isolate}
+#s2 .mini{position:absolute;left:50%;top:330px;width:150px;height:150px;margin-left:-75px}
+
+/* ===== 3: الإضافة السريعة ===== */
+.qa{position:absolute;left:110px;top:150px;width:1000px;padding:30px}
+.qa .search{display:flex;align-items:center;gap:16px;background:var(--field);border:2px solid var(--accent);border-radius:18px;padding:18px 22px;font-size:30px;
+  box-shadow:0 0 0 6px rgba(255,148,102,.15)}
+.qa .search .ic{width:32px;height:32px;color:var(--muted)}
+.qa .search .typed{direction:ltr;flex:1;text-align:right;font-weight:500}
+.qa .search .caret{display:inline-block;width:3px;height:34px;background:var(--accent);vertical-align:middle}
+.qa .hdr{color:var(--faint);font-size:20px;margin:20px 6px 8px}
+.row{display:flex;align-items:center;gap:20px;padding:14px;border-radius:18px}
+.row + .row{border-top:1px solid var(--line)}
+.row .poster{width:78px;height:112px;border-radius:12px}
+.row .poster .pt{display:none}
+.row .meta{flex:1}
+.row .t{font-family:var(--display);font-size:32px;font-weight:700;direction:ltr;text-align:right;line-height:1.2}
+.row .sub{display:flex;gap:12px;align-items:center;color:var(--muted);font-size:20px;margin-top:6px}
+.row .acts{display:flex;gap:10px;align-items:center}
+.row .inlist{color:var(--watching);font-weight:600;font-size:21px;display:flex;gap:8px;align-items:center}
+.added{display:flex;gap:12px;align-items:center;position:absolute;left:14px;top:50%;margin-top:-26px}
+.added span{color:var(--watching);font-weight:700;font-size:22px}
+.qa .acts{transition:none}
+.toast{position:absolute;left:50%;bottom:70px;transform:translateX(-50%) translate(var(--x,0px),var(--y,0px)) scale(var(--s,1));padding:16px 30px;border-radius:16px;background:var(--raised);
+  border:1px solid var(--line);font-size:24px;font-weight:600;box-shadow:0 20px 50px rgba(0,0,0,.5);white-space:nowrap}
+
+/* ===== 4: إضافة المتصفح ===== */
+.browser{position:absolute;left:110px;top:140px;width:1040px;height:760px;border-radius:20px;overflow:hidden;background:#101014;border:1px solid #2b2b38;
+  box-shadow:0 40px 100px rgba(0,0,0,.6)}
+.browser .bar{height:64px;background:#1d1d24;display:flex;align-items:center;gap:14px;padding:0 20px;direction:ltr}
+.browser .dots i{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:8px}
+.browser .url{flex:1;height:38px;border-radius:19px;background:#0f0f14;color:#b9b9c6;font-size:19px;display:flex;align-items:center;padding:0 18px;font-family:monospace}
+.browser .ext{width:38px;height:38px;border-radius:10px;background:#2a2a34;display:flex;align-items:center;justify-content:center}
+.browser .ext img{width:28px}
+.browser .page{position:absolute;top:64px;left:0;right:0;bottom:0;padding:40px 44px;direction:ltr;display:flex;gap:36px;font-family:Arial,sans-serif;background:linear-gradient(#18181e,#101014)}
+.browser .page .poster{width:260px;height:385px}
+.browser .page h3{font-size:48px;color:#fff;margin-bottom:8px}
+.browser .page .ln{height:16px;border-radius:8px;background:#26262f;margin:14px 0}
+.extpanel{position:absolute;left:640px;top:520px;width:430px;background:#17171f;border:1px solid #2b2b38;border-radius:20px;padding:22px 24px;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+.extpanel .h{display:flex;gap:12px;align-items:center;font-weight:700;font-size:24px}
+.extpanel .h img{width:36px}
+.extpanel .s{color:#8b8a99;font-size:18px;margin:6px 0 16px}
+.extpanel .bs{display:flex;gap:10px}
+.extpanel .bs div{flex:1;text-align:center;padding:12px;border-radius:12px;border:1px solid #2b2b38;background:#1f1f2a;font-weight:700;font-size:20px}
+.extpanel .bs .am{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.extpanel .ok{position:absolute;inset:auto 24px 22px 24px;text-align:center;font-weight:700;color:var(--watching);font-size:22px;padding:12px;border-radius:12px;background:#17171f}
+
+/* ===== 5: الشاشة الرئيسية ===== */
+.win{position:absolute;border-radius:22px;overflow:hidden;background:var(--bg);border:1px solid var(--line-2);box-shadow:0 50px 120px rgba(0,0,0,.65)}
+.win .tb{height:46px;background:#130F1A;display:flex;align-items:center;gap:10px;padding:0 18px;font-family:var(--display);font-weight:700;font-size:20px}
+.win .tb img{width:24px}
+.win .tb .wc{margin-right:auto;display:flex;gap:26px;color:var(--muted);direction:ltr;font-size:18px}
+#home{left:120px;top:70px;width:1680px;height:940px}
+#home .in{position:absolute;top:46px;left:0;right:0;padding:26px 40px}
+.hh{display:flex;align-items:center;gap:16px}
+.hh .gr small{display:block;color:var(--muted);font-size:20px}
+.hh .gr b{font-family:var(--display);font-size:40px;font-weight:800}
+.hh .sp{flex:1}
+.hh .icb{width:52px;height:52px;border-radius:14px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-2)}
+.hero{position:relative;height:440px;border-radius:26px;overflow:hidden;margin-top:24px}
+.hero .bgp{position:absolute;inset:0}
+.hero .scrim{position:absolute;inset:0;background:linear-gradient(270deg,transparent 30%,rgba(21,17,28,.92) 85%)}
+.hero .txt{position:absolute;left:50px;top:70px;width:620px}
+.hero .txt small{color:var(--accent-hi);font-weight:600;font-size:21px}
+.hero .txt h3{font-family:var(--display);font-weight:800;font-size:72px;line-height:1.1;direction:ltr;text-align:right;margin:8px 0}
+.hero .txt .m{display:flex;gap:12px;align-items:center;color:var(--ink-2);font-size:21px}
+.hero .txt .bs{display:flex;gap:12px;margin-top:26px}
+.hero .dots{position:absolute;left:50px;bottom:30px;display:flex;gap:10px;direction:ltr}
+.hero .dots i{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.35)}
+.hero .dots i.on{width:34px;border-radius:6px;background:#fff}
+.sec{display:flex;align-items:baseline;gap:14px;margin:30px 0 16px}
+.sec b{font-family:var(--display);font-size:30px;font-weight:800}
+.sec span{color:var(--muted);font-size:19px}
+.cw{display:flex;gap:22px}
+.cwc{flex:1;display:flex;gap:16px;align-items:center;padding:14px;border-radius:20px}
+.cwc .poster{width:84px;height:120px;border-radius:12px}
+.cwc .poster .pt{display:none}
+.cwc b{font-family:var(--display);font-size:26px;direction:ltr;display:block;text-align:right}
+.cwc small{color:var(--muted);font-size:18px}
+.bar{height:8px;border-radius:4px;background:rgba(255,255,255,.1);margin-top:12px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:4px;background:var(--watching)}
+.tabs{display:flex;gap:12px}
+.tab{padding:10px 22px;border-radius:999px;font-weight:600;font-size:21px;background:var(--surface);border:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.tab span{opacity:.7;font-size:18px}
+.grid{display:flex;gap:22px;margin-top:22px}
+.grid .poster{width:210px;height:310px}
+.callout{position:absolute;padding:16px 24px;border-radius:18px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:25px;
+  box-shadow:0 20px 50px rgba(0,0,0,.5);white-space:nowrap;z-index:5}
+.callout::after{content:'';position:absolute;width:18px;height:18px;background:inherit;transform:rotate(45deg)}
+.callout.dn::after{bottom:-8px;right:40px}
+.callout.up::after{top:-8px;right:40px}
+
+/* ===== 6: الحالات والتقييم ===== */
+.det{position:absolute;left:110px;top:250px;width:1040px;padding:34px;display:flex;gap:34px}
+.det .poster{width:300px;height:445px}
+.det .info{flex:1}
+.det h3{font-family:var(--display);font-size:64px;font-weight:800;direction:ltr;text-align:right;line-height:1.1}
+.det .m{color:var(--muted);font-size:21px;margin:6px 0 16px}
+.det .rates{display:flex;gap:12px;margin-bottom:22px}
+.det .rates .badge{font-size:23px;padding:7px 14px}
+.stars{display:flex;gap:6px;direction:ltr;justify-content:flex-end}
+.stars i{font-style:normal;font-size:34px;color:rgba(255,255,255,.18)}
+.stars i.on{color:var(--queue)}
+.det .lbl{color:var(--muted);font-size:19px;margin:20px 0 8px}
+.note{background:var(--field);border:1px solid var(--line);border-radius:14px;padding:16px 18px;font-size:23px;min-height:62px}
+.statusbar{position:absolute;left:110px;top:150px;width:1040px;display:flex;gap:14px;justify-content:center}
+.statusbar .pill{border:2px solid transparent;background:var(--surface)}
+.filters{position:absolute;left:110px;top:790px;width:1040px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* ===== 7: البلاير ===== */
+.player{position:absolute;left:90px;top:120px;width:1040px;height:720px;border-radius:24px;overflow:hidden;background:#000;border:1px solid var(--line-2);box-shadow:0 40px 110px rgba(0,0,0,.7)}
+.player .pb{height:70px;background:rgba(21,17,28,.96);display:flex;align-items:center;gap:12px;padding:0 20px}
+.player .pb b{font-family:var(--display);font-size:24px;direction:ltr}
+.player .pb .ep{color:var(--accent-hi);font-family:var(--display);font-size:22px;direction:ltr}
+.player .pb .sp{flex:1}
+.srv{padding:7px 14px;border-radius:10px;font-size:17px;font-weight:600;background:var(--raised);border:1px solid var(--line);color:var(--ink-2);white-space:nowrap}
+.srv.on{background:var(--accent);color:var(--accent-ink)}
+.player .vid{position:absolute;top:70px;left:0;right:0;bottom:0}
+.player .vid .poster{position:absolute;inset:0;border-radius:0;width:auto;height:auto}
+.player .vid .poster .pt{display:none}
+.player .ctr{position:absolute;left:0;right:0;bottom:0;padding:26px 30px;background:linear-gradient(transparent,rgba(0,0,0,.8));direction:ltr}
+.player .ctr .tl{height:7px;border-radius:4px;background:rgba(255,255,255,.25)}
+.player .ctr .tl i{display:block;height:100%;width:var(--w,0%);background:var(--accent);border-radius:4px;position:relative}
+.player .ctr .tl i::after{content:'';position:absolute;right:-9px;top:-6px;width:19px;height:19px;border-radius:50%;background:#fff}
+.player .ctr .row2{display:flex;justify-content:space-between;color:#fff;font-size:20px;margin-top:12px;font-weight:500}
+.player .sub{position:absolute;left:0;right:0;bottom:120px;text-align:center}
+.player .sub span{background:rgba(0,0,0,.7);padding:8px 18px;border-radius:8px;font-size:30px;font-weight:600}
+.player .bigplay{position:absolute;left:50%;top:50%;width:120px;height:120px;margin:-60px;border-radius:50%;background:rgba(255,255,255,.15);backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center}
+.resume{position:absolute;right:30px;top:96px;padding:12px 20px;border-radius:14px;background:rgba(21,17,28,.9);border:1px solid var(--line);font-size:21px;font-weight:600;display:flex;gap:10px;align-items:center}
+.tracker{position:absolute;right:130px;top:640px;width:560px;padding:26px 30px;display:flex;gap:24px;align-items:center}
+.tracker .num{font-family:var(--display);font-weight:800;font-size:46px;white-space:nowrap;direction:ltr;line-height:1}
+.tracker small{display:block;color:var(--muted);font-size:19px}
+.flag{position:absolute;padding:14px 22px;border-radius:16px;font-weight:700;font-size:23px;white-space:nowrap;z-index:4}
+
+/* ===== 8: موسم جديد ===== */
+.ns-card{position:absolute;left:300px;top:200px;width:420px}
+.ns-card .poster{width:420px;height:620px;border-radius:24px}
+.ns-card .rib{position:absolute;left:-14px;top:30px;background:var(--accent);color:var(--accent-ink);padding:12px 22px;border-radius:12px;font-weight:800;font-size:24px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.wtoast{position:absolute;right:60px;bottom:60px;width:560px;padding:22px 24px;border-radius:14px;background:#2b2b2b;border:1px solid #3d3d3d;box-shadow:0 20px 60px rgba(0,0,0,.6);display:flex;gap:18px}
+.wtoast img{width:56px;height:56px}
+.wtoast b{font-size:24px;display:block}
+.wtoast small{font-size:20px;color:#c8c8c8}
+.wtoast .app{font-size:16px;color:#9a9a9a;margin-bottom:6px}
+
+/* ===== 9: Watch Party ===== */
+.room{position:absolute;left:110px;top:90px;width:1050px;padding:26px 34px;display:flex;align-items:center;gap:30px}
+.room small{color:var(--muted);font-size:20px;display:block}
+.code{display:flex;gap:8px;direction:ltr}
+.code i{font-style:normal;width:58px;height:74px;border-radius:12px;background:var(--field);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+  font-family:var(--display);font-weight:800;font-size:44px;color:var(--accent)}
+.code .dash{width:18px;background:none;border:none;color:var(--faint)}
+.avs{display:flex;direction:ltr;margin-right:auto}
+.av{width:62px;height:62px;border-radius:50%;border:3px solid var(--solid);margin-left:-14px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:24px;color:#1b1424}
+.screens{position:absolute;left:110px;top:300px;width:1050px;display:flex;gap:50px}
+.scr{flex:1}
+.scr .lab{display:flex;gap:10px;align-items:center;font-weight:600;font-size:22px;margin-bottom:12px;color:var(--ink-2)}
+.scr .frm{position:relative;height:380px;border-radius:18px;overflow:hidden;border:1px solid var(--line-2);background:#000}
+.scr .frm .poster{position:absolute;inset:0;width:auto;height:auto;border-radius:0}
+.scr .frm .poster .pt{display:none}
+.scr .ctl{position:absolute;left:16px;right:16px;bottom:16px;height:6px;border-radius:3px;background:rgba(255,255,255,.25);direction:ltr}
+.scr .ctl i{display:block;height:100%;width:var(--w,30%);background:var(--accent);border-radius:3px}
+.scr .ov{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;gap:12px}
+.sync{position:absolute;left:635px;top:480px;width:60px;height:30px;margin-left:-30px}
+.weblink{position:absolute;left:110px;top:780px;width:1050px;padding:22px 28px;display:flex;gap:20px;align-items:center}
+.weblink .url{direction:ltr;font-family:monospace;font-size:22px;color:var(--accent-hi);background:var(--field);padding:10px 16px;border-radius:10px}
+.phone{width:60px;height:96px;border-radius:12px;border:3px solid var(--ink-2);position:relative;flex:none}
+.phone::after{content:'';position:absolute;left:50%;bottom:6px;width:16px;height:4px;margin-left:-8px;border-radius:2px;background:var(--ink-2)}
+
+/* ===== 10: الذكاء الاصطناعي ===== */
+.taste{position:absolute;left:110px;top:110px;width:1040px;padding:32px}
+.taste .th{display:flex;align-items:center;gap:16px}
+.taste .th b{font-family:var(--display);font-size:36px}
+.taste .prof{margin-top:16px;font-size:23px;color:var(--ink-2);line-height:1.7}
+.taste .prof em{font-style:normal;color:var(--accent-hi);font-weight:600}
+.think{display:flex;gap:12px;align-items:center;font-size:22px;color:var(--muted);margin-top:22px}
+.think i{width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.picks{display:flex;gap:24px;margin-top:26px}
+.pick{flex:1;padding:16px;border-radius:20px;background:var(--raised);border:1px solid var(--line)}
+.pick .poster{width:100%;height:330px}
+.pick b{display:block;font-family:var(--display);font-size:24px;margin-top:12px;direction:ltr;text-align:right}
+.pick .why{display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--accent-hi);font-size:18px;font-weight:600}
+.whyp{position:absolute;left:150px;top:820px;width:960px;padding:20px 26px;border-radius:18px;background:var(--solid);border:1px solid var(--accent);font-size:22px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.whyp b{color:var(--accent-hi)}
+.prov{display:flex;flex-wrap:wrap;gap:12px;margin-top:26px}
+.prov .chip{direction:ltr}
+
+/* ===== 11: الفيلم الغامض ===== */
+.myst{position:absolute;left:110px;top:150px;width:1080px;height:680px;border-radius:24px;overflow:hidden;border:1px solid var(--line-2);background:#000;box-shadow:0 40px 110px rgba(0,0,0,.7)}
+.myst .poster{position:absolute;inset:0;width:auto;height:auto;border-radius:0}
+.myst .poster .pt{font-size:90px;bottom:60px;background:none}
+.myst .top{position:absolute;top:0;left:0;right:0;height:76px;background:rgba(21,17,28,.92);display:flex;align-items:center;gap:16px;padding:0 24px;z-index:2}
+.myst .top b{font-family:var(--display);font-size:28px}
+.myst .qm{position:absolute;left:50%;top:50%;font-family:var(--display);font-size:260px;font-weight:800;color:rgba(255,255,255,.85);transform:translate(-50%,-50%) scale(var(--s,1));z-index:2;text-shadow:0 10px 40px rgba(0,0,0,.6)}
+
+/* ===== 12: الإحصائيات ===== */
+.statcap{position:absolute;left:0;right:0;top:60px;text-align:center}
+.statcap h2{font-family:var(--display);font-weight:800;font-size:76px}
+.statcap h2 em{font-style:normal;color:var(--accent)}
+.statcap p{font-size:28px;color:var(--ink-2)}
+.kpis{position:absolute;left:120px;right:120px;top:280px;display:flex;gap:30px}
+.kpi{flex:1;padding:28px 32px}
+.kpi small{color:var(--muted);font-size:22px}
+.kpi b{display:block;margin-top:14px;font-family:var(--display);font-size:84px;font-weight:800;line-height:1.1;direction:ltr;text-align:right}
+.kpi .bar{height:12px;margin-top:16px}
+.charts{position:absolute;left:120px;right:120px;top:540px;display:flex;gap:30px}
+.chart{flex:1;padding:26px 30px;height:420px}
+.chart h4{font-size:24px;font-weight:600;margin-bottom:18px}
+.bars{display:flex;align-items:flex-end;gap:18px;height:280px;direction:rtl}
+.bars div{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;height:100%;justify-content:flex-end}
+.bars i{display:block;width:100%;border-radius:10px 10px 4px 4px;background:linear-gradient(var(--accent-hi),var(--accent))}
+.bars span{font-size:18px;color:var(--muted)}
+.genres{display:flex;flex-wrap:wrap;gap:12px;align-content:flex-start}
+.genres .chip{font-size:24px}
+.genres .chip span{color:var(--muted);font-size:19px}
+.hist{display:flex;align-items:flex-end;gap:10px;height:280px;direction:ltr}
+.hist div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:8px}
+.hist i{display:block;width:100%;border-radius:8px 8px 3px 3px;background:var(--watched)}
+.hist span{font-size:18px;color:var(--muted)}
+
+/* ===== 13: التنزيلات ===== */
+.ask{position:absolute;left:190px;top:160px;width:880px;padding:36px 40px}
+.ask h4{font-family:var(--display);font-size:38px;margin-bottom:14px}
+.ask .file{display:flex;gap:18px;align-items:center;background:var(--field);border:1px solid var(--line);border-radius:16px;padding:18px 20px}
+.ask .file .fi{width:60px;height:72px;border-radius:10px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--accent-hi);direction:ltr}
+.ask .file b{display:block;direction:ltr;text-align:right;font-size:25px;font-family:monospace}
+.ask .file small{color:var(--muted);font-size:20px}
+.ask .bs{display:flex;gap:14px;margin-top:24px;justify-content:flex-start}
+.dls{position:absolute;left:110px;top:150px;width:1040px;padding:30px 34px}
+.dls h4{font-family:var(--display);font-size:34px;margin-bottom:10px;display:flex;gap:12px;align-items:center}
+.dl{display:flex;gap:18px;align-items:center;padding:18px 0;border-top:1px solid var(--line)}
+.dl .fi{width:54px;height:64px;border-radius:10px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent-hi);direction:ltr;flex:none}
+.dl .mid{flex:1}
+.dl b{display:block;direction:ltr;text-align:right;font-family:monospace;font-size:22px}
+.dl small{color:var(--muted);font-size:19px}
+.dl .bar{height:10px}
+.dl .bar i{background:var(--accent)}
+.dl .st{font-weight:700;font-size:20px;white-space:nowrap;min-width:150px;text-align:left}
+.dl.blocked{background:rgba(255,122,154,.08);border-radius:14px;padding:18px;border-top:none;margin-top:6px}
+.dl.blocked b{text-decoration:line-through;opacity:.7}
+.shield{position:absolute;left:660px;top:790px;width:460px;padding:24px 26px;display:flex;gap:18px;align-items:center}
+.shield svg{width:64px;height:64px;color:var(--watching)}
+.shield b{font-size:24px;display:block}
+.shield small{color:var(--muted);font-size:19px}
+.adbox{position:absolute;width:190px;height:110px;border-radius:12px;background:repeating-linear-gradient(45deg,#3b2a40,#3b2a40 12px,#2f2235 12px,#2f2235 24px);border:2px dashed #ff7a9a;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:28px;color:#ff7a9a;direction:ltr}
+
+/* ===== 14: الأمزجة ===== */
+.moodcap{position:absolute;left:0;right:0;top:56px;text-align:center}
+.moodcap h2{font-family:var(--display);font-weight:800;font-size:76px}
+.moodcap h2 em{font-style:normal;color:var(--accent)}
+.moodcap p{font-size:28px;color:var(--ink-2)}
+#mwin{left:330px;top:290px;width:1260px;height:600px}
+#mwin .in{position:absolute;top:46px;left:0;right:0;padding:22px 30px}
+#mwin .hero{height:300px;margin-top:16px}
+#mwin .hero .txt{top:46px}
+#mwin .hero .txt h3{font-size:54px}
+#mwin .tabs{margin-top:22px}
+.moods{position:absolute;left:0;right:0;top:930px;display:flex;justify-content:center;gap:24px}
+.mood{display:flex;align-items:center;gap:14px;padding:12px 26px 12px 16px;border-radius:999px;background:rgba(255,255,255,.06);border:2px solid transparent;font-weight:700;font-size:26px}
+.mood i{width:38px;height:38px;border-radius:50%}
+
+/* ===== 15: الأمان والخصوصية ===== */
+.tiles{position:absolute;left:150px;right:150px;top:330px;display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+.tile{padding:30px 32px;display:flex;gap:22px;align-items:flex-start}
+.tile .ti{width:72px;height:72px;border-radius:20px;display:flex;align-items:center;justify-content:center;flex:none}
+.tile .ti svg{width:38px;height:38px}
+.tile b{display:block;font-family:var(--display);font-size:32px;line-height:1.2}
+.tile small{display:block;color:var(--muted);font-size:21px;margin-top:6px;line-height:1.5}
+
+/* ===== 16: النهاية ===== */
+#s16 .logo{position:absolute;left:50%;top:180px;width:260px;height:260px;margin-left:-130px}
+#s16 .logo img{width:100%;height:100%}
+#s16 .word{position:absolute;left:0;right:0;top:460px;text-align:center;font-family:var(--display);font-weight:800;font-size:130px;direction:ltr;line-height:1}
+#s16 .sl{position:absolute;left:0;right:0;top:620px;text-align:center;font-size:42px;color:var(--ink-2);font-weight:500}
+#s16 .cta{position:absolute;left:50%;top:740px;transform:translateX(-50%) translate(var(--x,0px),var(--y,0px)) scale(var(--s,1));display:flex;gap:18px;align-items:center}
+#s16 .cta .btn{font-size:28px;padding:18px 34px;border-radius:18px}
+#s16 .gh{position:absolute;left:0;right:0;top:880px;text-align:center;direction:ltr;font-family:monospace;font-size:26px;color:var(--muted)}
+#s16 .gh svg{width:28px;height:28px;vertical-align:middle;margin-right:10px;fill:var(--muted)}
+#s16 .os{position:absolute;left:0;right:0;top:935px;text-align:center;font-size:22px;color:var(--faint)}
+</style>
+</head>
+<body>
+<div id="frame">
+  <div id="bg"><i id="g1"></i><i id="g2"></i><i id="g3"></i></div>
+
+  <!-- 1: البداية -->
+  <section class="scene" id="s1">
+    <div class="logo a"><img src="../build/icon.svg" alt=""><div class="sheen"></div></div>
+    <div class="word"><span class="a">r</span><span class="a">i</span><span class="a">l</span><span class="a">i</span><span class="a">o</span></div>
+    <div class="tag a"><span id="s1tag"></span><span class="caret"></span></div>
+  </section>
+
+  <!-- 2: المشكلة -->
+  <section class="scene" id="s2">
+    <div class="mess note a" style="left:150px;top:150px">فيلم صاحبي قالي عليه 🤔</div>
+    <div class="mess lnk a" style="left:1240px;top:120px">imdb.com/title/tt0816692</div>
+    <div class="mess shot a" style="left:1430px;top:640px"></div>
+    <div class="mess chat a" style="left:200px;top:720px">ابقى شوف المسلسل ده!</div>
+    <div class="mess note a" style="left:1300px;top:860px">الموسم الجاي نزل؟</div>
+    <div class="mess lnk a" style="left:120px;top:470px">notes.txt — 37 فيلم</div>
+    <div class="mess shot a" style="left:760px;top:90px"></div>
+    <div class="mess note a" style="left:820px;top:880px">كنت واقف عند حلقة كام؟</div>
+    <div class="mess chat a" style="left:1450px;top:420px">نتفرج على إيه النهارده؟</div>
+    <div class="q a">قايمة أفلامك <em>متبعترة</em>؟</div>
+    <img class="mini a" src="../build/icon.svg" alt="">
+    <div class="ans a"><b>rilio</b> بيلمّها كلها في مكان واحد</div>
+  </section>
+
+  <!-- 3: الإضافة السريعة -->
+  <section class="scene" id="s3">
+    <div class="qa glass a">
+      <div class="search"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span class="typed"><span id="s3type"></span><span class="caret"></span></span></div>
+      <div class="hdr a">— 4 نتايج —</div>
+      <div id="s3rows"></div>
+    </div>
+    <div class="cap">
+      <span class="kick a"><b>01</b> إضافة سريعة</span>
+      <h2 class="a">ضيف أي فيلم أو مسلسل <em>في ثانية</em></h2>
+      <p class="a">ابحث بالاسم والنتايج بتظهر وإنت بتكتب — بوستر، سنة، وتقييم IMDb. دوسة واحدة وبقى في قايمتك.</p>
+      <div class="chips"><span class="chip a">بحث لايف من TMDB</span><span class="chip a">تراجع لو غلطت</span><span class="chip a">مفيش تكرار</span></div>
+    </div>
+    <div class="toast a" id="s3toast">اتضاف لـ "هشوفه" ✔</div>
+  </section>
+
+  <!-- 4: إضافة المتصفح -->
+  <section class="scene" id="s4">
+    <div class="browser a">
+      <div class="bar"><span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
+        <div class="url">🔒 imdb.com/title/tt11280740</div><div class="ext"><img src="../icon48.png" alt=""></div></div>
+      <div class="page">
+        <div id="s4poster"></div>
+        <div style="flex:1"><h3>Severance</h3><div style="color:#9a9aa8;font-size:22px">TV Series · 2022– · Drama, Mystery, Sci-Fi</div>
+          <div style="margin-top:18px;display:flex;gap:10px"><span class="badge imdb">★ 8.7</span></div>
+          <div class="ln" style="width:92%;margin-top:30px"></div><div class="ln" style="width:80%"></div><div class="ln" style="width:86%"></div><div class="ln" style="width:60%"></div></div>
+      </div>
+    </div>
+    <div class="extpanel a" id="s4panel">
+      <div class="h"><img src="../icon48.png" alt=""><span>rilio — ضيف لقايمتك</span></div>
+      <div class="s">Severance · مسلسل · 2022</div>
+      <div class="bs"><div class="am">هشوفه</div><div>شفته</div></div>
+      <div class="ok a" id="s4ok">✔ اتضاف لقايمتك</div>
+    </div>
+    <div class="cap">
+      <span class="kick a"><b>02</b> إضافة للمتصفح</span>
+      <h2 class="a">أو من صفحة <em>IMDb</em> على طول</h2>
+      <p class="a">إضافة Chrome / Edge بتحطلك زرار على صفحة أي فيلم أو مسلسل — ومن غير ما تكتب حاجة.</p>
+    </div>
+  </section>
+
+  <!-- 5: الشاشة الرئيسية -->
+  <section class="scene" id="s5">
+    <div class="win a" id="home">
+      <div class="tb"><img src="../build/icon.svg" alt="">rilio<div class="wc"><span>—</span><span>☐</span><span>✕</span></div></div>
+      <div class="in a" id="homeIn">
+        <div class="hh">
+          <div class="gr"><small>مساء الخير 👋</small><b>نتفرج على إيه الليلة؟</b></div>
+          <div class="sp"></div>
+          <span class="btn acc"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>ضيف</span>
+          <span class="icb"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span>
+          <span class="icb"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5a5 5 0 0 1 6 5"/></svg></span>
+          <span class="icb"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></span>
+          <span class="icb"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>
+          <span class="icb"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg></span>
+          <span class="icb"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 14.4H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg></span>
+        </div>
+        <div class="hero">
+          <div class="bgp" id="hero1"></div><div class="bgp" id="hero2"></div>
+          <div class="scrim"></div>
+          <div class="txt" id="herotxt1"><small>اختيار الليلة · 1 من 6</small><h3>Dune: Part Two</h3>
+            <div class="m"><span>2024 · فيلم · خيال علمي</span><span class="badge imdb">IMDb 8.5</span><span class="badge rt">🍅 92%</span></div>
+            <div class="bs"><span class="btn acc">▶ شغّل</span><span class="btn">التفاصيل</span></div></div>
+          <div class="txt" id="herotxt2"><small>اختيار الليلة · 2 من 6</small><h3>Shōgun</h3>
+            <div class="m"><span>2024 · مسلسل · دراما</span><span class="badge imdb">IMDb 8.6</span><span class="badge rt">🍅 99%</span></div>
+            <div class="bs"><span class="btn acc">▶ شغّل</span><span class="btn">التفاصيل</span></div></div>
+          <div class="dots"><i id="dot1" class="on"></i><i id="dot2"></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="sec"><b>كمّل اللي بدأته</b><span>من نفس المكان اللي وقفت فيه</span></div>
+        <div class="cw" id="cwRow"></div>
+        <div class="sec" style="margin-top:34px"><div class="tabs">
+          <span class="tab" style="background:var(--queue);color:#2b1d05">هشوفه <span>24</span></span>
+          <span class="tab">بتفرج <span>3</span></span><span class="tab">شفته <span>142</span></span><span class="tab">سبته <span>6</span></span></div></div>
+        <div class="grid" id="homeGrid"></div>
+      </div>
+    </div>
+    <div class="callout dn a" id="co1" style="left:1040px;top:330px">✨ اختيار الليلة بيتغيّر لوحده كل 9 ثواني</div>
+    <div class="callout dn a" id="co2" style="left:760px;top:690px">⏯ كمّل الحلقة من نفس الثانية</div>
+    <div class="callout up a" id="co3" style="left:1180px;top:610px">🗂 4 قوايم: هشوفه · بتفرج · شفته · سبته</div>
+  </section>
+
+  <!-- 6: الحالات والتقييم -->
+  <section class="scene" id="s6">
+    <div class="statusbar">
+      <span class="pill a" style="color:var(--queue)"><i></i>هشوفه</span>
+      <span class="pill a" style="color:var(--watching)"><i></i>بتفرج</span>
+      <span class="pill a" style="color:var(--watched)" id="s6watched"><i></i>شفته</span>
+      <span class="pill a" style="color:var(--dropped)"><i></i>سبته</span>
+    </div>
+    <div class="det glass a">
+      <div id="s6poster"></div>
+      <div class="info">
+        <h3>Arrival</h3>
+        <div class="m">2016 · فيلم · خيال علمي، دراما · 116 دقيقة</div>
+        <div class="rates"><span class="badge imdb a">IMDb 7.9</span><span class="badge rt a">🍅 94%</span></div>
+        <div class="lbl">تقييمي</div>
+        <div class="stars" id="s6stars"></div>
+        <div class="lbl">ملاحظتي</div>
+        <div class="note"><span id="s6note"></span></div>
+      </div>
+    </div>
+    <div class="filters">
+      <span class="chip a">الكل</span><span class="chip a">أفلام</span><span class="chip a">مسلسلات</span><span class="chip a">تصنيفات ▾</span>
+      <span class="chip a">ترتيبي</span><span class="chip a">الأحدث</span><span class="chip a ltr">IMDb ↓</span>
+    </div>
+    <div class="cap">
+      <span class="kick a"><b>03</b> نظّم وقيّم</span>
+      <h2 class="a">رتّب كل حاجة <em>على مزاجك</em></h2>
+      <p class="a">4 حالات لكل عمل، تقييم IMDb و Rotten Tomatoes جنب بعض، تقييمك إنت من 10 وملاحظة بخط إيدك.</p>
+      <div class="chips"><span class="chip a">فلترة بالتصنيف</span><span class="chip a">ترتيب بالسحب</span></div>
+    </div>
+  </section>
+
+  <!-- 7: البلاير -->
+  <section class="scene" id="s7">
+    <div class="player a">
+      <div class="pb">
+        <b>Dark</b><span class="ep" id="s7ep">S01 · E04</span><span class="sp"></span>
+        <span class="srv on a" id="srv1">سيرفر 1</span><span class="srv a" id="srv2">سيرفر 2</span><span class="srv a">سيرفر 3</span><span class="srv a">سيرفر 4</span><span class="srv a">مخصص</span>
+        <span class="srv">CC عربي</span><span class="srv">⧉ نافذة</span><span class="srv">⛶</span>
+      </div>
+      <div class="vid"><div id="s7vid"></div>
+        <div class="sub a"><span>إحنا مش بنسأل إمتى… إحنا بنسأل إمتى!</span></div>
+        <div class="bigplay a"><svg viewBox="0 0 24 24" width="56" height="56"><path d="M8 5v14l11-7z" fill="#fff"/></svg></div>
+        <div class="ctr"><div class="tl"><i id="s7tl"></i></div><div class="row2"><span id="s7time">00:00</span><span>51:24</span></div></div>
+      </div>
+      <div class="resume a">⏱ وقفت عند <span class="ltr">S01E04 · 23:10</span> — نكمّل؟</div>
+    </div>
+    <div class="flag a" id="s7done" style="left:110px;top:875px;background:var(--watching);color:#0F2A23">✔ اتعلّمت <span class="ltr">S01E04</span> لوحدها</div>
+    <div class="flag a" id="s7next" style="left:470px;top:875px;background:var(--raised);border:1px solid var(--line)">خلصتها — شغّل الجاية ▶</div>
+    <div class="cap" style="margin-top:-330px">
+      <span class="kick a"><b>04</b> البلاير</span>
+      <h2 class="a">اتفرج <em>جوه البرنامج</em></h2>
+      <p class="a">4 سيرفرات + سيرفر بتاعك، ترجمة عربي تلقائي، نافذة مستقلة وملء الشاشة — والحلقات بتتعلّم لوحدها.</p>
+    </div>
+    <div class="tracker glass a">
+      <div><small>متابعة الحلقات</small><div class="num" id="s7num">S01 · E04</div></div>
+      <div style="flex:1"><small id="s7rem">فاضل 7 من 10 في موسم 1</small><div class="bar" style="height:12px"><i id="s7bar" style="width:30%"></i></div></div>
+    </div>
+  </section>
+
+  <!-- 8: موسم جديد -->
+  <section class="scene" id="s8">
+    <div class="ns-card a"><div id="s8poster"></div><div class="rib a">🔔 موسم جديد نزل!</div></div>
+    <div class="cap">
+      <span class="kick a"><b>05</b> تنبيهات</span>
+      <h2 class="a">ولا موسم جديد <em>هيفوتك</em></h2>
+      <p class="a">rilio بيراقب المسلسلات اللي بتتابعها، وأول ما موسم جديد ينزل يبعتلك إشعار على ويندوز.</p>
+    </div>
+    <div class="wtoast a">
+      <img src="../build/icon.svg" alt="">
+      <div><div class="app">rilio · دلوقتي</div><b>🔔 موسم جديد نزل</b><small><span class="ltr">The Bear</span> — الموسم 4</small></div>
+    </div>
+  </section>
+
+  <!-- 9: Watch Party -->
+  <section class="scene" id="s9">
+    <div class="room glass a">
+      <div><small>كود الأوضة</small>
+        <div class="code" id="s9code"></div></div>
+      <div class="avs" id="s9avs"></div>
+      <div style="text-align:left"><small>متصلين</small><b style="font-family:var(--display);font-size:40px" id="s9n" class="ltr">1 / 8</b></div>
+    </div>
+    <div class="screens">
+      <div class="scr a"><div class="lab">💻 إنت</div><div class="frm"><div class="s9p"></div><div class="ctl"><i class="s9w"></i></div><div class="ov a s9ov"><svg viewBox="0 0 24 24" width="34" height="34"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="#fff"/></svg>إيقاف مؤقت</div></div></div>
+      <div class="scr a"><div class="lab">📱 صاحبك في إسكندرية</div><div class="frm"><div class="s9p"></div><div class="ctl"><i class="s9w"></i></div><div class="ov a s9ov"><svg viewBox="0 0 24 24" width="34" height="34"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="#fff"/></svg>إيقاف مؤقت</div></div></div>
+    </div>
+    <svg class="sync a" viewBox="0 0 60 30"><g fill="var(--accent)"><circle class="sd" cx="10" cy="15" r="5"/><circle class="sd" cx="30" cy="15" r="5"/><circle class="sd" cx="50" cy="15" r="5"/></g></svg>
+    <div class="weblink glass a">
+      <div class="phone"></div>
+      <div style="flex:1"><b style="font-size:25px;display:block">صاحبك معندوش البرنامج؟</b><small style="color:var(--muted);font-size:20px">ابعتله لينك يفتحه من الموبايل أو أي متصفح ويدخل معاكم</small></div>
+      <span class="url">…/join/K7Q2M9XD</span>
+    </div>
+    <div class="cap">
+      <span class="kick a"><b>06</b> Watch Party</span>
+      <h2 class="a">اتفرجوا <em>سوا</em> وإنتو بعيد</h2>
+      <p class="a">اعمل أوضة وابعت الكود — لحد 8 أشخاص، وأي حد يوقف أو يكمّل الكل بيمشي معاه في نفس اللحظة.</p>
+    </div>
+  </section>
+
+  <!-- 10: الذكاء الاصطناعي -->
+  <section class="scene" id="s10">
+    <div class="taste glass a">
+      <div class="th"><svg class="ic" style="width:40px;height:40px;color:var(--accent)" viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg><b>ذوقك</b><span style="flex:1"></span><span class="btn acc a" id="s10btn">✨ رشّحلي دلوقتي</span></div>
+      <div class="prof">شفت <em>142</em> حاجة، متوسط تقييمك <em class="ltr">7.9/10</em>، وأكتر حاجة بتنجذب ليها <em>الخيال العلمي</em>.</div>
+      <div class="think a" id="s10think"><i class="td"></i><i class="td"></i><i class="td"></i><span>الـ AI بيفكر في ذوقك…</span></div>
+      <div class="picks" id="s10picks"></div>
+    </div>
+    <div class="whyp a"><b>اترشحلك ليه؟</b> اترشح بناءً على ذوقك في: <span class="ltr">Interstellar · Arrival · Dark</span> — وكل ما تقيّم أكتر، الترشيحات بتبقى أدق.</div>
+    <div class="cap" style="margin-top:-230px">
+      <span class="kick a"><b>07</b> ترشيحات AI</span>
+      <h2 class="a">ترشيحات على <em>ذوقك إنت</em></h2>
+      <p class="a">وصّل أي ذكاء اصطناعي تحبه — حتى موديل محلي على جهازك ومجاني. المفتاح متشفّر وعمره ما بيخرج من البرنامج.</p>
+      <div class="prov" id="s10prov"></div>
+    </div>
+  </section>
+
+  <!-- 11: الفيلم الغامض -->
+  <section class="scene" id="s11">
+    <div class="myst a">
+      <div class="top"><b>فيلم غامض</b><span style="flex:1"></span><span class="btn acc a" id="s11btn">👁 اكشف الاسم</span></div>
+      <div id="s11poster"></div>
+      <div class="qm a" id="s11qm">?</div>
+    </div>
+    <div class="cap">
+      <span class="kick a"><b>08</b> الفيلم الغامض</span>
+      <h2 class="a">محتار؟ <em>سيبها للحظ</em></h2>
+      <p class="a">rilio يختارلك فيلم عشوائي من قايمتك ويشغّله من غير ما يقولك اسمه… والمفاجأة لما تكشفه.</p>
+    </div>
+  </section>
+
+  <!-- 12: الإحصائيات -->
+  <section class="scene" id="s12">
+    <div class="statcap"><h2 class="a">ذوقك <em>بالأرقام</em></h2><p class="a">شاشة إحصائيات كاملة عن كل اللي اتفرجت عليه</p></div>
+    <div class="kpis">
+      <div class="kpi glass a"><small>حاجة شفتها</small><b id="k1">0</b></div>
+      <div class="kpi glass a"><small>متوسط تقييمك</small><b id="k2">0</b></div>
+      <div class="kpi glass a"><small>أفلام ومسلسلات</small><b id="k3">0٪</b><div class="bar"><i id="k3b" style="width:0;background:var(--accent)"></i></div></div>
+    </div>
+    <div class="charts">
+      <div class="chart glass a"><h4>نشاطك آخر ٦ شهور</h4><div class="bars" id="s12bars"></div></div>
+      <div class="chart glass a"><h4>التصنيفات اللي بتحبها</h4><div class="genres" id="s12genres"></div></div>
+      <div class="chart glass a"><h4>توزيع تقييماتك</h4><div class="hist" id="s12hist"></div></div>
+    </div>
+  </section>
+
+  <!-- 13: التنزيلات -->
+  <section class="scene" id="s13">
+    <div class="ask glass a" id="s13ask">
+      <h4>تنزّل الملف ده؟</h4>
+      <div class="file"><div class="fi">MKV</div><div><b>Dune.Part.Two.2024.1080p.mkv</b><small>2.4 GB · من download-site.net</small></div></div>
+      <div class="bs"><span class="btn acc a" id="s13yes">⬇ نزّل</span><span class="btn">لأ</span></div>
+    </div>
+    <div class="dls glass a" id="s13list">
+      <h4><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg>تنزيلاتي</h4>
+      <div class="dl"><div class="fi">MKV</div><div class="mid"><b>Dune.Part.Two.2024.1080p.mkv</b><div class="bar"><i id="d1" style="width:0"></i></div></div><div class="st" id="d1s">0%</div></div>
+      <div class="dl"><div class="fi">MP4</div><div class="mid"><b>Dark.S01E05.720p.mp4</b><div class="bar"><i id="d2" style="width:40%"></i></div></div><div class="st" id="d2s">⏸ متوقف</div></div>
+      <div class="dl"><div class="fi">SRT</div><div class="mid"><b>Dark.S01E05.ar.srt</b><div class="bar"><i style="width:100%;background:var(--watching)"></i></div></div><div class="st" style="color:var(--watching)">✔ خلص</div></div>
+      <div class="dl blocked a" id="s13blk"><div class="fi" style="color:var(--dropped)">EXE</div><div class="mid"><b>Dune.2024.Full.Movie.exe</b><small>شكله فيلم بس هو برنامج</small></div><div class="st" style="color:var(--dropped)">⛔ اتمنع</div></div>
+    </div>
+    <div class="adbox a" style="left:150px;top:790px">AD</div>
+    <div class="adbox a" style="left:380px;top:850px">POPUP</div>
+    <div class="shield glass a"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+      <div><b>حظر الإعلانات شغال</b><small>وتقدر تقفله لأي موقع لوحده</small></div></div>
+    <div class="cap">
+      <span class="kick a"><b>09</b> التنزيلات</span>
+      <h2 class="a">نزّل واتفرج <em>أوفلاين</em></h2>
+      <p class="a">مفيش حاجة بتنزل من غير موافقتك — الاسم والحجم والمصدر قدامك. البرامج المتنكرة بتتمنع، وكل اللي نزل يشتغل من مكتبتك جوه البرنامج.</p>
+      <div class="chips"><span class="chip a">إيقاف واستكمال</span><span class="chip a">مكتبة محلية</span><span class="chip a">مانع إعلانات</span></div>
+    </div>
+  </section>
+
+  <!-- 14: الأمزجة -->
+  <section class="scene" id="s14">
+    <div class="moodcap"><h2 class="a">4 أمزجة… <em>على مودك</em></h2><p class="a">ولون شريط ويندوز نفسه بيتغيّر معاها</p></div>
+    <div class="win a" id="mwin">
+      <div class="tb" id="mtb"><img src="../build/icon.svg" alt="">rilio<div class="wc"><span>—</span><span>☐</span><span>✕</span></div></div>
+      <div class="in">
+        <div class="hh"><div class="gr"><small>مساء الخير 👋</small><b>نتفرج على إيه الليلة؟</b></div><div class="sp"></div><span class="btn acc">+ ضيف</span></div>
+        <div class="hero"><div class="bgp" id="mhero"></div><div class="scrim"></div>
+          <div class="txt"><small>اختيار الليلة</small><h3>Interstellar</h3><div class="bs"><span class="btn acc">▶ شغّل</span></div></div></div>
+        <div class="tabs"><span class="tab" style="background:var(--queue);color:#2b1d05">هشوفه <span>24</span></span><span class="tab">بتفرج <span>3</span></span><span class="tab">شفته <span>142</span></span><span class="tab">سبته <span>6</span></span></div>
+      </div>
+    </div>
+    <div class="moods">
+      <span class="mood a" id="m0"><i style="background:linear-gradient(135deg,#FF9466,#B9A2FF)"></i>سهرة</span>
+      <span class="mood a" id="m1"><i style="background:linear-gradient(135deg,#6EE7C8,#5E9DF5)"></i>نعناع</span>
+      <span class="mood a" id="m2"><i style="background:linear-gradient(135deg,#FFC56E,#FF7A5C)"></i>قهوة</span>
+      <span class="mood a" id="m3"><i style="background:linear-gradient(135deg,#FBF3E8,#F2774A)"></i>شروق</span>
+    </div>
+  </section>
+
+  <!-- 15: الأمان والخصوصية -->
+  <section class="scene" id="s15">
+    <div class="statcap"><h2 class="a">وكل ده… <em>بأمان</em></h2><p class="a">اتعمل عشان يبقى بتاعك إنت</p></div>
+    <div class="tiles" id="s15tiles"></div>
+  </section>
+
+  <!-- 16: النهاية -->
+  <section class="scene" id="s16">
+    <div class="logo a"><img src="../build/icon.svg" alt=""></div>
+    <div class="word a">rilio</div>
+    <div class="sl a">قايمة مشاهدتك… اتعملت للسهرات الحلوة 🍿</div>
+    <div class="cta a"><span class="btn acc">⬇ حمّله دلوقتي — مجاناً</span></div>
+    <div class="gh a"><svg viewBox="0 0 16 16"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0z"/></svg>github.com/Gasser-hafez/Rilio</div>
+    <div class="os a">ويندوز · إضافة Chrome و Edge</div>
+  </section>
+
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  <div id="ripple"></div>
+  <div id="vignette"></div>
+  <div id="grain"></div>
+</div>
+
+<script src="promo.js"></script>
+</body>
+</html>

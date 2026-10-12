@@ -15,3 +15,6 @@ party-server/.wrangler/
 .agents/
 .claude/
 skills-lock.json
+
+# مخرجات فيديو التعريف (بتتعمل من promo/render.mjs)
+promo/out/
