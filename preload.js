@@ -54,6 +54,9 @@ if (process.isMainFrame && location.origin === 'app://local' && location.pathnam
       onList: fn => ipcRenderer.on('wl:dl:list', (e, l) => fn(l)),
       onEvent: fn => ipcRenderer.on('wl:dl:event', (e, ev) => fn(ev)),
       onAsk: fn => ipcRenderer.on('wl:dl:ask', (e, a) => fn(a)),
+      subs: rel => ipcRenderer.invoke('wl:dl:subs', rel),
+      subsOnline: (rel, q) => ipcRenderer.invoke('wl:dl:subsOnline', rel, q),
+      osCheck: key => ipcRenderer.invoke('wl:os:check', key),
     },
   });
   contextBridge.executeInMainWorld({

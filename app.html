@@ -663,7 +663,7 @@
   .lp-btn:hover{background:rgba(255,255,255,.12)}
   .lp-btn .ic{width:22px;height:22px}
   .lp-time{font-size:13.5px;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.85);padding-inline:8px;white-space:nowrap}
-  .lp select{height:34px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;padding:0 8px}
+  .lp select{width:auto;flex:none;height:34px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background-color:rgba(255,255,255,.08);color:#fff;font-size:13px;padding-block:0;padding-inline:12px 30px;background-position:left 9px center}
   .lp select option{background:#1b1b1b;color:#fff}
   .lp input[type=range]{accent-color:var(--accent);cursor:pointer}
   #lpSeek{width:100%;height:18px;display:block}
@@ -959,12 +959,12 @@
     <input type="range" id="lpSeek" min="0" max="1000" value="0" aria-label="مكان الفيديو" dir="ltr">
     <div class="lp-ctl">
       <button class="lp-btn" data-act="lpToggle" id="lpPlay" aria-label="تشغيل"></button>
-      <button class="lp-btn txt" data-act="lpSkip" data-s="-10" title="رجوع 10 ثواني (←)" aria-label="رجوع 10 ثواني">−10</button>
-      <button class="lp-btn txt" data-act="lpSkip" data-s="10" title="قدّام 10 ثواني (→)" aria-label="قدّام 10 ثواني">+10</button>
+      <button class="lp-btn txt" data-act="lpSkip" data-s="-10" title="رجوع 10 ثواني (←)" aria-label="رجوع 10 ثواني" dir="ltr">−10</button>
+      <button class="lp-btn txt" data-act="lpSkip" data-s="10" title="قدّام 10 ثواني (→)" aria-label="قدّام 10 ثواني" dir="ltr">+10</button>
       <span class="lp-time" id="lpTime" dir="ltr"></span>
       <span class="grow"></span>
       <select id="lpSubs" aria-label="الترجمة" hidden></select>
-      <select id="lpRate" aria-label="السرعة"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
+      <select id="lpRate" aria-label="السرعة" dir="ltr"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
       <button class="lp-btn" data-act="lpMute" id="lpMute" aria-label="الصوت"></button>
       <input type="range" id="lpVol" min="0" max="1" step="0.05" value="1" aria-label="مستوى الصوت" dir="ltr">
       <button class="lp-btn" data-act="lpFs" title="ملء الشاشة (F)" aria-label="ملء الشاشة"><i data-ic="expand"></i></button>
@@ -1138,6 +1138,22 @@
             <button class="linkbtn" data-act="keyGuide" data-k="omdb"><i data-ic="bulb"></i>إزاي أجيب المفتاح؟</button>
             <button class="linkbtn" data-act="keyShared" id="keySharedBtn"><i data-ic="undo"></i>رجّع للمفتاح المشترك</button>
           </div>
+        </div>
+        <div class="kcard desk-only">
+          <div class="khead"><b>OpenSubtitles</b><span class="wtag soft">اختياري</span><span class="kbadge" id="osBadge"></span></div>
+          <p class="sub">ترجمة عربي (أو إنجليزي لو مفيش) للأفلام والحلقات اللي في المكتبة، لما الملف ميكونش جواه ترجمة. ببلاش.</p>
+          <div class="fieldrow">
+            <input type="password" id="osKey" dir="ltr" autocomplete="off" spellcheck="false" placeholder="API Key — سيبه فاضي = من غير ترجمة أونلاين">
+            <button class="btn btn-amber" data-act="osSave">احفظ واتأكد</button>
+          </div>
+          <div class="kstat" id="osStat" role="status" aria-live="polite"></div>
+          <details class="adv"><summary>إزاي أجيب المفتاح؟</summary>
+            <ol class="sub" style="padding-inline-start:20px">
+              <li>اعمل حساب ببلاش على OpenSubtitles.com لو معندكش، وادخل بيه.</li>
+              <li>افتح صفحة المطورين: <button class="btn btn-sm" data-act="osOpen"><i data-ic="ext"></i>افتح الصفحة</button></li>
+              <li>دوس <b dir="ltr">New consumer</b>، اكتب أي اسم (مثلاً rilio)، وبعدين انسخ الـ <b dir="ltr">API Key</b> وحطه هنا.</li>
+            </ol>
+          </details>
         </div>
       </section>
 

@@ -380,6 +380,7 @@ const EXTERNAL_OK = [
   /^https:\/\/www\.themoviedb\.org\/signup$/,
   /^https:\/\/www\.themoviedb\.org\/settings\/api$/,
   /^https:\/\/www\.omdbapi\.com\/apikey\.aspx$/,
+  /^https:\/\/www\.opensubtitles\.com\/en\/consumers$/, // مفتاح الترجمة الأونلاين
 ];
 ipcMain.handle('wl:openExternal', (e, url) => {
   if (!fromApp(e)) throw new Error('forbidden');
@@ -499,6 +500,8 @@ app.whenReady().then(() => {
     session: session.defaultSession, protocol, getWindow: () => win, fromApp, isSiteWindow: wc => siteWindows.has(wc),
     settingsPath: path.join(app.getPath('userData'), 'downloads.json'),
     defaultDir: (!app.isPackaged && process.env.WL_DL_DIR) || path.join(app.getPath('downloads'), 'rilio'), // الـ env للتست بس
+    getStore: () => store, appVersion: app.getVersion(),
+    osBase: (!app.isPackaged && process.env.WL_OS_BASE) || 'https://api.opensubtitles.com/api/v1', // سيرفر وهمي للتست بس
   });
 
   createWindow();

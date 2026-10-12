@@ -290,6 +290,7 @@ async function refreshKeyStatus(){
   keyBadge($('omdbBadge'),omdb?'checking':'shared');
   const [a,b]=await Promise.all([tmdb?checkTmdbKey(tmdb):null,omdb?checkOmdbKey(omdb):null]);
   if(seq!==keyCheckSeq)return; // اتفتحت تاني في النص
+  if(dlApi){const os=(await sget('watchlist:oskey'))||'';$('osKey').value=os;$('osStat').textContent='';keyBadge($('osBadge'),os?'ok':'none');}
   if(a)keyBadge($('tmdbBadge'),a);
   if(b)keyBadge($('omdbBadge'),b);
 }
@@ -298,6 +299,16 @@ async function keySave(kind){
   if(kind==='omdb'&&!input.value.trim())return keyShared();
   const st=await saveCheckedKey(kind,input.value,stat);
   if(st==='ok'||st==='limit'){keyBadge($(kind==='tmdb'?'tmdbBadge':'omdbBadge'),st);if(kind==='omdb')$('keySharedBtn').hidden=false;}
+}
+// OpenSubtitles: الفحص من main (CSP الواجهة مبيسمحش بالنت غير لـ TMDB/OMDb) — بيتحفظ بس لو شغال
+async function osSave(){
+  const v=$('osKey').value.trim(), st=$('osStat');
+  if(!v){await sset('watchlist:oskey','');keyBadge($('osBadge'),'none');st.className='kstat';st.textContent='اتشال — مفيش ترجمة أونلاين';return;}
+  keyStat(st,'checking');
+  const r=await dlApi.osCheck(v).catch(()=>({ok:false,error:'NET'}));
+  const s=r.ok?'ok':r.error==='BAD_KEY'?'bad':'offline';
+  if(s==='ok')await sset('watchlist:oskey',v);
+  keyStat(st,s);if(s!=='offline')keyBadge($('osBadge'),s);
 }
 async function keyShared(){
   await sset('watchlist:omdbkey','');
@@ -2310,9 +2321,7 @@ function dlPlayFile(f){
   const sig={signal:lpAbort.signal};
   $('lpTitle').textContent=it?it.title:stemOf(base);
   $('lpSub').textContent=[l&&l.s&&l.e?`S${pad(l.s)}E${pad(l.e)}`:'',it?base:''].filter(Boolean).join(' · ');
-  v.innerHTML=(f.subs||[]).map((s,i)=>`<track kind="subtitles" src="${esc(s.url)}" label="${esc(s.label)}"${/^[a-z]{2,3}$/i.test(s.label)?` srclang="${esc(s.label)}"`:''}${i===0?' default':''}>`).join('');
-  $('lpSubs').innerHTML=`<option value="-1">بدون ترجمة</option>`+(f.subs||[]).map((s,i)=>`<option value="${i}"${i===0?' selected':''}>${esc(s.label)}</option>`).join('');
-  $('lpSubs').hidden=!(f.subs||[]).length;
+  lpSetSubs(f.subs||[]);
   $('lpRate').value='1';v.playbackRate=1;
   v.src=f.url;
   $('lp').hidden=false;
@@ -2321,6 +2330,7 @@ function dlPlayFile(f){
   for(const ev of ['timeupdate','play','pause','volumechange','durationchange','ended'])v.addEventListener(ev,lpUi,sig);
   v.addEventListener('pause',()=>$('lp').classList.remove('idle'),sig);
   lpUi();
+  lpEnsureSubs(f,l);
   if(!it||it._party)return;
   const tv=it.type==='tv', s=l.s, e=l.e;
   if(tv&&!(s&&e))return; // حلقة مش معروفة — منعلّمش حلقة غلط
@@ -2337,6 +2347,37 @@ function dlPlayFile(f){
     else if(r==='done')autoDone(it,tv?s:0,tv?e:0);
   };
   v.addEventListener('timeupdate',onTime,sig);v.addEventListener('pause',onTime,sig);
+}
+// الترجمة في البلاير: العربي الأول لو موجود
+function lpSetSubs(list){
+  const v=$('dlVideo');
+  v.querySelectorAll('track').forEach(t=>t.remove());
+  for(const s of list){const t=document.createElement('track');t.kind='subtitles';t.src=s.url;t.label=s.label;if(/^[a-z]{2,3}$/i.test(s.label))t.srclang=s.label;v.appendChild(t);}
+  const pick=list.length?Math.max(0,list.findIndex(s=>/^ar\b/i.test(s.label))):-1;
+  for(let i=0;i<v.textTracks.length;i++)v.textTracks[i].mode=i===pick?'showing':'disabled';
+  $('lpSubs').innerHTML='<option value="-1">بدون ترجمة</option>'+list.map((s,i)=>`<option value="${i}"${i===pick?' selected':''}>${esc(s.label)}</option>`).join('');
+  $('lpSubs').hidden=!list.length;
+}
+// مفيش ملف ترجمة جنب الفيلم: نطلّع اللي جوه الملف (MKV) — ولو مفيش، أونلاين من OpenSubtitles (لو فيه مفتاح)
+const OS_ERR={NOT_FOUND:'ملقتش ترجمة عربي ولا إنجليزي ليه على OpenSubtitles',LIMIT:'خلص حد التنزيل اليومي في OpenSubtitles — جرّب بكرة',
+  BAD_KEY:'مفتاح OpenSubtitles مش شغال — راجعه في الإعدادات',NET:'معرفتش أوصل لـ OpenSubtitles — اتأكد من النت'};
+async function lpEnsureSubs(f,l){
+  if((f.subs||[]).length||!dlApi)return;
+  const mkv=/\.(mkv|webm)$/i.test(f.name);
+  if(mkv)toast('بدوّر على ترجمة جوه الفيلم…');
+  let list=await dlApi.subs(f.name).catch(()=>[]);
+  if(lpFile!==f)return;
+  const it=l&&l.it;
+  if(!list.length&&it&&it.tmdbId&&(it.type!=='tv'||(l.s&&l.e))){
+    if(!(await sget('watchlist:oskey'))){toast('مفيش ترجمة للملف ده — ضيف مفتاح OpenSubtitles من الإعدادات وأنا أجيبلك ترجمة أونلاين');return;}
+    toast('بجيب ترجمة أونلاين…');
+    const r=await dlApi.subsOnline(f.name,{tmdbId:it.tmdbId,type:it.type,s:l.s||null,e:l.e||null}).catch(()=>({error:'NET'}));
+    if(lpFile!==f)return;
+    if(r.error){toast(OS_ERR[r.error]||'معرفتش أجيب ترجمة');return;}
+    list=Array.isArray(r.subs)?r.subs:[];
+  }
+  if(!list.length){if(mkv)toast('مفيش ترجمة جوه الملف ده');return;}
+  f.subs=list;lpSetSubs(list);toast('الترجمة جاهزة ✔');
 }
 function lpClose(keepOpen){
   const v=$('dlVideo');
@@ -2627,6 +2668,8 @@ document.addEventListener('click',(e)=>{
     case 'wOpen': openLink(el.dataset.url); break;
     case 'wTmdbSave': wKeySave('tmdb'); break;
     case 'wOmdbSave': wKeySave('omdb'); break;
+    case 'osSave': osSave(); break;
+    case 'osOpen': window.__wlDesktop.openExternal('https://www.opensubtitles.com/en/consumers'); break;
     case 'wDone': case 'wClose': wFinish(); break;
     case 'updInstall': updInstall(); break;
     case 'partyWatch': partyClose(); partyOpenMedia(party.media); break;

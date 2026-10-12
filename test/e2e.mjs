@@ -91,7 +91,26 @@ fs.writeFileSync(path.join(ud2, 'storage.json'), JSON.stringify({
 }));
 const dlDir = path.join(ud2, 'dl-test');
 fs.writeFileSync(path.join(ud2, 'sitewin.json'), JSON.stringify({ width: 900, height: 650 }));
-proc = await launch(ud2, { env: { WL_ADBLOCK_FILTERS: '/wl-ad.gif\n/wl-adpop', WL_DL_DIR: dlDir } });
+// OpenSubtitles وهمي: نفس شكل الـ API (بحث → تنزيل → لينك الملف)، والمفتاح الصح بس اللي بيعدّي
+const OS_KEY = 'TestKey1234567890abcd', osHits = [];
+const osSrv = http.createServer((req, res) => {
+  osHits.push({ url: req.url, key: req.headers['api-key'], ua: req.headers['user-agent'] });
+  const json = o => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+  const u = new URL(req.url, 'http://x');
+  if (u.pathname === '/file/22.srt') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('1\n00:00:01,000 --> 00:00:04,000\nأهلاً\n'); }
+  if (req.headers['api-key'] !== OS_KEY) { res.writeHead(403); return res.end('{}'); }
+  if (u.pathname === '/infos/formats') return json({ data: {} });
+  if (u.pathname === '/subtitles') return json({ data: [
+    { attributes: { language: 'en', download_count: 9999, release: 'Other.Release', files: [{ file_id: 11, file_name: 'x.srt' }] } },
+    { attributes: { language: 'ar', download_count: 5, release: 'ep', files: [{ file_id: 22, file_name: 'ep.srt' }] } }] });
+  if (u.pathname === '/download' && req.method === 'POST') {
+    let b = ''; req.on('data', c => b += c); req.on('end', () => json(JSON.parse(b).file_id === 22 ? { link: `http://127.0.0.1:${osSrv.address().port}/file/22.srt` } : {}));
+    return;
+  }
+  res.writeHead(404); res.end();
+});
+await new Promise(r => osSrv.listen(0, '127.0.0.1', r));
+proc = await launch(ud2, { env: { WL_ADBLOCK_FILTERS: '/wl-ad.gif\n/wl-adpop', WL_DL_DIR: dlDir, WL_OS_BASE: `http://127.0.0.1:${osSrv.address().port}` } });
 try {
   console.log('run 2: malicious backup + hostile iframe');
   const app = await conn('app://local/');
@@ -371,6 +390,27 @@ try {
         await until(() => app.ev(`items.find(i=>i.id==='lib1').curEp===3`), 5000, 'episode marked watched');
         await app.ev(`dlClose();1`);
       });
+      const showingCue = `(t=>t&&t.cues&&t.cues.length?t.cues[0].text:'')([...document.getElementById('dlVideo').textTracks].find(t=>t.mode==='showing'))`;
+      await check('subtitles inside an MKV are pulled out, saved next to it and shown (Arabic first)', async () => {
+        fs.copyFileSync(path.join(root, 'test', 'fixtures', 'subs.mkv'), path.join(dlDir, 'Emb Movie.mkv'));
+        await app.ev(`dlRefresh().then(()=>dlPlayFile(dl.library.find(f=>f.name==='Emb Movie.mkv'))).then(()=>1)`);
+        await until(() => app.ev(`document.querySelectorAll('#lpSubs option').length===3`), 10000, 'two tracks in the picker');
+        assert.equal(await until(() => app.ev(showingCue), 8000, 'Arabic cues'), 'مرحبا');
+        assert.ok(fs.existsSync(path.join(dlDir, 'Emb Movie.ar.srt')) && fs.existsSync(path.join(dlDir, 'Emb Movie.en.srt')), fs.readdirSync(dlDir).join(','));
+        await app.ev(`dlClose();1`);
+      });
+      await check('subtitles online (OpenSubtitles) when there are none: key checked first, Arabic preferred, saved next to the video', async () => {
+        assert.deepEqual(await app.ev(`__wlDesktop.dl.osCheck('nope')`), { ok: false, error: 'BAD_KEY' });
+        assert.deepEqual(await app.ev(`__wlDesktop.dl.osCheck('WrongKey1234567890abc')`), { ok: false, error: 'BAD_KEY' });
+        assert.equal((await app.ev(`__wlDesktop.dl.osCheck(${JSON.stringify(OS_KEY)})`)).ok, true);
+        await app.ev(`sset('watchlist:oskey',${JSON.stringify(OS_KEY)}).then(()=>dlRefresh()).then(()=>dlPlayFile(dl.library.find(f=>f.name==='ep.wav'))).then(()=>1)`);
+        assert.equal(await until(() => app.ev(showingCue), 10000, 'online cues'), 'أهلاً');
+        assert.ok(fs.existsSync(path.join(dlDir, 'ep.ar.srt')));
+        const search = osHits.find(h => h.url.startsWith('/subtitles'));
+        assert.match(search.url, /parent_tmdb_id=55/); assert.match(search.url, /season_number=1/); assert.match(search.url, /episode_number=3/);
+        assert.equal(search.key, OS_KEY); assert.match(search.ua, /^rilio v\d/);
+        await app.ev(`dlClose();1`);
+      });
     } finally { srv.close(); }
   }
   await check('in-app confirm instead of Windows dialogs: cancel keeps, confirm deletes', async () => {
@@ -424,7 +464,7 @@ try {
     assert.equal(r.u, 'https://web.nxsha.app/dl/tv/77/2/5');
   });
   app.close();
-} finally { proc.kill(); }
+} finally { proc.kill(); osSrv.close(); }
 
 // ---------- تشغيل 3: إشعارات المواسم الجديدة (TMDB متزيّف عن طريق CDP) ----------
 const ud3 = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-test-'));
