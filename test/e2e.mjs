@@ -729,7 +729,7 @@ try {
   });
   await check('auto-track: custom server without {episode} — the episode the player reports is what counts', async () => {
     // زي إعدادات المستخدم: سيرفر مخصص من غير موسم/حلقة، والحلقة بتتختار من جوه البلاير
-    await app.ev(`$('playerTpl').value='https://vsembed.ru/embed/{type}/{tmdbID}';1`);
+    await app.ev(`customPlayerServers=[{name:'vsembed',tpl:'https://vsembed.ru/embed/{type}/{tmdbID}'}];1`);
     const info = (e, tmdb = 650) => JSON.stringify({ tmdb: String(tmdb), mediaType: 'tv', season: 1, episode: e });
     const ev = (pos, e, tmdb) => app.ev(`${frame}.contentWindow.postMessage({fake:'playing',pos:${pos},info:${info(e, tmdb)}},'*');1`);
     await app.ev(`items.push(cleanItem({id:'s650',title:'Show H',type:'tv',status:'watching',tmdbId:650,imdbID:'tt650',curSeason:1,curEp:1}));playerSrv=PLAYER_SERVERS.length;openPlayer('s650').then(()=>1)`);
@@ -743,7 +743,7 @@ try {
     assert.equal((await itemOf('s650')).curEp, 5, 'event for another title ignored');
     await ev(2600, 3); await sleep(500);
     assert.equal((await itemOf('s650')).curEp, 5, 'rewatching an old episode does not move the counter back');
-    await app.ev(`playerSrv=0;$('playerTpl').value='';closeModal();1`);
+    await app.ev(`playerSrv=0;customPlayerServers=[];closeModal();1`);
   });
   await check('watch time: counted only while the video plays (seeks ignored), shown in stats', async () => {
     await app.ev(`items.push(cleanItem({id:'s660',title:'Show Timer',type:'tv',status:'watching',tmdbId:660,imdbID:'tt660',curSeason:1,curEp:0}));playerSrv=0;openPlayer('s660').then(()=>1)`);
@@ -1180,18 +1180,16 @@ try {
       assert.equal(await stored('watchlist:omdbkey'), '');
       assert.equal(await app.ev(`$('omdbBadge').textContent`), 'المفتاح المشترك');
     });
-    await check('settings: advanced templates validated on change (javascript: rejected), default server saved', async () => {
-      await app.ev(`setNav('pgWatch');$('playerTpl').value='javascript:alert(1)';$('playerTpl').dispatchEvent(new Event('change'));1`);
-      await sleep(200);
-      assert.match(await app.ev(`$('playerTplErr').textContent`), /https/);
-      assert.equal(await stored('watchlist:playerTpl'), null);
-      await app.ev(`$('playerTpl').value='https://example.org/e/{type}/{tmdbID}';$('playerTpl').dispatchEvent(new Event('change'));1`);
-      await sleep(300);
-      assert.equal(await stored('watchlist:playerTpl'), 'https://example.org/e/{type}/{tmdbID}');
-      assert.match(await app.ev(`$('defSrv').textContent`), /مخصص/, 'custom template shows as a server option');
-      await app.ev(`document.querySelector('#defSrv [data-ix="3"]').click();1`); await sleep(300);
-      assert.equal(await stored('watchlist:playerSrv'), '3');
-      assert.equal(await app.ev(`playerSrv`), 3);
+    await check('settings: custom servers validated on add (javascript: rejected), default server saved', async () => {
+      await app.ev(`setNav('pgWatch');$('customServerTpl').value='javascript:alert(1)';customServerAdd().then(()=>1)`);
+      assert.match(await app.ev(`$('customServersErr').textContent`), /http/);
+      assert.equal(await stored('watchlist:customPlayerServers'), null);
+      await app.ev(`$('customServerName').value='مخصص تجربة';$('customServerTpl').value='https://example.org/e/{type}/{tmdbID}';customServerAdd().then(()=>1)`);
+      assert.deepEqual(JSON.parse(await stored('watchlist:customPlayerServers')), [{ name: 'مخصص تجربة', tpl: 'https://example.org/e/{type}/{tmdbID}' }]);
+      assert.match(await app.ev(`$('defSrv').textContent`), /مخصص تجربة/, 'custom server shows as a server option');
+      await app.ev(`document.querySelector('#defSrv [data-ix="4"]').click();1`); await sleep(300);
+      assert.equal(await stored('watchlist:playerSrv'), '4');
+      assert.equal(await app.ev(`playerSrv`), 4);
     });
     await check('terms can be re-read from "about" (read-only, closable); key-guide links are allowlisted exactly', async () => {
       await app.ev(`setNav('pgAbout');document.querySelector('[data-act="showTerms"]').click();1`);

@@ -56,7 +56,8 @@ function restorePlayerSrv(saved,savedLen){
   const len=parseInt(savedLen||'')||LEGACY_SRV_LIST_LEN;
   const total=playerServers().length;
   if(ix<0)return 0;
-  if(ix>=len)return customPlayerServers.length?PLAYER_SERVERS.length:0;
+  // ix>=len معناه "مخصص" بس في الحفظ القديم (الطول كان عدد الثابتة بس)؛ في الجديد ده رقم بايظ
+  if(ix>=len)return len<=PLAYER_SERVERS.length&&customPlayerServers.length?PLAYER_SERVERS.length:0;
   return ix<total?ix:0;
 }
 let playerSrv=0, playerShield=true, subLang='ar';
