@@ -390,6 +390,22 @@ ipcMain.handle('wl:openExternal', (e, url) => {
   return true;
 });
 
+// فحص المواقع والسيرفرات — الطلب من main (CSP الواجهة مبيسمحش بالنت). بنقرا الـ headers بس ونقفل
+ipcMain.handle('wl:siteCheck', (e, urls) => {
+  if (!fromApp(e)) throw new Error('forbidden');
+  if (!Array.isArray(urls) || urls.length > 60 || !urls.every(u => typeof u === 'string' && u.length <= 2000 && /^https?:\/\//i.test(u))) throw new Error('bad payload');
+  return Promise.all(urls.map(async u => {
+    const t0 = Date.now();
+    try {
+      const res = await net.fetch(u, { signal: AbortSignal.timeout(12000) });
+      if (res.body) res.body.cancel().catch(() => {});
+      return { status: res.status, ms: Date.now() - t0 };
+    } catch (err) {
+      return { error: err.name === 'TimeoutError' ? 'TIMEOUT' : 'UNREACHABLE' };
+    }
+  }));
+});
+
 /* ================= النافذة والـ tray ================= */
 let win, tray, quitting = false;
 

@@ -1341,7 +1341,13 @@
           <input type="text" id="siteUrl" dir="ltr" placeholder="https://example.com/?s={q}" style="flex:2;min-width:200px">
           <button class="btn btn-amber" data-act="addSite"><i data-ic="plus"></i>إضافة</button>
         </div>
-      
+        <div class="desk-only">
+          <h3 class="mt">فحص المواقع</h3>
+          <p class="sub">بيجرّب كل المواقع والسيرفرات (الأساسية والمخصصة) ويقولك مين شغال ومين واقع.</p>
+          <button class="btn btn-sm" data-act="checkSites"><i data-ic="shield"></i>افحص دلوقتي</button>
+          <div id="siteCheck" style="display:flex;flex-direction:column;gap:6px;margin-top:8px" aria-live="polite"></div>
+        </div>
+
       </section>
 
       <section class="spage" id="pgData" hidden>

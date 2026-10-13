@@ -163,6 +163,14 @@ try {
     assert.deepEqual(JSON.parse(c), [4, 4, 4, 0]);
     assert.deepEqual(await app.ev(`[validPlayerTpl('https://a.com/{tmdbID}'),validPlayerTpl('https://a.com/x'),validPlayerTpl('https://u:p@a.com/{tmdbID}'),validPlayerTpl('javascript:{tmdbID}')]`), [true, false, false, false]);
   });
+  await check('site check: up / responds with an error / down, non-http rejected', async () => {
+    const dead = http.createServer(); await new Promise(r => dead.listen(0, '127.0.0.1', r));
+    const deadPort = dead.address().port; await new Promise(r => dead.close(r));
+    const base = `http://127.0.0.1:${osSrv.address().port}`;
+    const r = JSON.parse(await app.ev(`__wlDesktop.siteCheck(${JSON.stringify([`${base}/file/11.srt`, `${base}/nope`, `http://127.0.0.1:${deadPort}/`])}).then(JSON.stringify)`));
+    assert.deepEqual(r.map(x => x.status ?? x.error), [200, 403, 'UNREACHABLE']);
+    assert.equal(await app.ev(`__wlDesktop.siteCheck(['javascript:alert(1)']).then(()=>'ok',()=>'rejected')`), 'rejected');
+  });
   await check('updates section: shows current version; dev build never checks or installs', async () => {
     const r = await app.ev(`(async()=>{const st=await __wlDesktop.update.check();const inst=await __wlDesktop.update.install();
       await new Promise(r=>setTimeout(r,200));

@@ -1426,6 +1426,22 @@ async function siteBlock(ix){
   await sset('watchlist:sites',JSON.stringify(sites));
   renderSites();toast(s.noBlock?`حظر الإعلانات اتقفل لـ ${s.name}`:`حظر الإعلانات رجع لـ ${s.name}`);
 }
+// فحص كل المواقع والسيرفرات بفيلم معروف (Fight Club): أقل من 400 شغال، 4xx بيرد بس رافض، غير كده واقع
+async function checkSites(){
+  const box=$('siteCheck'), sample={type:'film',imdbID:'tt0137523',title:'Fight Club'};
+  const list=[...sites.map(s=>({name:s.name,tpl:s.url,kind:s.dl?'تحميل':'مشاهدة'})),...playerServers().map(s=>({name:s.name,tpl:s.tpl,kind:'سيرفر'}))]
+    .flatMap(x=>{try{return [{...x,url:fillUrl(x.tpl,sample,550)}];}catch(e){return [];}});
+  box.innerHTML='<div class="kstat">بفحص…</div>';
+  const r=await window.__wlDesktop.siteCheck(list.map(x=>x.url)).catch(()=>null);
+  if(!r){box.innerHTML='<div class="kstat bad">معرفتش أفحص — جرّب تاني</div>';return;}
+  box.innerHTML=list.map((x,i)=>{
+    const s=r[i], st=!s.status||s.status>=500?'bad':s.status>=400?'warn':'ok';
+    const msg=st==='ok'?`✓ شغال · ${s.ms}ms`:st==='warn'?`⚠ بيرد بس رجّع ${s.status}`:
+      s.error==='TIMEOUT'?'✗ واقع — مردّش في 12 ثانية':s.error?'✗ واقع — مش بيتوصل له':`✗ واقع — خطأ ${s.status}`;
+    return `<div class="site-row"><span class="site-name" dir="auto">${esc(x.name)}<span class="sub"> · ${x.kind}</span></span>
+      <span class="site-url" dir="ltr">${esc(x.url)}</span><span class="kstat ${st}" style="margin:0;white-space:nowrap">${msg}</span></div>`;
+  }).join('');
+}
 async function delSite(ix){
   sites.splice(ix,1);
   await sset('watchlist:sites',JSON.stringify(sites));
@@ -2980,6 +2996,7 @@ document.addEventListener('click',(e)=>{
     case 'playerSrvCycle': playerSrvCycle(parseInt(el.dataset.n)); break;
     case 'compatiblePlayer': toggleCompatiblePlayer(); break;
     case 'customServerAdd': customServerAdd(); break;
+    case 'checkSites': checkSites(); break;
     case 'customServerRemove': customServerRemove(parseInt(el.dataset.ix)); break;
     case 'playerShield': togglePlayerShield(); break;
     case 'adblockToggle': toggleAdblock(); break;
