@@ -1812,18 +1812,19 @@ async function backup(){
   $('bkBanner').style.display='none';
   toast('النسخة اتنزلت ✔ خبيها في مكان أمين');
 }
+async function restoreBackup(data){
+  if(!data['watchlist:data'])throw new Error('bad');
+  JSON.parse(data['watchlist:data']); // تأكيد إنها قايمة صالحة
+  if(!(await uiConfirm('الاسترجاع هيستبدل كل البيانات الحالية بالنسخة دي — متأكد؟',{yes:'استرجع',danger:true})))return;
+  await chrome.storage.local.set(data);
+  toast('اترجعت ✔');
+  setTimeout(()=>location.reload(),600);
+}
 $('restoreFile').addEventListener('change',async e=>{
   const f=e.target.files[0];e.target.value='';
   if(!f)return;
-  try{
-    const data=JSON.parse(await f.text());
-    if(!data['watchlist:data'])throw new Error('bad');
-    JSON.parse(data['watchlist:data']); // تأكيد إنها قايمة صالحة
-    if(!(await uiConfirm('الاسترجاع هيستبدل كل البيانات الحالية بالنسخة دي — متأكد؟',{yes:'استرجع',danger:true})))return;
-    await chrome.storage.local.set(data);
-    toast('اترجعت ✔');
-    setTimeout(()=>location.reload(),600);
-  }catch(err){toast('الملف ده مش نسخة احتياطية صالحة');}
+  try{await restoreBackup(JSON.parse(await f.text()));}
+  catch(err){toast('الملف ده مش نسخة احتياطية صالحة');}
 });
 
 /* ================= استيراد ترشيحات الـ AI ================= */
@@ -1850,6 +1851,9 @@ $('importOverlay').addEventListener('click',e=>{if(e.target===$('importOverlay')
 
 function parseRecs(text){
   const out=[];const seen=new Set();
+  // رد الـ prompt الطويل فيه أقسام بقوايم مرقمة (البروفايل، الـ queue) — الترشيحات بس اللي في قسمها
+  const sec=text.match(/===\s*RECOMMENDATIONS\s*===([\s\S]*?)(?=\n[^\S\n]*===|$)/i);
+  if(sec)text=sec[1];
   text.split(/\r?\n/).forEach(line=>{
     const m=line.match(/^\s*(?:\d+\s*[\).:\-–—]\s*|[-*•]\s+)(.+)$/);
     if(!m)return;
@@ -1857,6 +1861,7 @@ function parseRecs(text){
     // [because: A; B] = العناوين من ذوقك اللي الترشيح مبني عليها — بتتشال قبل أي حاجة عشان سنينها متلخبطش سنة العنوان
     let from=[];
     s=s.replace(/\[\s*because\s*:([^\]]*)\]/i,(_,l)=>{from=l.split(/[;؛]/).map(t=>t.trim()).filter(Boolean).slice(0,5).map(t=>t.slice(0,120));return '';}).trim();
+    s=s.replace(/\[\s*(?:drivers|predicted)\s*:[^\]]*\]/gi,'').trim();
     let year=null;const ym=s.match(/\((?:[^)]*?)?(\d{4})(?:[^)]*)?\)/);
     if(ym)year=parseInt(ym[1]);
     const parts=s.split(/\s+[—–:|]\s+| - /);
@@ -2112,7 +2117,7 @@ $('aiSec').addEventListener('toggle',e=>{if(e.target.open&&aiModelList.length<=1
 async function aiRun(){
   const btn=$('aiRunBtn');
   btn.disabled=true;
-  $('impStatus').textContent='الـ AI بيفكر في ذوقك… (الموديلات المحلية ممكن تاخد دقيقة)';
+  $('impStatus').textContent='الـ AI بيحلل ذوقك على مراحل… (ممكن ياخد دقيقة أو اتنين، والموديلات المحلية أكتر)';
   try{
     const r=await window.__wlAi.run(tasteProfile());
     if(!r.ok){$('impStatus').textContent='⚠ '+aiErrText(r);return;}
@@ -2146,6 +2151,8 @@ $('setFile').addEventListener('change',async e=>{
   if(!f)return;
   try{
     const data=JSON.parse(await f.text());
+    // نسخة احتياطية كاملة (القايمة + الإعدادات) بدل ملف إعدادات — زي خطوة "عندك ملف؟" في أول تشغيل
+    if(!data.__watchlistSettings&&data['watchlist:data'])return await restoreBackup(data);
     const keys=SETTINGS_KEYS.filter(k=>data[k]!=null);
     if(!data.__watchlistSettings||!keys.length)throw new Error('bad');
     const patch={};keys.forEach(k=>patch[k]=data[k]);
@@ -2157,6 +2164,49 @@ $('setFile').addEventListener('change',async e=>{
 
 /* ================= ملف الذوق ================= */
 // نفس النص بيتنسخ للـ AI يدوي وبيتبعت أوتوماتيك من زرار "رشّحلي" — وآخر سطر بيحدد شكل الرد عشان parseRecs تقراه
+// زرار النسخ و"رشّحلي": تحليل على مراحل — الرد بيتقري بـ parseRecs من قسم RECOMMENDATIONS بس
+const DEEP_PROMPT=`Above is my taste profile: my ratings out of 10, my comments (in Egyptian Arabic), and my watch queue.
+
+Work in stages. Finish stage 1 fully before choosing any title.
+
+STAGE 1 — Build my viewer profile from evidence
+- Treat my comments as the main evidence. Genre tags are weak signals.
+- Find patterns that cut across genres: recurring words in my comments, what my 9–10s share that my 7–8s lack, what exactly sank my low ratings, and every comment where I say something was "missing".
+- Test each hypothesis against my ratings. If a factor seems to matter (famous cast, genre, director, attractive actors), check whether it also appears in titles I rated low. Keep only patterns my ratings actually support.
+- Separate what makes me choose to start something from what makes me rate it highly.
+- Output:
+  a) 5–8 numbered core drivers, each backed by specific titles/comments.
+  b) My deal-breakers: things that sink a title no matter what else it has.
+  c) The ingredient that separates my 9–10 from my 8.
+  d) A one-line formula for my ideal title.
+
+STAGE 2 — Recommend from the profile, not from similarity
+- Recommend 10 titles that appear nowhere in my lists (liked, mixed, disliked, or queue).
+- Pick each title because it satisfies several of my drivers, not because it resembles something I liked. Cross genres when the drivers allow it.
+- Check every pick against every deal-breaker: how it ends (resolved vs open/ambiguous), whether episode 1–2 hooks immediately, whether it pads or sprawls, and whether later seasons drop.
+- If a show is only worth it up to a certain season, or a film has a better cut, say so.
+- Only include titles you predict I'd rate 8 or higher; favor likely 9–10s over safe 7s.
+
+STAGE 3 — Review my queue
+- Sort my queue into: watch next / keep / risky / remove, one short reason each tied to my drivers.
+- Flag any entry whose year or type (film vs TV) looks mismatched with the title I probably meant.
+
+OUTPUT
+Write in Egyptian Arabic; keep titles in original English.
+
+=== PROFILE ===
+(stage 1)
+
+=== RECOMMENDATIONS ===
+One per line, exactly:
+1. Original English Title (Year) — one-line reason in Arabic [drivers: 1, 3, 5] [because: Title A; Title B] [predicted: 9/10]
+Inside [because: ...] put 1–3 titles copied exactly from my lists that best support the pick, separated by ";".
+
+=== QUEUE ===
+(stage 3)
+
+=== TRAPS ===
+2–4 titles that look like a fit but break a deal-breaker, one line each.`;
 function tasteProfile(){
   const w=items.filter(i=>i.status==='watched'&&i.rating);
   const unrated=items.filter(i=>i.status==='watched'&&!i.rating);
@@ -2177,12 +2227,7 @@ function tasteProfile(){
   if(unrated.length)txt+='ALSO WATCHED, NOT RATED (don\'t recommend these):\n'+unrated.map(qline).join('\n')+'\n\n';
   if(watching.length)txt+='CURRENTLY WATCHING (don\'t recommend these):\n'+watching.map(i=>qline(i)+` — at ${progLabel(i)}`).join('\n')+'\n\n';
   if(queue.length)txt+='CURRENTLY IN MY QUEUE (don\'t recommend these):\n'+queue.map(qline).join('\n')+'\n\n';
-  txt+='Based on this taste profile, recommend 10 films or TV shows I haven\'t listed above.\n'
-    +'Reply with ONLY a numbered list, one per line, exactly in this format:\n'
-    +'1. Original English Title (Year) — one-line reason in Arabic, based on my likes and dislikes [because: Title A; Title B]\n'
-    +'Inside [because: ...] put 1-3 titles copied exactly from my lists above that this pick is mainly based on, separated by ";".\n'
-    +'No intro, no headings, no closing text.';
-  return txt;
+  return txt+DEEP_PROMPT;
 }
 
 // "اترشح ليه": السبب + العناوين من قايمتك اللي الـ AI قال إنه بنى عليها (ببوسترها وتقييمك لو لقيناها عندك)

@@ -13,7 +13,9 @@ if (!app.requestSingleInstanceLock()) app.quit();
 // لازم يطابق appId في package.json عشان إشعارات ويندوز تظهر
 // لازم يطابق appId في package.json (بيفضل com.watchlist.desktop حتى بعد الاسم الجديد —
 // لو اتغيّر، ويندوز بيعتبر التحديث برنامج تاني ويتثبّت جنب القديم)
-app.setAppUserModelId('com.watchlist.desktop');
+// نسخة التطوير (electron.exe) بـ ID تاني: لو نفس الـ ID، ويندوز بيعمل Electron.lnk بيه
+// والتاسك بار بتاع البرنامج المتثبّت بياخد أيقونة Electron
+app.setAppUserModelId(app.isPackaged ? 'com.watchlist.desktop' : 'com.watchlist.desktop.dev');
 
 // الواجهة بتتحمل من app://local بدل file:// — صفحة file:// تقدر تقرا أي ملف على الجهاز لو حصل فيها injection
 const APP_ORIGIN = 'app://local/';
@@ -171,7 +173,7 @@ async function aiCall(kind, url, key, endpoint, body) {
     let res;
     try {
       // redirect: 'error' — مفيش API محترم بيعمل redirect، ولو حصل المفتاح ميروحش لدومين تاني
-      res = await fetch(url + endpoint, { method: body ? 'POST' : 'GET', headers, body: body && JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(body ? 180000 : 20000) });
+      res = await fetch(url + endpoint, { method: body ? 'POST' : 'GET', headers, body: body && JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(body ? 360000 : 20000) }); // البرومبت على مراحل بيكتب كتير — الموديلات المحلية بتاخد وقت
     } catch (err) {
       return { ok: false, error: err.name === 'TimeoutError' ? 'TIMEOUT' : 'UNREACHABLE' };
     }

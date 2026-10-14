@@ -171,6 +171,16 @@ try {
     assert.deepEqual(r.map(x => x.status ?? x.error), [200, 403, 'UNREACHABLE']);
     assert.equal(await app.ev(`__wlDesktop.siteCheck(['javascript:alert(1)']).then(()=>'ok',()=>'rejected')`), 'rejected');
   });
+  await check('settings-file picker: a full backup goes to restore (confirm), a bad file shows its error above the welcome screen', async () => {
+    const pick = obj => app.ev(`(()=>{const dt=new DataTransfer();dt.items.add(new File([${JSON.stringify(JSON.stringify(obj))}],'x.json'));
+      $('setFile').files=dt.files;$('setFile').dispatchEvent(new Event('change'));return 1})()`);
+    await pick({ 'watchlist:data': '[]' });
+    await until(() => app.ev(`$('confirmOverlay').classList.contains('show')`), 3000, 'restore confirm');
+    await app.ev(`$('confirmNo').click();1`);
+    await pick({ nothing: 1 });
+    await until(() => app.ev(`$('toast').classList.contains('show')&&$('toast').textContent.includes('مش ملف إعدادات')`), 3000, 'error toast');
+    assert.ok(await app.ev(`+getComputedStyle($('toast')).zIndex>+getComputedStyle($('welcomeOverlay')).zIndex`), 'toast above welcome');
+  });
   await check('updates section: shows current version; dev build never checks or installs', async () => {
     const r = await app.ev(`(async()=>{const st=await __wlDesktop.update.check();const inst=await __wlDesktop.update.install();
       await new Promise(r=>setTimeout(r,200));
@@ -1082,6 +1092,14 @@ try {
         liked:/LIKED[^]*- Dark \\(TV, 2017[^\\n]*my rating 9\\/10 — تحفة بس بطيء/.test(tasteProfile().split('DISLIKED')[0])};
     })()`);
     assert.deepEqual(r, { status: 'watched', rating: 9, type: 'tv', tab: 'watched', noteShown: true, note: 'تحفة بس بطيء', liked: true });
+  });
+  await check('copy for AI: staged prompt after the profile; its reply parsed from RECOMMENDATIONS only', async () => {
+    assert.ok(await app.ev(`(()=>{const t=tasteProfile();return t.startsWith('My taste profile:')&&t.includes('=== RECOMMENDATIONS ===')&&!t.includes('No intro, no headings')})()`));
+    const reply = ['=== PROFILE ===', '1. بيحب النهايات المقفولة', '2. Mindhunter — مثال', '', '=== RECOMMENDATIONS ===',
+      '1. **Heat (1995)** — سبب [drivers: 1, 3] [because: Se7en (1995); The Departed] [predicted: 9/10]',
+      '2. Prisoners (2013) — سبب تاني [drivers: 2] [because: Zodiac] [predicted: 8/10]', '', '=== QUEUE ===', '1. Dark — watch next', '=== TRAPS ===', '- Lost — نهايتها'].join('\n');
+    assert.deepEqual(JSON.parse(await app.ev(`JSON.stringify(parseRecs(${JSON.stringify(reply)}).map(c=>[c.title,c.year,c.why,c.from]))`)),
+      [['Heat', 1995, 'سبب', ['Se7en (1995)', 'The Departed']], ['Prisoners', 2013, 'سبب تاني', ['Zodiac']]]);
   });
   await check('💡 shows why: reason + the titles from your list it was based on (with your rating)', async () => {
     const r = await app.ev(`(async()=>{
