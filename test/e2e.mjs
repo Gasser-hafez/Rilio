@@ -1041,7 +1041,7 @@ try {
     assert.equal(r.ok, true, JSON.stringify(r));
     const h = hits.at(-1);
     assert.equal(h.path, '/v1/chat/completions'); assert.equal(h.auth, 'Bearer ' + SECRET);
-    assert.match(JSON.parse(h.body).messages[0].content, /numbered list/);
+    assert.match(JSON.parse(h.body).messages[0].content, /=== RECOMMENDATIONS ===/);
     assert.ok(!r.text.includes('think'));
     assert.deepEqual(await app.ev(`parseRecs(${JSON.stringify(r.text)}).map(c=>[c.title,c.year,c.why])`),
       [['Dark', 2017, 'مسلسل ألماني'], ['Sicario', 2015, 'توتر']]);
